@@ -432,3 +432,172 @@ Versión en `VERSION` (raíz), inicial `0.1.0`.
   (descarga + compilación ANE); se cachea.
 - [Lead] Los archivos `_Skeleton.swift` de cada target son temporales: cada dueño los reemplaza.
   Compila tu target aislado: `cd app && swift build --target <Target> --scratch-path .build-<letra>`.
+- [D] Vault-template: **source key** = nombre del raw sin extensión. La página de la fuente en el wiki
+  (`wiki/meetings/<key>.md` o `wiki/sources/<key>.md`) usa exactamente ese nombre, y las citas son
+  `[[<key>]]` (+ timestamp en reuniones). Por eso un nombre puede existir dos veces en el mismo proyecto
+  (raw/meetings/X.md y wiki/meetings/X.md). `VaultStore.resolveWikilink` (C) debe: (1) quitar `|label`
+  y `#heading`; (2) si el target contiene `/`, resolverlo como ruta relativa a la raíz del vault (con o
+  sin `.md`; los no-md llevan extensión, ej. `[[projects/x/raw/docs/a.pdf|PDF]]`); (3) nombre simple:
+  preferir `projects/<p>/wiki/**` del mismo proyecto, luego `people/`, luego otros `wiki/`, y solo al
+  final `raw/`. La página de la fuente enlaza al raw con ruta completa.
+- [D] Páginas de navegación reservadas por proyecto: `index`, `log`, `overview`, `tasks`, `health`
+  (en `projects/<slug>/wiki/`). Siempre se enlazan con ruta completa:
+  `[[projects/<slug>/wiki/overview|Resumen]]`. `health.md` global (lint global) vive en la raíz del vault.
+- [D] Línea que `ProjectManager.create` (C) debe añadir al `index.md` global, bajo `## Proyectos`
+  (el encabezado existe en el template): `- [[projects/<slug>/wiki/index|<emoji> <Nombre>]] — <descripción>`.
+  `{{DATE}}` = `yyyy-MM-dd`. Los placeholders también aparecen dentro de frontmatter YAML entre comillas
+  (`title: "{{PROJECT_NAME}} — índice"`): escapar `"` y `\` del nombre al sustituir.
+  El template de proyecto ya trae en `wiki/log.md` la entrada `## [{{DATE}}] create | Proyecto creado`.
+- [D] `save-answer` con `project: null` y citas de varios proyectos escribe en `questions/` en la raíz
+  del vault (carpeta creada bajo demanda) y lo enlaza en `index.md` global bajo `## Preguntas guardadas`.
+  `VaultStore.pages(projectSlug: nil)` debería incluir `questions/` y `health.md`.
+- [D] Frontmatter `sources:` de las páginas del wiki = rutas raw relativas al vault (strings, no
+  wikilinks). `people:` = wikilinks entre comillas. Tipos de página (`type:`): meeting, source, topic,
+  decision, person, question, overview, tasks, index, log, health, people (people/README.md).
+  Pendientes en `tasks.md` con formato Obsidian Tasks: `- [ ] texto — [[persona|Nombre]] · 📅 AAAA-MM-DD · ([[fuente]] 00:12:30)`,
+  hechos `- [x] … ✅ AAAA-MM-DD`. Callouts usados: `> [!conflict]`, `> [!note]`, `> [!warning]` —
+  el WikiView (E) debería estilizarlos (markdown-it no los conoce: `[!conflict]` en rojo/ámbar).
+  El wiki no contiene HTML (ni comentarios) para que markdown-it con `html:false` lo muestre limpio.
+- [D] Mensaje final de cada comando (lo que la app muestra): ingest = 3-6 viñetas `- ` en el idioma de
+  la fuente, sin rutas ni wikilinks; lint = 3-5 viñetas; save-answer = 1 línea; classify = SOLO una
+  línea JSON minificada (aun así, C debería extraer el primer `{...}` del resultado por robustez);
+  query = respuesta con wikilinks `[[…]]` (la app los vuelve clicables).
+- [A] Recorder: además de §5.2 expone `public private(set) var warning: RecorderWarning?`
+  (`.microphoneUnavailable` = sigue grabando solo sistema, `.systemAudioLost`, `.diskWriteFailed`; se limpia
+  al iniciar), `public var isRecording: Bool` y `public enum RecorderError: LocalizedError` (mensajes es/en
+  según `AppConfig.load().uiLanguage`; `.screenCapturePermissionDenied` cuando falta el permiso).
+  `recoverInterruptedSessions(in:)` es `nonisolated` (usable desde `sb`/background); omite sesiones que
+  este proceso está grabando.
+- [A] Si el micrófono falla o está denegado, la grabación continúa: `micCaptured = false` y la clave `"mic"`
+  se QUITA de `tracks`. Tras `stop()` cada pista tiene ≥1 archivo y ambas tienen exactamente el mismo número
+  de muestras (se rellenan/recortan al mismo instante). Mientras graba, el relleno con ceros va ~2 s
+  detrás del reloj (un crash pierde ≤2 s); la recuperación iguala las pistas al largo de la mayor y
+  reconstruye `tracks` desde los WAV en disco.
+- [A] `JSONEncoder.sb` (.iso8601) trunca fracciones de segundo: `endedAt - startedAt` puede diferir <1 s de
+  la duración real; para la duración exacta usar las muestras de los WAV.
+- [A] Para E: llamar `Recorder.recoverInterruptedSessions(in: paths.sessions)` al arrancar (→ `recordingFinished`)
+  y `stop()` en `applicationWillTerminate`. Tras activar "Grabación de pantalla y audio del sistema" en
+  Ajustes, macOS suele exigir reabrir la app antes de que `permissions().screenAudio` sea true → el paso
+  de permisos del onboarding debería ofrecer "Reabrir SecondBrain".
+- [A] Firma: `scripts/make-dev-cert.sh` crea "SecondBrain Dev" (self-signed, sin confiar; codesign la usa
+  sin diálogos, verificado) para que los permisos TCC sobrevivan a cada build. `build-app.sh` firma sin
+  hardened runtime por defecto (`SB_HARDENED=1` lo activa); overrides `SB_SIGN_IDENTITY=-`, `SB_SCRATCH`,
+  `SB_SKIP_BUILD=1`, flag `--debug`. Los bundles de recursos van en `Contents/Resources/` (el accessor
+  generado busca primero en `Bundle.main.resourceURL`; verificado con un ejecutable dentro de la .app).
+  La release no está notarizada: las notas explican "Ajustes → Privacidad y seguridad → Abrir de todos modos".
+- [D] Verificado con `claude -p` real (sonnet, acceptEdits, sin Bash/Web): ingest de una reunión de ~40 turnos
+  ≈ 100 s, 30-50 turnos, ≈ US$0.40 (cuenta de suscripción: consume cuota, no dinero); query (opus) ≈ 16 s;
+  classify ≈ 4 s. Por robustez, ClaudeRunner/UI (C/E) deberían mostrar como resumen de ingest solo las
+  líneas que empiezan por `- ` del resultado final (a veces Claude antepone una frase de estado).
+- [E] SDK macOS 26+/CLT: `@State` de SwiftUI ahora es una macro cuyo plugin (`SwiftUIMacros`) solo viene con
+  Xcode → con Command Line Tools no compila. La app usa `typealias ViewState<V> = SwiftUI.State<V>` y
+  `@ViewState` (property wrapper directo). Cualquier otro código SwiftUI debe hacer lo mismo. `@Observable`,
+  `@Bindable`, `@Environment` sí funcionan. Regex literales: usar `#/…/#` (modo v5 no acepta `/…/`).
+- [E] Recursos de la app: `AppResources.bundle` busca `SecondBrain_SecondBrain.bundle` en
+  `Bundle.main.resourceURL`, junto a la .app y junto al ejecutable antes de caer en `Bundle.module`.
+  Idioma: `L("clave")` carga explícitamente `es.lproj`/`en.lproj` según `config.uiLanguage` (no el locale
+  del sistema); al cambiarlo la UI se reconstruye.
+- [E] Cambiar en Ajustes `vaultPath`/`dataPath`/`whisperModel` con el motor ya arrancado NO recrea el
+  BrainEngine (evita dos colas): se guarda la config y la app muestra "Reiniciar ahora" (relanza la .app).
+  Durante el onboarding (motor sin arrancar) sí se recrea. El resto de cambios → `engine.updateConfig`.
+  `engine.start()` se llama al terminar el onboarding (o al llegar al paso "Primer proyecto"), no antes.
+- [E] Sesiones recuperadas (`recoverInterruptedSessions`) se pasan a `engine.recordingFinished` al arrancar
+  el motor; BrainEngine debe tolerar que no exista SourceRecord previo o que esté en `.recording`.
+- [E] La app también llama `WhisperTranscriber.prepare` en segundo plano (onboarding / tras arrancar) mientras
+  BrainEngine puede llamarlo antes de transcribir → B: `prepare` debe ser idempotente y seguro si se llama
+  dos veces en paralelo (compartir la misma tarea de carga).
+- [E] Notificaciones locales solo si el proceso corre dentro de una .app con bundle id
+  (UNUserNotificationCenter aborta en un binario suelto de `swift build`). Requiere Info.plist con
+  `CFBundleIdentifier` (A).
+- [E] Token de `claude setup-token`: SwiftTerm 1.99 entrega la salida del proceso directo al parser (no
+  llama `dataReceived` de la vista), así que se usa `setProcessOutputHandler` + `getBufferAsData()` y se
+  re-unen las líneas que el terminal partió por ancho antes de `ClaudeSetup.extractToken`. Hay campo de
+  "pegar código" como respaldo. Tras instalar Claude se guarda `config.claudePath`.
+- [E] Chat: con `.done(result:isError:false)` la app reemplaza el texto acumulado por `result` (respuesta
+  final completa); los `.text` se tratan como incrementales mientras tanto. Citas `[[x]]` se resuelven con
+  `VaultStore.resolveWikilink(x, from: "projects/<slug>/wiki/index.md" | "index.md")`.
+- [C] API adicional en BrainCore (solo aditiva): `HistoryStore.summary(entryId:) -> String?` + `setSummary(_:entryId:)`
+  (archivo `data/history/<id>/summary.md` = resultado final de Claude, el resumen humano de ingest/lint/save-answer);
+  `HistoryStore.entry(id:)`, `conflicts(entryId:)`, `discard(_:)`, `var gitEnabled`; `HistoryError.alreadyUndone`.
+  `BrainEngine.undo(historyId:force:)` (force default false), `onJobUpdate: ((Job) -> Void)?` (mensaje humano por
+  paso: "Leyendo …", "Editando …"), `autoProcess` (false = solo procesa vía `runUntilIdle`; lo usa `sb`),
+  `source(_ id:)`. `ProjectManager.get(_ slug:)`, `VaultStore.title(of:)`, `VaultStore.templateURL`,
+  `ClaudeSetup.deleteToken()`, `EngineError`, `ProjectError`, `Log.configure/info/error`, `slugify(_:)`.
+- [C] `ClaudeRunner`: el prompt va por **stdin** (no como argumento) porque `--allowedTools/--disallowedTools` son
+  variádicos. Además de `--allowedTools` se pasa `--tools <misma lista>` (restringe herramientas disponibles, no solo
+  pre-aprobadas) y `--strict-mcp-config` (no carga MCP del usuario). Se quita `CLAUDECODE` del env. Rate limit también
+  se detecta por el evento stream-json `rate_limit_event` con `status: "rejected"` (`resetsAt` epoch). Un `.done` llega
+  siempre al final (después de todos los `.text`/`.tool`); si `isError` la engine lo trata como fallo reintentable.
+- [C] Cola: los jobs `done` se borran (disco y `jobs`); quedan `queued`/`running`/`failed`. Backoff 30 s, 60 s; al 3er
+  fallo → `failed`. `notInstalled`/`notAuthenticated` → `failed` sin reintentos (mensaje humano en `job.error` y
+  `source.error`). Rate limit → `notBefore` = reset+30 s o +15 min, sin consumir intento, `EngineEvent.rateLimited`.
+  `runUntilIdle` espera backoffs que vencen en < 5 min; esperas más largas quedan en cola. Un fallo de `classify`
+  nunca marca la fuente como `failed` (se queda `needsProject`, sin sugerencia).
+- [C] Si Claude falla a mitad de un ingest/lint/save-answer, los cambios parciales igual se registran como
+  HistoryEntry (para poder deshacerlos). `HistoryStore.begin` clona el vault (APFS clone) a `history/<id>/.staging`.
+- [C] Transcripción: turnos separados por línea en blanco (para que el markdown no los junte en un párrafo).
+  Se guarda también `data/sessions/<id>/transcript.json`. Transcripción sin segmentos → fuente `done` con `error`
+  "No se escuchó a nadie…" y sin ingest. `delete` borra el raw solo si nunca se ingirió (`historyId == nil`).
+- [C] Imports: `.md/.txt` se embeben en un `.md` raw; PDF/DOCX/RTF/HTML/otros se copian junto al `.md` (frontmatter
+  `original_file: <nombre>` en la misma carpeta) y el `.md` lleva el texto extraído (PDFKit / NSAttributedString).
+  URL → `type: url`, carpeta `raw/docs`. `assign` mueve también el `original_file`.
+- [C] Enlace del proyecto en `index.md` global: `- [[projects/<slug>/wiki/index|<emoji> <nombre>]] — <descripción>`
+  bajo `## Proyectos` (o `## Projects`); se crea la sección si no existe. `resolveWikilink` soporta targets con ruta.
+- [C] `SB_VAULT_TEMPLATE` (env) sobreescribe la ubicación de `vault-template/` (tests). `sb` extra: `retry`, `delete`,
+  `--run` en note/import/assign/simulate/retry, `ask --save`, `lint --no-run`, `simulate --chunk-seconds`.
+- [C→D] Observado con haiku: el ingest edita `projects/<p>/CLAUDE.md` (añade alias/glosario). Si no es intencional,
+  el prompt de ingest debería prohibirlo.
+- [B] `WhisperTranscriber` (Transcription) — extras públicos además de §5.1: `var messageLanguage: String`
+  ("es" default | "en"; la app debe ponerlo desde `config.uiLanguage`) para los textos de progreso/error;
+  `TranscriptionError: LocalizedError` (`.modelUnavailable`, `.noAudio`) con mensajes humanos. Tipos puros
+  `TranscriptMerge`, `RawSegment`, `Windowing`, `SpeechTurn` son públicos (testables). `SB_TRANSCRIBE_DEBUG=1`
+  vuelca los segmentos crudos (idioma, logprob, RMS) a stderr.
+- [B] Modelos en `DataPaths.models` con layout Hub: `models/argmaxinc/whisperkit-coreml/openai_whisper-<modelName>/`,
+  `models/argmaxinc/speakerkit-coreml/…`, tokenizer en `models/openai/whisper-<modelName>/`. large-v3 pesa ~3 GB
+  (no 1.6 GB): ajustar el texto del onboarding (Agente E). Una vez descargados, `prepare` valida offline y no toca
+  la red (~0.5 s si ya están compilados; primera compilación ANE ~30–90 s, con progreso "suave" 0.75→0.97).
+  `transcribe` llama a `prepare` sola si `!isReady` (sin progreso de descarga): conviene que la app/onboarding
+  haga `prepare` antes. No reentrante: una transcripción a la vez (la cola serial ya lo garantiza).
+- [B] Idioma por ventana: se diariza PRIMERO la pista system y las ventanas de Whisper siguen los turnos de
+  hablante (≤28 s), la pista mic usa ventanas por enunciado (energía). Ventanas cortas con idioma raro (ej. "pl")
+  se re-decodifican forzando el idioma más probable entre los de la reunión. `Transcript.language` = dominante
+  por duración hablada. Verificado: audio es/en mezclado ya no se traduce (antes "en" para todo).
+- [B] Memoria: cada pista se carga completa como Float32 (2 h ≈ 460 MB), una pista a la vez; la diarización
+  necesita la pista entera para que los hablantes sean consistentes en toda la reunión.
+- [I] Integración (verificado E2E con `sb` + Claude sonnet real + WhisperKit large-v3, y la .app de `build-app.sh`):
+  layout real de modelos = layout del Hub bajo `downloadBase`: `data/models/models/argmaxinc/whisperkit-coreml/…`,
+  `data/models/models/argmaxinc/speakerkit-coreml/…`, `data/models/models/openai/whisper-large-v3/` (la entrada [B]
+  omitía el `models/` intermedio). Para no re-descargar basta clonar `~/Documents/huggingface/models` en `data/models/models`.
+- [I] Eco (B): un segmento mic solo se descarta como eco si ≥50 % de su duración se solapa (±0.3 s) con habla del
+  sistema. Antes, con ±1 s de tolerancia, una pregunta de "Yo" seguida de una respuesta con las mismas palabras se
+  borraba ("¿puedes preparar el análisis…?" → "Claro, preparo el análisis…"). Además, con solape, un segmento mic con
+  RMS < 0.03 y < 0.12 × el RMS del sistema se descarta aunque el texto no coincida (residuo del AEC que Whisper
+  transcribe como otra frase/idioma; visto en una grabación real con altavoces).
+- [I] `VaultStore.resolveWikilink` aplica la prioridad de [D]: wiki del mismo proyecto > `people/` > otros wiki/raíz >
+  raw del mismo proyecto > otros raw/`_inbox`. Antes ganaba el raw (orden alfabético `raw/` < `wiki/`), así que las
+  citas `[[<source-key>]]` abrían la transcripción en vez del resumen. `backlinks` lista el vault una sola vez.
+- [I] Dueño del cerebro: `VaultStore.ownerName()` / `setOwnerName(_:)` (BrainCore/Owner.swift) leen/escriben la línea
+  `- **Nombre:** …` de `people/README.md` (la que el esquema ya manda leer). La app pide "Tu nombre" en el paso
+  "Primer proyecto" del onboarding y en Ajustes → General; `sb owner [nombre]`. Con el nombre puesto, el ingest usa
+  "Jaime (yo)" y crea su página `owner: true` (verificado); sin él, lint insiste en "todavía no sé quién eres".
+- [I] `BrainEngine.undo(historyId:force:)` también desliga la fuente (`historyId = nil`), así se puede volver a
+  aprender (`retry`, botón "Aprender de nuevo" en Reuniones y fuentes) o moverla de proyecto. Actividad usa siempre
+  `engine.undo` (antes el "deshacer de todos modos" llamaba a `history.undo` directo).
+- [I] La app y `sb` ponen `WhisperTranscriber.messageLanguage = config.uiLanguage`. Texto de onboarding: ~3 GB.
+- [R] Revisión: `ClaudeRunner` ya NO pre-aprueba Write/Edit/MultiEdit (`--allowedTools Read,Glob,Grep`; siguen en `--tools`).
+  `acceptEdits` solo auto-acepta ediciones dentro del cwd (el vault); verificado con `claude -p`: antes un prompt podía
+  escribir en cualquier ruta del disco (inyección vía una fuente importada), ahora esa escritura se deniega y las del vault
+  funcionan (ingest E2E con haiku OK). `locate` + spawn van fuera del hilo del llamador; `ClaudeRunner.terminateAll()` (público)
+  lo llama la app en `applicationWillTerminate`.
+- [R] `HistoryStore.begin` escribe `history/<id>/pending.json` (+ `pending.pid`); `recoverInterrupted()` (público, lo llama
+  `BrainEngine.start`) convierte un `.staging` huérfano (crash/quit a mitad de un job de Claude) en una entrada normal,
+  deshacible. Omite los de otro proceso vivo (app + `sb` a la vez).
+- [R] Transcribe: el `rawPath` se persiste ANTES de borrar el audio; si al reintentar ya no hay audio pero existe
+  `transcript.json`, se reutiliza (antes un crash en ese hueco transcribía silencio: "No se escuchó a nadie").
+  `recordingFinished` no encola un segundo transcribe; fuentes `.recording` cuya sesión ya tiene `endedAt` se reencolan al arrancar.
+- [R] `undo` lanza `EngineError.busy` mientras corre un ingest/lint/save-answer (su snapshot se tragaría el deshacer).
+  `assign` se permite con un classify corriendo (solo lee; su resultado se ignora si ya hay proyecto).
+  `EngineError`/`ProjectError`/`HistoryError` con textos es/en; la UI los muestra en vez del genérico.
+- [R] `VaultStore.resolveWikilinks(_:from:)` (aditivo): resuelve muchos targets con un solo recorrido; WikiWebView resuelve
+  links/backlinks fuera del hilo principal. Elegir como vault una carpeta con contenido que no es un vault (p. ej. Documentos)
+  usa la subcarpeta `SecondBrain/`. Importar una carpeta se rechaza; `.txt/.csv` no UTF-8 caen a Windows-1252.

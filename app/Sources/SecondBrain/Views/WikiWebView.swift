@@ -1,0 +1,159 @@
+import AppKit
+import BrainCore
+import SwiftUI
+import WebKit
+
+/// Renders a vault markdown page with the bundled markdown-it. `[[wikilinks]]` are resolved in Swift
+/// (VaultStore.resolveWikilink) and come back as `sbwiki://page/<path>` navigations.
+struct WikiWebView: NSViewRepresentable {
+    let vault: VaultStore
+    let path: String?
+    var onNavigate: (String) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        webView.navigationDelegate = context.coordinator
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.allowsMagnification = true
+        let dir = AppResources.webDirectory
+        webView.loadFileURL(dir.appendingPathComponent("wiki.html"), allowingReadAccessTo: dir)
+        context.coordinator.webView = webView
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.parent = self
+        context.coordinator.show(path)
+    }
+
+    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+        coordinator.stopWatching()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var parent: WikiWebView
+        weak var webView: WKWebView?
+        private var loaded = false
+        private var shownPath: String?
+        private var shownModified: Date?
+        private var watchTimer: Timer?
+        private var renderGeneration = 0
+
+        init(parent: WikiWebView) { self.parent = parent }
+
+        func show(_ path: String?) {
+            guard path != shownPath else { return }
+            shownPath = path
+            render(keepScroll: false)
+            startWatching()
+        }
+
+        private func modificationDate() -> Date? {
+            guard let shownPath else { return nil }
+            let url = parent.vault.url(for: shownPath)
+            return (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        }
+
+        private func startWatching() {
+            watchTimer?.invalidate()
+            watchTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.loaded, self.shownPath != nil else { return }
+                    if self.modificationDate() != self.shownModified { self.render(keepScroll: true) }
+                }
+            }
+        }
+
+        func stopWatching() {
+            watchTimer?.invalidate()
+            watchTimer = nil
+        }
+
+        private func render(keepScroll: Bool) {
+            guard loaded, let webView else { return }
+            let vault = parent.vault
+            var payload: [String: Any] = [
+                "keepScroll": keepScroll,
+                "backlinksTitle": L("wiki.backlinks"),
+                "propLabels": [
+                    "type": L("prop.type"), "date": L("prop.date"), "updated": L("prop.updated"),
+                    "status": L("prop.status"), "duration": L("prop.duration"), "language": L("prop.language"),
+                    "project": L("prop.project"), "people": L("prop.people"), "role": L("prop.role"),
+                ],
+            ]
+            renderGeneration += 1
+            let generation = renderGeneration
+            guard let path = shownPath else {
+                payload["markdown"] = ""
+                payload["emptyText"] = L("wiki.noPageSelected")
+                send(payload, to: webView)
+                return
+            }
+            shownModified = modificationDate()
+            payload["emptyText"] = L("wiki.emptyPage")
+            // Resolving links and backlinks walks (and reads) the whole vault: keep it off the main thread.
+            Task {
+                let page = await Task.detached { () -> [String: Any] in
+                    let markdown = (try? vault.read(path)) ?? ""
+                    let targets = Self.wikilinkTargets(in: markdown)
+                    let resolved = vault.resolveWikilinks(targets, from: path)
+                    var links: [String: Any] = [:]
+                    for target in targets { links[target] = resolved[target] ?? NSNull() }
+                    let backlinks = vault.backlinks(to: path).filter { $0.path != path }.map { ["path": $0.path, "title": $0.title] }
+                    return ["markdown": markdown, "links": links, "backlinks": backlinks]
+                }.value
+                guard generation == renderGeneration, path == shownPath, let webView = self.webView else { return }
+                send(payload.merging(page) { _, new in new }, to: webView)
+            }
+        }
+
+        private func send(_ payload: [String: Any], to webView: WKWebView) {
+            guard let data = try? JSONSerialization.data(withJSONObject: payload),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            webView.evaluateJavaScript("SB.render(\(json))")
+        }
+
+        nonisolated private static let wikilinkRegex = try! NSRegularExpression(pattern: #"\[\[([^\[\]\|#\n]+)(?:#[^\[\]\|\n]*)?(?:\|[^\[\]\n]*)?\]\]"#)
+
+        nonisolated static func wikilinkTargets(in text: String) -> [String] {
+            let ns = text as NSString
+            return wikilinkRegex.matches(in: text, range: NSRange(location: 0, length: ns.length)).map {
+                ns.substring(with: $0.range(at: 1)).trimmingCharacters(in: .whitespaces)
+            }
+        }
+
+        // MARK: WKNavigationDelegate
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            loaded = true
+            render(keepScroll: false)
+        }
+
+        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                     decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+            guard let url = action.request.url else { return decisionHandler(.cancel) }
+
+            if url.scheme == "sbwiki" {
+                let encoded = url.absoluteString.replacingOccurrences(of: "sbwiki://page/", with: "")
+                if let path = encoded.removingPercentEncoding { parent.onNavigate(path) }
+                return decisionHandler(.cancel)
+            }
+            if ["http", "https", "mailto"].contains(url.scheme ?? "") {
+                NSWorkspace.shared.open(url)
+                return decisionHandler(.cancel)
+            }
+            if url.isFileURL, url.lastPathComponent != "wiki.html" {
+                // A plain markdown link like [x](other-page.md): resolve it like a wikilink.
+                let name = url.deletingPathExtension().lastPathComponent
+                if let path = shownPath, let target = parent.vault.resolveWikilink(name, from: path) {
+                    parent.onNavigate(target)
+                }
+                return decisionHandler(.cancel)
+            }
+            decisionHandler(.allow)
+        }
+    }
+}

@@ -1,8 +1,9 @@
 .DS_Store
-/vault/
+*.xcodeproj
 /data/
+/vault/
+app/.build*/
 app/.build/
 app/.swiftpm/
 build/
 dist/
-*.xcodeproj

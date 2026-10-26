@@ -1,1 +1,347 @@
 "app.name" = "SecondBrain";
+
+/* Common */
+"common.back" = "Back";
+"common.cancel" = "Cancel";
+"common.close" = "Close";
+"common.continue" = "Continue";
+"common.done" = "Done";
+"common.ok" = "OK";
+"common.oops" = "Something went wrong";
+
+/* Dates and durations */
+"date.justNow" = "just now";
+"duration.lessThanMinute" = "under 1 min";
+"duration.minutes" = "%ld min";
+"duration.hoursMinutes" = "%ld h %ld min";
+
+/* Sidebar */
+"sidebar.brain" = "Whole brain";
+"sidebar.people" = "People";
+"sidebar.projects" = "Projects";
+"sidebar.newProject" = "New project";
+"sidebar.inProgress" = "%ld in progress";
+"brain.subtitle" = "What I know across all your projects";
+"people.subtitle" = "The people who show up in your meetings";
+"people.emptyTitle" = "I don't know anyone yet";
+"people.emptyMessage" = "As I learn from your meetings, each person gets a page here: who they are, which projects they're in, and what they've said.";
+"project.missing" = "I can't find this project";
+
+/* Tabs */
+"tab.wiki" = "Wiki";
+"tab.sources" = "Meetings & sources";
+"tab.ask" = "Ask";
+"tab.activity" = "Activity";
+
+/* Recording */
+"record.start" = "Record";
+"record.starting" = "Starting…";
+"record.stopping" = "Saving…";
+"record.stopWithTime" = "Stop · %@";
+"record.hotkeyHint" = "You can also press ⌥⌘R from any app";
+"record.finishSetupFirst" = "Finish setting up SecondBrain before recording.";
+"record.needsPermission" = "I need permission to hear your computer's audio. Turn it on in System Settings → Privacy → Screen & System Audio Recording.";
+"record.couldNotStart" = "I couldn't start recording. Please try again.";
+"record.couldNotStop" = "I couldn't stop the recording cleanly. Everything recorded so far is safe.";
+"record.warnMic" = "I can't hear your microphone; I'm still recording your computer's audio.";
+"record.warnSystemAudio" = "I stopped hearing your computer's audio. Check the permission in Settings.";
+"record.warnDisk" = "I couldn't save the audio to disk. Do you have free space?";
+
+/* Queue status */
+"queue.transcribing" = "Transcribing “%@”…";
+"queue.transcribingPercent" = "Transcribing “%@”… %@";
+"queue.ingesting" = "Learning from “%@”…";
+"queue.classifying" = "Figuring out which project “%@” belongs to…";
+"queue.linting" = "Reviewing your brain…";
+"queue.savingAnswer" = "Saving the answer to the wiki…";
+"queue.waitingClaude" = "Waiting for Claude until %@";
+"queue.oneWaiting" = "1 item waiting";
+"queue.manyWaiting" = "%ld items waiting";
+
+/* Statuses */
+"status.recording" = "Recording";
+"status.queued" = "Waiting";
+"status.transcribing" = "Transcribing";
+"status.needsProject" = "No project";
+"status.ingesting" = "Learning";
+"status.done" = "Done";
+"status.failed" = "Problem";
+
+"kind.meeting" = "Meeting";
+"kind.document" = "Document";
+"kind.note" = "Note";
+"kind.url" = "Link";
+
+/* Errors */
+"error.generic" = "Something went wrong. Please try again.";
+"error.claudeNotInstalled" = "Claude isn't installed on this Mac.";
+"error.claudeNotAuthenticated" = "Your Claude account isn't connected.";
+"error.rateLimited" = "You've reached your Claude plan's limit; I'll continue once it frees up.";
+"error.rateLimitedUntil" = "You've reached your Claude plan's limit; I'll continue at %@.";
+"error.claudeFailed" = "Claude ran into a problem: %@";
+
+/* Wiki */
+"wiki.backlinks" = "Mentioned in";
+"wiki.emptyPage" = "This page is empty for now.";
+"wiki.noPageSelected" = "Pick a page from the list.";
+"wiki.emptyTitle" = "Your wiki is waiting";
+"wiki.emptyMessage" = "Record a meeting or add a document and what I learn will show up here: summaries, decisions, to-dos and people.";
+"wiki.showInFinder" = "Show in Finder";
+"wiki.back" = "Previous page";
+"wikiGroup.general" = "General";
+"wikiGroup.meetings" = "Meetings";
+"wikiGroup.sources" = "Documents";
+"wikiGroup.topics" = "Topics";
+"wikiGroup.decisions" = "Decisions";
+"wikiGroup.people" = "People";
+"wikiGroup.questions" = "Questions";
+"prop.type" = "Type";
+"prop.date" = "Date";
+"prop.updated" = "Updated";
+"prop.status" = "Status";
+"prop.duration" = "Duration";
+"prop.language" = "Language";
+"prop.project" = "Project";
+"prop.people" = "People";
+"prop.role" = "Role";
+
+/* Meetings & sources */
+"sources.emptyTitle" = "Nothing here yet";
+"sources.emptyMessage" = "Record a meeting, drop in files (PDF, Word, text) or paste a link. I'll learn from all of it and organize it in the wiki.";
+"sources.dropHere" = "Drop to add to this project";
+"sources.linkPlaceholder" = "Paste a link for me to read…";
+"sources.addLink" = "Add link";
+"sources.newNote" = "New note";
+"sources.addFiles" = "Add files";
+"sources.badLink" = "That link doesn't look right.";
+"sources.linkFailed" = "I couldn't open that link. Check that the page exists and that you're online.";
+"sources.importFailed" = "I couldn't add “%@”.";
+"sources.retry" = "Try again";
+"sources.relearn" = "Learn from it again";
+"sources.failedTranscribe" = "I couldn't transcribe this meeting.";
+"sources.failedLearn" = "I couldn't learn from this.";
+"sources.openTranscript" = "Open transcript";
+"sources.moveTo" = "Move to another project";
+"sources.moveFailed" = "I couldn't move it to that project.";
+"sources.delete" = "Delete";
+"sources.deleteConfirm" = "Delete “%@”?";
+"sources.deleteMessage" = "It's removed from the list along with any leftover audio. What I already learned in the wiki stays.";
+"sources.deleteFailed" = "I couldn't delete it.";
+
+"note.title" = "New note";
+"note.hint" = "Write anything you want me to remember. I'll add it to the project's wiki.";
+"note.titlePlaceholder" = "Title (optional)";
+"note.save" = "Save note";
+"note.defaultTitle" = "Note from %@";
+"note.failed" = "I couldn't save the note.";
+
+/* Ask */
+"chat.scopeProject" = "This project";
+"chat.scopeBrain" = "Whole brain";
+"chat.lint" = "Review my brain";
+"chat.lintHelp" = "I look for contradictions, orphan pages and overdue to-dos, and fix the easy ones.";
+"chat.lintQueued" = "Reviewing… I'll let you know when done";
+"chat.clear" = "Clear conversation";
+"chat.emptyTitle" = "Ask me anything";
+"chat.emptyMessage" = "I answer from what's in your wiki and tell you where I found it.";
+"chat.suggestion1" = "What did we decide in the last meeting?";
+"chat.suggestion2" = "What to-dos are open and who owns them?";
+"chat.suggestion3" = "Give me a summary of where things stand";
+"chat.placeholder" = "Type your question…";
+"chat.stop" = "Stop";
+"chat.thinking" = "Thinking…";
+"chat.step.reading" = "Reading…";
+"chat.step.readingFile" = "Reading %@…";
+"chat.step.searching" = "Searching your notes…";
+"chat.saveToWiki" = "Save to wiki";
+"chat.saved" = "Saved to wiki";
+"chat.copy" = "Copy";
+"chat.reconnect" = "Reconnect Claude";
+"chat.errorNotConnected" = "Please reconnect your Claude account.";
+"chat.errorRateLimited" = "You've reached your Claude plan's limit; I'll continue once it frees up.";
+"chat.errorRateLimitedUntil" = "You've reached your Claude plan's limit; you can ask again at %@.";
+"chat.errorOther" = "I couldn't answer this time. Please try again.";
+
+/* Activity */
+"activity.emptyTitle" = "No changes yet";
+"activity.emptyMessage" = "Every time I learn something, you'll see which pages I changed here. You can always undo it.";
+"activity.pagesChanged" = "%ld pages changed";
+"activity.undo" = "Undo changes";
+"activity.undone" = "Undone";
+"activity.undoConfirm" = "Undo these changes?";
+"activity.undoMessage" = "The %ld pages will go back to how they were before.";
+"activity.undoAnyway" = "Undo anyway";
+"activity.conflictTitle" = "Some pages changed afterwards";
+"activity.conflictMessage" = "These pages were edited after this change: %@. Undoing will lose those later edits.";
+"activity.undoFailed" = "I couldn't undo the changes.";
+"activity.showFiles" = "Show pages";
+"activity.viewChanges" = "View changes";
+"activity.open" = "Open";
+"activity.added" = "new";
+"activity.modified" = "updated";
+"activity.deleted" = "deleted";
+"diff.sideBySide" = "Side by side";
+"diff.unified" = "Single column";
+"diff.before" = "Before";
+"diff.after" = "After";
+
+/* Unassigned */
+"inbox.title" = "Unassigned";
+"inbox.subtitle" = "Things that don't have a project yet";
+"inbox.emptyTitle" = "All sorted";
+"inbox.emptyMessage" = "When you record without picking a project, the meeting lands here and I'll suggest where it belongs.";
+"inbox.needsProject" = "Which project do these belong to?";
+"inbox.inProgress" = "In progress";
+"inbox.suggestion" = "Looks like %@ — assign it?";
+"inbox.assign" = "Assign";
+"inbox.choose" = "Choose project";
+"inbox.other" = "Other…";
+"inbox.thinking" = "Figuring out which project it belongs to…";
+"inbox.noSuggestion" = "I'm not sure which project it belongs to.";
+
+/* New project */
+"newProject.title" = "New project";
+"newProject.name" = "Name";
+"newProject.namePlaceholder" = "e.g. App launch, Acme client, Thesis";
+"newProject.emoji" = "Icon";
+"newProject.description" = "What is it about?";
+"newProject.descriptionHint" = "A sentence or two. It helps me know which meetings belong here.";
+"newProject.descriptionPlaceholder" = "e.g. Website redesign with the marketing team";
+"newProject.create" = "Create project";
+"newProject.error" = "I couldn't create the project. Is there already one with that name?";
+
+/* Menu */
+"menu.computer" = "Computer";
+"menu.microphone" = "Microphone";
+"menu.project" = "Project";
+"menu.titlePlaceholder" = "Meeting title (optional)";
+"menu.open" = "Open SecondBrain";
+"menu.quit" = "Quit";
+"menu.finishSetup" = "Open SecondBrain to finish setting it up.";
+
+/* Notifications */
+"notify.doneTitle" = "Done";
+"notify.doneBody" = "I learned from “%@”.";
+"notify.failedTitle" = "Something went wrong";
+"notify.failedBody" = "I couldn't process “%@”. You can try again from the app.";
+"notify.inboxTitle" = "Which project is this?";
+"notify.inboxBody" = "“%@” is in Unassigned waiting for a project.";
+"notify.jobFailed" = "I couldn't finish a task. You can try again from the app.";
+"notify.lintFailed" = "I couldn't review your brain this time.";
+"notify.rateTitle" = "Paused for Claude's limit";
+"notify.rateBody" = "You've reached your plan's limit; I'll continue at %@.";
+"notify.lintTitle" = "I reviewed your brain";
+"notify.lintBody" = "I tidied up %ld pages.";
+"notify.savedTitle" = "Answer saved to the wiki";
+
+/* Models */
+"models.error" = "I couldn't download the transcription model. Check your internet connection.";
+
+/* Restart */
+"restart.message" = "This change takes effect when SecondBrain restarts.";
+"restart.now" = "Restart now";
+
+/* Claude */
+"claude.looking" = "Looking for Claude on your Mac…";
+"claude.missingTitle" = "First, let's install Claude";
+"claude.missingMessage" = "Claude is who reads your meetings and writes your wiki. I'll install it for you; it takes a minute.";
+"claude.install" = "Install Claude";
+"claude.installing" = "Installing…";
+"claude.installFailed" = "The installation didn't finish. Check your connection and try again.";
+"claude.checkAgain" = "Look again";
+"claude.found" = "Claude is installed";
+"claude.connectTitle" = "Connect your Claude account";
+"claude.connectMessage" = "Your browser will open so you can sign in to Claude. When you're done, come back here: I save the connection automatically.";
+"claude.connect" = "Connect with Claude";
+"claude.terminalHint" = "If it asks for something, type here and press Return.";
+"claude.restartTerminal" = "Start over";
+"claude.alreadyLoggedIn" = "I'm already signed in — verify";
+"claude.pasteTitle" = "Already have a connection code? Paste it here";
+"claude.pasteSave" = "Save";
+"claude.pasteInvalid" = "That code doesn't look right. It should start with sk-ant-oat.";
+"claude.verifying" = "Checking your account…";
+"claude.verifyingHint" = "This can take up to a minute.";
+"claude.verifyFailed" = "I couldn't confirm the connection. Try connecting again.";
+"claude.connectedTitle" = "Connected!";
+"claude.connectedMessage" = "Claude can now learn from your meetings.";
+"claude.reconnectTitle" = "Claude account";
+
+/* Onboarding */
+"onb.start" = "Get started";
+"onb.skip" = "Skip";
+"onb.finish" = "Start using SecondBrain";
+"onb.welcome.title" = "Hi, I'm your second brain";
+"onb.welcome.message" = "I listen to your meetings, transcribe them, and write a tidy wiki for each project so you never forget what was said.";
+"onb.welcome.feature1" = "I record your computer's audio and your microphone: Zoom, Meet, Teams, anything.";
+"onb.welcome.feature2" = "Everything stays on your Mac. Transcription happens right here, your audio is never uploaded.";
+"onb.welcome.feature3" = "Claude, with your own account, turns each meeting into summaries, decisions, to-dos and people pages.";
+"onb.consent.title" = "Before recording, let people know";
+"onb.consent.message" = "Recording people without their knowledge may be illegal where you live and, above all, isn't fair to them. Say you're recording at the start of every meeting and respect anyone who doesn't want to be.";
+"onb.consent.accept" = "I understand and will tell others when I record";
+"onb.vault.title" = "Where should I keep your notes?";
+"onb.vault.message" = "Your wiki is a regular folder of text files. You can open it, back it up or move it whenever you like.";
+"onb.vault.change" = "Change…";
+"onb.vault.choose" = "Use this folder";
+"onb.vault.panelMessage" = "Choose where to keep your SecondBrain wiki";
+"onb.vault.hint" = "If you use Obsidian, you can open this folder as a vault.";
+"onb.perm.title" = "Two permissions and you're set";
+"onb.perm.message" = "macOS will ask you to confirm. I only listen when you press Record.";
+"onb.perm.screenTitle" = "Computer audio";
+"onb.perm.screenMessage" = "To hear the other people on your calls. macOS calls it “Screen & System Audio Recording”, but I don't record your screen.";
+"onb.perm.micTitle" = "Microphone";
+"onb.perm.micMessage" = "To hear what you say.";
+"onb.perm.allow" = "Allow";
+"onb.perm.openSettings" = "Open Settings";
+"onb.perm.granted" = "Done";
+"onb.perm.restartHint" = "If you already turned it on in Settings and it doesn't show here, restart SecondBrain.";
+"onb.claude.title" = "Connect Claude";
+"onb.claude.message" = "I use your Claude account (Pro or Max) to understand your meetings. No technical knowledge needed.";
+"onb.models.title" = "Getting transcription ready";
+"onb.models.message" = "I'm downloading the model that transcribes your meetings right here on your Mac (about 3 GB). This only happens once.";
+"onb.models.starting" = "Starting the download…";
+"onb.models.ready" = "Ready to transcribe";
+"onb.models.retry" = "Try again";
+"onb.models.hint" = "You can continue: the download keeps going in the background.";
+"onb.models.continueBackground" = "Continue";
+"onb.project.title" = "Your first project";
+"onb.project.message" = "A project groups the meetings and documents about one thing: a client, a team, your thesis…";
+"onb.project.create" = "Create and continue";
+"onb.done.title" = "All set!";
+"onb.done.message" = "Here's how you'll use SecondBrain day to day:";
+"onb.done.menuTitle" = "The brain in your menu bar";
+"onb.done.menuMessage" = "Top right of your screen. Click it to record, pick the project and see how things are going. It turns red while recording.";
+"onb.done.hotkeyTitle" = "Record from anywhere";
+"onb.done.hotkeyMessage" = "Press ⌥⌘R (Option + Command + R) to start or stop a recording.";
+"onb.done.afterTitle" = "After each meeting";
+"onb.done.afterMessage" = "I transcribe and learn on my own. I'll let you know when I'm done and you'll see it in the project's wiki.";
+
+/* Settings */
+"settings.general" = "General";
+"settings.language" = "Language";
+"settings.captureMic" = "Also record my microphone";
+"settings.hotkey" = "⌥⌘R shortcut to record";
+"settings.storage" = "Storage";
+"settings.vault" = "Wiki folder";
+"settings.dataFolder" = "Audio and internal data";
+"settings.reveal" = "Show in Finder";
+"settings.transcription" = "Transcription";
+"settings.whisper" = "Model";
+"settings.whisper.precise" = "Most accurate";
+"settings.whisper.fast" = "Faster";
+"settings.whisper.status" = "Status";
+"settings.whisper.download" = "Download now";
+"settings.whisper.footer" = "“Faster” transcribes in less time with slightly lower accuracy.";
+"settings.claude" = "Claude";
+"settings.ingestModel" = "For learning from meetings";
+"settings.queryModel" = "For answering questions";
+"settings.model.sonnet" = "Sonnet (balanced)";
+"settings.model.opus" = "Opus (smartest)";
+"settings.model.haiku" = "Haiku (fastest)";
+"settings.account" = "Account";
+"settings.advanced" = "Advanced";
+"settings.git" = "Keep history with git";
+"settings.gitFooter" = "If your wiki folder is a git repository, I commit after every change.";
+
+"owner.label" = "Your name";
+"owner.placeholder" = "e.g. Jamie Smith";
+"owner.hint" = "So Claude knows that “Me” in your meetings is you.";

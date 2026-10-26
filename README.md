@@ -31,7 +31,8 @@ Tu segundo cerebro por proyecto, 100% en tu Mac. Graba tus reuniones (audio de l
 | Tu wiki, transcripciones y notas (markdown, se abre con Obsidian) | `~/Documents/SecondBrain` (o la carpeta que elegiste; Ajustes → *Dónde se guarda* → *Mostrar en Finder*) |
 | Ajustes de la app | `~/Library/Application Support/SecondBrain/config.json` |
 | Audio pendiente de transcribir, historial de cambios y modelos (~3 GB) | `~/Library/Application Support/SecondBrain/data` |
-| Conexión con Claude | Llavero de macOS, elemento `app.secondbrain.mac` |
+| Conexión con Claude y con tus cuentas de correo/calendario | Llavero de macOS, elementos `app.secondbrain.mac` |
+| Cuentas conectadas y proyecto de cada reunión | `~/Library/Application Support/SecondBrain/data/accounts.json`, `meetings.json` |
 
 `~/Library` está oculta: en Finder usa **Ir → Ir a la carpeta…** (⇧⌘G) y pega la ruta.
 
@@ -49,6 +50,37 @@ Tu segundo cerebro por proyecto, 100% en tu Mac. Graba tus reuniones (audio de l
 - **Otras fuentes:** arrastra PDFs, textos o enlaces a un proyecto, o escribe una nota.
 - **Preguntar:** pregunta lo que sea sobre un proyecto o todo tu cerebro; las respuestas citan sus fuentes.
 - **Actividad:** ve qué cambió Claude en cada paso y **deshaz** cuando quieras.
+
+## Ver tu cerebro (Grafo)
+
+La pestaña **Grafo** (en cada proyecto y en *Todo el cerebro*) dibuja todo lo que SecondBrain sabe como un mapa: cada página es un punto y cada enlace una línea. En *Todo el cerebro* los colores son tus proyectos; dentro de un proyecto, los colores son tipos (reuniones, correos, personas, decisiones…). Haz clic en un punto para explorar sus conexiones y abrir la página; pulsa ▶ para ver cómo creció tu cerebro con el tiempo.
+
+## Reuniones
+
+La sección **Reuniones** muestra tu agenda y te acompaña en cada junta:
+
+- **Antes:** *Prepararme* te enseña quiénes van, qué quedó pendiente con ellos y qué preguntar; con *Preparar con Claude* obtienes agenda y preguntas sugeridas.
+- **Durante:** cuando la reunión empieza, el botón se vuelve **Grabar** (también en el menú 🧠 y en la barra lateral). Título, proyecto y asistentes ya van puestos.
+- **Después:** *Ver resumen* abre la página que Claude escribió.
+
+Para ver tu agenda hay dos caminos: **Usar el calendario de la Mac** (un clic, macOS te pide permiso; sirve con cualquier cuenta que ya tengas en la app Calendario) o conectar tu cuenta de Microsoft 365 / Google (abajo).
+
+## Conectar correo y calendario (Microsoft 365 / Google)
+
+En **Ajustes → Cuentas** (o desde las secciones *Correo* y *Reuniones*) pulsa **Conectar Microsoft 365** o **Conectar Google**. Se abre tu navegador, inicias sesión y listo. SecondBrain **solo lee**: nunca envía, borra ni mueve nada, y todo se queda en tu Mac. Puedes desconectar cuando quieras.
+
+- **Correo:** en la sección *Correo* ves tus mensajes recientes y con un botón los agregas al proyecto que elijas ("Agregar a 🚀 Proyecto"). Si el mensaje es parte de una conversación, se agrega completa. Siempre puedes deshacer.
+- **Tu organización bloquea la conexión** ("necesita aprobación del administrador", "access blocked"): pulsa **¿Cómo lo habilito?**. Ahí tienes un mensaje listo para enviarle a TI (botón *Pedírselo a TI*) y los pasos exactos para el administrador:
+  - *Microsoft 365:* en el centro de administración de Microsoft Entra, abrir `https://login.microsoftonline.com/common/adminconsent?client_id=<ID de la app>` y **Aceptar**, o en *Aplicaciones empresariales → Consentimiento y permisos* permitir que los usuarios den consentimiento a permisos de bajo impacto. Permisos pedidos: `User.Read`, `Mail.Read`, `Calendars.Read`, `offline_access` (todos delegados, solo lectura).
+  - *Google Workspace:* en la consola de administración, *Seguridad → Control de acceso y datos → Controles de API → Gestionar acceso de aplicaciones de terceros → Añadir aplicación* → buscar por ID de cliente → marcar **De confianza**. Permisos pedidos: `gmail.readonly`, `calendar.readonly`, `openid email profile`.
+  - Mientras tanto, puedes seguir pegando correos (*Edición → Agregar correo…*, ⇧⌘V) y usar el calendario de la Mac.
+- **Registro de la aplicación (solo para quien distribuye SecondBrain):** la conexión usa OAuth con un *ID de cliente* por proveedor. Créalo una vez y ponlo en `OAuthDefaults` (`app/Sources/BrainCore/ModelsV3.swift`) antes de compilar, o en *Ajustes → Cuentas → Avanzado* (o variables `SB_MS_CLIENT_ID`, `SB_GOOGLE_CLIENT_ID`, `SB_GOOGLE_CLIENT_SECRET`):
+  - *Microsoft:* Entra → *Registros de aplicaciones → Nuevo registro* → cuentas en cualquier directorio y personales → plataforma *Aplicaciones móviles y de escritorio* con URI `http://localhost` → *Autenticación → Permitir flujos de cliente público: Sí* → *Permisos de API*: `User.Read`, `Mail.Read`, `Calendars.Read`, `offline_access` → copia el *Id. de aplicación (cliente)*.
+  - *Google:* Google Cloud → *Pantalla de consentimiento OAuth* (interna si es Workspace; externa + usuarios de prueba si no) con los permisos de Gmail y Calendar de solo lectura → *Credenciales → Crear ID de cliente OAuth → Aplicación de escritorio* → copia el ID y el secreto de cliente.
+
+## Apariencia
+
+**Ajustes → General → Apariencia**: *Sistema*, *Claro* u *Oscuro* (también en el menú *Ver → Apariencia*). Cambia al instante.
 
 ## Privacidad
 
@@ -73,4 +105,5 @@ scripts/release.sh <versión>          # publica en GitHub Releases
 - **Install:** requires an Apple Silicon Mac on macOS 15+, ~5 GB free and a Claude Pro/Max plan. Open the `.dmg`, drag SecondBrain to Applications and open it. When macOS says it can't verify the app (not notarized), go to *System Settings → Privacy & Security* and click **Open Anyway** (*Abrir de todos modos*). Then grant *System Audio Recording* and *Microphone*, connect Claude (browser sign-in) and let it download the transcription model (~3 GB, once).
 - **Troubleshooting:** no other voices in the transcript → enable SecondBrain under *Privacy & Security → Screen & System Audio Recording* and reopen the app; Claude errors → *SecondBrain → Settings… (⌘,) → Claude → Reconnect Claude*; a failed model download resumes with *Retry*.
 - **Files:** wiki in `~/Documents/SecondBrain` (or the folder you chose); settings, pending audio, history and models in `~/Library/Application Support/SecondBrain`; the Claude token in the Keychain (`app.secondbrain.mac`).
+- **v0.3:** *Graph* tab (your brain as a map, colored by project or by type, with a time replay), *Meetings* (agenda from the Mac Calendar or a connected account; prepare with Claude, record with one click, open the summary), *Mail* (read recent messages from Microsoft 365 / Google and add them to a project; read-only), and Light/Dark/System appearance. If your organization blocks the sign-in, open **How do I enable it?** for a ready-to-send message to IT and the exact admin steps (Microsoft: admin consent URL; Google: Admin console → Security → API controls → Manage Third-Party App Access → Trusted). Distributors must register an OAuth client per provider and put the ids in `OAuthDefaults` (or Settings → Accounts → Advanced).
 - **Uninstall:** quit, delete the app, delete `~/Library/Application Support/SecondBrain`, and optionally your wiki folder (back it up first) and the `app.secondbrain.mac` Keychain item.

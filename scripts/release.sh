@@ -86,6 +86,12 @@ Graba tus reuniones (audio de la computadora + tu micrófono), las transcribe **
 mantiene un wiki por proyecto con todo lo que se habló. El audio nunca sale de tu computadora; lo
 único que se envía es el texto que Claude lee con tu propia cuenta.
 
+### Novedades
+- **Grafo:** tu cerebro como un mapa (pestaña *Grafo*): colores por proyecto o por tipo, clic para explorar, ▶ para ver cómo creció.
+- **Reuniones:** agenda desde el calendario de la Mac o tu cuenta de Microsoft 365 / Google; *Prepararme* antes, **Grabar** con un clic durante, *Ver resumen* después.
+- **Correo conectado:** lee tus mensajes recientes de Microsoft 365 / Google y agrégalos a un proyecto con un botón (solo lectura, siempre se puede deshacer). Si tu organización lo bloquea, *¿Cómo lo habilito?* trae el mensaje para TI y los pasos del administrador.
+- **Apariencia:** claro, oscuro o sistema.
+
 ### Instalar
 1. Descarga **SecondBrain-$VERSION.dmg** (abajo, en *Assets*), ábrelo y arrastra **SecondBrain** a la
    carpeta **Aplicaciones**.
@@ -107,6 +113,12 @@ suscripción de Claude (Pro o Max).
 
 Records your meetings (computer audio + your mic), transcribes them **on your Mac**, and Claude keeps a
 per-project wiki of everything discussed. Audio never leaves your computer.
+
+### What's new
+- **Graph:** your brain as a map (colors by project or type, click to explore, ▶ to replay how it grew).
+- **Meetings:** agenda from the Mac Calendar or your Microsoft 365 / Google account; prepare before, **Record** with one click during, open the summary after.
+- **Connected mail:** read recent Microsoft 365 / Google messages and add them to a project with one button (read-only, always undoable). If your organization blocks it, *How do I enable it?* has the message for IT and the admin steps.
+- **Appearance:** light, dark or system.
 
 ### Install
 1. Download **SecondBrain-$VERSION.dmg** (under *Assets*), open it and drag **SecondBrain** to

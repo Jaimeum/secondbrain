@@ -7,3 +7,4 @@ app/.build/
 app/.swiftpm/
 build/
 dist/
+.claude/

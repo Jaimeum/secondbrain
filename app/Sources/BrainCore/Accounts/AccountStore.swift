@@ -1,17 +1,29 @@
 import Foundation
 import Observation
 
-/// Connected Microsoft 365 / Google accounts (CONTRACT §12.3). The list lives in `data/accounts.json`; tokens go to
-/// the Keychain (never to disk in plain text).
+/// Connected Microsoft 365 / Google accounts and the Mac Calendar (CONTRACT §12.3, §12.7). The list lives in
+/// `data/accounts.json`; OAuth tokens go to the Keychain (never to disk in plain text). The Mac Calendar ("local:calendar")
+/// has no tokens: it only needs the system permission.
 ///
-/// SKELETON (v0.3): `connect` and the real providers are stubs for the accounts engineer. With `SB_DEMO_ACCOUNTS=1`
-/// the store starts with two demo accounts backed by `DemoProvider` (nothing is written to disk).
+/// With `SB_DEMO_ACCOUNTS=1` the store starts with two demo accounts backed by `DemoProvider` (nothing is written to
+/// disk and no browser is opened).
 @MainActor @Observable public final class AccountStore {
     public private(set) var accounts: [ConnectedAccount] = []
+    /// Accounts whose refresh token stopped working (revoked, password change, admin policy): the UI offers
+    /// "Vuelve a iniciar sesión". Cleared by a successful `connect`.
+    public private(set) var needsSignIn: Set<String> = []
     /// `SB_DEMO_ACCOUNTS=1`: fake accounts and data for snapshots and UX review.
     public let isDemo: Bool
     @ObservationIgnored public private(set) var fileURL: URL
     @ObservationIgnored private var providers: [String: MailCalendarProvider] = [:]
+    /// Called after an account is added (the engine adds its address to "Tus correos").
+    @ObservationIgnored public var onConnected: ((ConnectedAccount) -> Void)?
+    /// Where tokens live (Keychain in the app; memory in tests).
+    @ObservationIgnored public var tokenStorage: TokenStorage = KeychainTokenStore()
+    /// The network (tests inject fixtures).
+    @ObservationIgnored public var transport: HTTPTransport = HTTP.urlSession
+    /// The app registration used to refresh tokens (env > config > compiled defaults).
+    @ObservationIgnored public var registration: () -> OAuthAppRegistration = { OAuthAppRegistration.effective(config: AppConfig.load()) }
 
     public nonisolated static var demoRequested: Bool { ProcessInfo.processInfo.environment["SB_DEMO_ACCOUNTS"] == "1" }
 
@@ -22,11 +34,17 @@ import Observation
     }
 
     public var hasAccounts: Bool { !accounts.isEmpty }
+    /// Accounts with mail (Microsoft / Google).
+    public var mailAccounts: [ConnectedAccount] { accounts.filter { $0.provider.hasMail } }
+    /// Every account with a calendar (all of them, including the Mac Calendar).
+    public var calendarAccounts: [ConnectedAccount] { accounts }
+    public var hasLocalCalendar: Bool { accounts.contains { $0.provider == .local } }
 
     public func account(id: String) -> ConnectedAccount? { accounts.first { $0.id == id } }
 
-    /// Signs in with the system browser (OAuth 2.0 Authorization Code + PKCE, loopback redirect) and adds the account.
-    /// Throws `AccountError.notConfigured` without a client id, `.cancelled`, `.consentRequired` (organization policy).
+    /// Signs in with the system browser (OAuth 2.0 Authorization Code + PKCE, loopback redirect) and adds the account;
+    /// `.local` asks for the Calendar permission instead. Throws `AccountError.notConfigured` without a client id,
+    /// `.cancelled`, `.consentRequired` (organization policy). Cancel by cancelling the calling task.
     public func connect(_ provider: AccountProvider, registration: OAuthAppRegistration,
                         openURL: @escaping @Sendable (URL) -> Void) async throws -> ConnectedAccount {
         if isDemo {
@@ -35,32 +53,90 @@ import Observation
             upsert(account)
             return account
         }
-        // TODO(accounts engineer): OAuthFlow (PKCE + loopback), token exchange, Keychain, profile(), upsert.
-        throw AccountError.notConfigured(provider)
+        if provider == .local { return try await connectLocalCalendar() }
+
+        let endpoint = try OAuthEndpoint.make(provider, registration: registration)
+        let language = AppConfig.load().uiLanguage
+        let transport = self.transport
+        let tokens = try await OAuthClient.authorize(endpoint, language: language, transport: transport, openURL: openURL)
+        try Task.checkCancellation()
+
+        // Who signed in: ask the API with the fresh token (nothing is stored until we know the address).
+        let pending = ConnectedAccount(provider: provider, email: "pending", scopes: provider.scopes)
+        let manager = TokenManager(key: "pending", provider: provider, endpoint: endpoint, storage: MemoryTokenStore(),
+                                   transport: transport, initial: tokens)
+        let profile = try await Self.makeProvider(pending, tokens: manager, transport: transport).profile()
+        var account = profile
+        account.scopes = tokens.scope.isEmpty ? provider.scopes : tokens.scope.split(separator: " ").map(String.init)
+        try tokenStorage.save(tokens, for: KeychainTokenStore.key(for: account))
+        needsSignIn.remove(account.id)
+        upsert(account)
+        Log.info("connected \(provider.rawValue) account")
+        onConnected?(account)
+        return account
+    }
+
+    private func connectLocalCalendar() async throws -> ConnectedAccount {
+        guard try await LocalCalendarProvider.requestAccess() else {
+            throw AccountError.failed(LocalCalendarProvider.noAccessMessage)
+        }
+        let account = account(id: LocalCalendarProvider.accountId) ?? LocalCalendarProvider.makeAccount()
+        upsert(account)
+        return account
     }
 
     /// Forgets the account and its tokens.
     public func disconnect(_ id: String) throws {
+        if let account = account(id: id), account.provider.needsOAuth, !isDemo {
+            tokenStorage.delete(KeychainTokenStore.key(for: account))
+        }
         accounts.removeAll { $0.id == id }
         providers[id] = nil
-        // TODO(accounts engineer): delete the Keychain tokens of `id`.
+        needsSignIn.remove(id)
         try save()
     }
 
     /// Mail and calendar of `account`; the provider refreshes its tokens on its own.
     public func provider(for account: ConnectedAccount) -> MailCalendarProvider {
         if let cached = providers[account.id] { return cached }
-        let provider: MailCalendarProvider = isDemo
-            ? DemoProvider(account: account, language: AppConfig.load().uiLanguage)
-            : UnavailableProvider(account: account)   // TODO(accounts engineer): GraphProvider / GoogleProvider
+        let provider: MailCalendarProvider
+        if isDemo {
+            provider = DemoProvider(account: account, language: AppConfig.load().uiLanguage)
+        } else if account.provider == .local {
+            provider = LocalCalendarProvider(account: account)
+        } else {
+            let id = account.id
+            let manager = TokenManager(
+                key: KeychainTokenStore.key(for: account), provider: account.provider,
+                endpoint: try? OAuthEndpoint.make(account.provider, registration: registration()),
+                storage: tokenStorage, transport: transport,
+                onReauthRequired: { [weak self] in Task { @MainActor in self?.markNeedsSignIn(id) } })
+            provider = Self.makeProvider(account, tokens: manager, transport: transport)
+        }
         providers[account.id] = provider
         return provider
+    }
+
+    static func makeProvider(_ account: ConnectedAccount, tokens: TokenManager, transport: @escaping HTTPTransport) -> MailCalendarProvider {
+        let api = APIClient(provider: account.provider, tokens: tokens, transport: transport)
+        switch account.provider {
+        case .microsoft: return MicrosoftGraphProvider(account: account, api: api)
+        case .google: return GoogleProvider(account: account, api: api)
+        case .local: return LocalCalendarProvider(account: account)
+        }
+    }
+
+    public func markNeedsSignIn(_ id: String) {
+        guard account(id: id) != nil, !needsSignIn.contains(id) else { return }
+        needsSignIn.insert(id)
+        providers[id] = nil
     }
 
     /// The data folder moved (`BrainEngine.reload`): read the list from the new place.
     public func reload(fileURL: URL) {
         self.fileURL = fileURL
         providers = [:]
+        needsSignIn = []
         load()
     }
 
@@ -98,18 +174,15 @@ import Observation
     }
 }
 
-/// Placeholder until the real Microsoft Graph / Google providers exist: every call says the account must be reconnected.
-final class UnavailableProvider: MailCalendarProvider {
-    let account: ConnectedAccount
-    init(account: ConnectedAccount) { self.account = account }
-    func profile() async throws -> ConnectedAccount { throw AccountError.notConfigured(account.provider) }
-    func listMessages(since: Date, pageToken: String?) async throws -> (messages: [MailMessageSummary], next: String?) {
-        throw AccountError.notConfigured(account.provider)
+public extension BrainEngine {
+    /// After connecting an account: its address joins "Tus correos" (people/README.md) if it wasn't there, so mail
+    /// from it counts as the owner's (CONTRACT §12.3).
+    func rememberOwnerEmail(of account: ConnectedAccount) {
+        guard account.provider.hasMail, account.email.contains("@") else { return }
+        let current = vault.ownerEmails()
+        guard !current.contains(account.email.lowercased()) else { return }
+        do { try vault.setOwnerEmails(current + [account.email.lowercased()]) } catch {
+            Log.error("could not add the account address to the owner's emails: \(error)")
+        }
     }
-    func searchMessages(_ query: String, pageToken: String?) async throws -> (messages: [MailMessageSummary], next: String?) {
-        throw AccountError.notConfigured(account.provider)
-    }
-    func fetchMessage(id: String) async throws -> MailMessageFull { throw AccountError.notConfigured(account.provider) }
-    func fetchThread(id: String) async throws -> [MailMessageFull] { throw AccountError.notConfigured(account.provider) }
-    func events(from: Date, to: Date) async throws -> [CalendarEvent] { throw AccountError.notConfigured(account.provider) }
 }

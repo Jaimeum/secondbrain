@@ -4,7 +4,7 @@ import Recorder
 import SwiftUI
 
 enum OnboardingStep: Int, CaseIterable {
-    case welcome, vault, permissions, claude, models, project, done
+    case welcome, vault, permissions, claude, models, project, accounts, done   // v0.3: accounts (optional)
 
     /// The step survives a relaunch (macOS often needs one after granting Screen Recording), keyed by the
     /// config file so an isolated `SB_CONFIG` doesn't resume someone else's setup.
@@ -79,6 +79,7 @@ struct OnboardingView: View {
             OwnerEmailsField().padding(.top, 8)
             ProjectFormFields(form: $form).padding(.top, 16)
             if let projectError { Text(projectError).foregroundStyle(.red).padding(.top, 8) }
+        case .accounts: AccountsStep()
         case .done: DoneStep()
         }
     }
@@ -113,6 +114,7 @@ struct OnboardingView: View {
         case .project: L("onb.project.create")
         case .done: L("onb.finish")
         case .models where !state.modelsReady: L("onb.models.continueBackground")
+        case .accounts where !state.engine.accounts.hasAccounts: L("onb.accounts.later")
         default: L("common.continue")
         }
     }
@@ -471,5 +473,37 @@ private struct DoneStep: View {
             .padding(18)
             .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
         }
+    }
+}
+
+// MARK: v0.3 accounts
+
+/// Optional: connect mail and calendar now (one card), or "Más tarde" (CONTRACT §12.3).
+private struct AccountsStep: View {
+    @Environment(AppState.self) private var state
+    @ViewState private var connector = AccountConnector()
+    @ViewState private var help: OrgHelpRequest?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            StepHeader(symbol: "envelope.badge", title: L("onb.accounts.title"), message: L("onb.accounts.message"))
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(state.engine.accounts.accounts) { account in
+                    HStack(spacing: 10) {
+                        ProviderBadge(provider: account.provider)
+                        Text(account.provider == .local ? L("accounts.macCalendar") : account.email)
+                        Spacer()
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    }
+                }
+                ConnectAccountControls(connector: connector, help: $help, context: .onboarding)
+                Label(L("accounts.footer"), systemImage: "lock.shield")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .sheet(item: $help) { request in OrgAccessHelpSheet(provider: request.provider) }
     }
 }

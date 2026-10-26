@@ -9,6 +9,8 @@ struct ThreadMeta: Codable, Equatable {
         var sourceId: String?
         var bodyHash: String?
         var added: Date?
+        /// v0.3: `"<provider>:<messageId>"` when it came from a connected account.
+        var externalId: String? = nil
     }
     var key: String
     var subject: String
@@ -117,7 +119,8 @@ extension VaultStore {
             if meta.subject.isEmpty { meta.subject = EmailParser.normalizeSubject(Frontmatter.field("subject", in: text) ?? "") }
             meta.messages.append(.init(file: file, date: Frontmatter.field("date", in: text).flatMap { SBDate.parseISO($0)?.date },
                                        from: from, sourceId: Frontmatter.field("source_id", in: text),
-                                       bodyHash: EmailParser.bodyFingerprint(Self.emailBody(text).body), added: nil))
+                                       bodyHash: EmailParser.bodyFingerprint(Self.emailBody(text).body), added: nil,
+                                       externalId: Frontmatter.field("external_id", in: text)))
             meta.addParticipants([from].compactMap { $0 })
         }
         return meta
@@ -131,7 +134,7 @@ extension VaultStore {
     }
 
     /// Body and quoted history of a stored email raw.
-    static func emailBody(_ text: String) -> (body: String, quoted: String?) {
+    public static func emailBody(_ text: String) -> (body: String, quoted: String?) {
         let body = Frontmatter.split(text).body
         for marker in ["\n## Historial citado", "\n## Quoted history"] {
             if let r = body.range(of: marker) {
@@ -183,6 +186,21 @@ public extension BrainEngine {
 
     /// The stored email this one duplicates (same sender, same sent minute, same body), if any.
     func duplicateOf(_ email: ParsedEmail) -> SourceRecord? {
+        duplicateOf(email, externalId: nil)
+    }
+
+    /// v0.3: also matches by `externalId` (`"<provider>:<messageId>"`, a message from a connected account).
+    func duplicateOf(_ email: ParsedEmail, externalId: String?) -> SourceRecord? {
+        if let externalId {
+            if let src = emailSource(externalId: externalId) { return src }
+            for folder in vault.threadFolders() {
+                guard let meta = vault.threadMeta(at: folder), let m = meta.messages.first(where: { $0.externalId == externalId })
+                else { continue }
+                return sources.first { $0.id == m.sourceId } ?? SourceRecord(id: m.sourceId ?? m.file, kind: .email, title: meta.subject,
+                                                                            projectSlug: VaultStore.projectSlug(of: folder), status: .done,
+                                                                            rawPath: "\(folder)/\(m.file)")
+            }
+        }
         let hash = EmailParser.bodyFingerprint(email.body)
         for folder in vault.threadFolders() {
             guard let meta = vault.threadMeta(at: folder) else { continue }
@@ -200,10 +218,23 @@ public extension BrainEngine {
     /// thread given a project moves there whole. Throws `EngineError.duplicateEmail` for an exact duplicate.
     @discardableResult
     func addEmail(_ email: ParsedEmail, threadKey: String?, projectSlug: String?) throws -> SourceRecord {
+        try addEmail(email, threadKey: threadKey, projectSlug: projectSlug, externalId: nil)
+    }
+
+    /// The source added from a connected account's message (`"<provider>:<messageId>"`), if any.
+    func emailSource(externalId: String) -> SourceRecord? {
+        sources.first { $0.externalId == externalId }
+    }
+
+    /// v0.3: same as `addEmail(_:threadKey:projectSlug:)`, remembering where the message came from (`externalId`
+    /// = `"<provider>:<messageId>"`): stored in the source, the raw (`external_id:`) and `_thread.json`; adding the
+    /// same message again throws `EngineError.duplicateEmail`.
+    @discardableResult
+    func addEmail(_ email: ParsedEmail, threadKey: String?, projectSlug: String?, externalId: String?) throws -> SourceRecord {
         guard !email.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(email.quotedHistory ?? "").isEmpty else {
             throw EngineError.emptyEmail
         }
-        if let dup = duplicateOf(email) { throw EngineError.duplicateEmail(dup.title) }
+        if let dup = duplicateOf(email, externalId: externalId) { throw EngineError.duplicateEmail(dup.title) }
         let fm = FileManager.default
         var project = validProject(projectSlug)
         var folder: String
@@ -248,7 +279,7 @@ public extension BrainEngine {
         cc: \(YAML.list(email.cc.map(EmailParser.format)))
         date: \(SBDate.iso(sent))
         added: \(SBDate.iso(added))
-        project: \(YAML.scalar(project))
+        project: \(YAML.scalar(project))\(externalId.map { "\nexternal_id: \(YAML.quoted($0))" } ?? "")
         ---
 
 
@@ -265,7 +296,7 @@ public extension BrainEngine {
         if meta.subject.isEmpty { meta.subject = EmailParser.normalizeSubject(email.subject ?? "") }
         meta.addParticipants([email.from].compactMap { $0 } + email.to + email.cc)
         meta.messages.append(.init(file: file.lastPathComponent, date: email.date, from: email.from, sourceId: id,
-                                   bodyHash: EmailParser.bodyFingerprint(email.body), added: added))
+                                   bodyHash: EmailParser.bodyFingerprint(email.body), added: added, externalId: externalId))
         meta.messages.sort { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }
         try meta.save(to: dir)
 
@@ -278,6 +309,7 @@ public extension BrainEngine {
                                rawPath: file.relativePath(from: vault.root), createdAt: added)
         src.eventDate = sent
         src.threadKey = meta.key
+        src.externalId = externalId
         enqueueAfterRaw(&src)
         Log.info("email added to thread \(meta.key) (\(folder)) as \(id)")
         if let moveTo {

@@ -63,6 +63,8 @@ public enum TranscriptWriter {
             ? transcript.durationSeconds
             : (manifest.endedAt?.timeIntervalSince(manifest.startedAt) ?? 0)
         let speakers = orderedSpeakers(transcript.segments).map { label(for: $0, language: language) }
+        // v0.3 (§12.5): who was invited (calendar), so ingest can map speaker labels to people.
+        let attendees = (manifest.attendees ?? []).isEmpty ? "" : "\nattendees: \(YAML.list(manifest.attendees ?? []))"
         var out = """
         ---
         type: transcript
@@ -73,7 +75,7 @@ public enum TranscriptWriter {
         added: \(SBDate.iso(addedAt))
         duration: "\(Fmt.clock(duration))"
         language: \(YAML.scalar(transcript.language))
-        speakers: \(YAML.list(speakers))
+        speakers: \(YAML.list(speakers))\(attendees)
         ---
 
         # \(title)

@@ -70,6 +70,10 @@ Work out (internally, don't output it):
 - **Speakers** (meetings): apply CLAUDE.md §7 strictly. For each label: person or null,
   confidence, evidence with timestamp. Check existing people pages and aliases first. Detect
   whether the owner ("Yo"/"Me") is named.
+- **Attendees** (meetings): if the raw has `attendees:` (from the calendar invitation), those are
+  the people invited. Use the list to map speaker labels to people (match existing people pages
+  and aliases; create or update the pages of attendees who took part). Being invited is not proof
+  of who said what: the confidence rules of CLAUDE.md §7 still apply.
 - **People** speaking, writing, receiving or mentioned, with work-relevant facts (role, org,
   expertise, opinions on project matters); for emails, their addresses.
 - **Agreements** (CLAUDE.md §10): the owner's commitments, everyone else's (who, what, due date),

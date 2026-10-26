@@ -31,7 +31,8 @@ final class RecordingSession: @unchecked Sendable {
     /// delivery latency of real buffers, or late audio would be dropped as overlap.
     private static let fillLag = 2.0
 
-    init(sessionsDir: URL, title: String?, projectSlug: String?, captureMic: Bool) throws {
+    init(sessionsDir: URL, title: String?, projectSlug: String?, captureMic: Bool,
+         calendarEventId: String? = nil, attendees: [String]? = nil) throws {
         let startedAt = Date()
         startHost = AudioMath.hostSeconds()
         let id = SessionManifest.newId(at: startedAt)
@@ -41,7 +42,8 @@ final class RecordingSession: @unchecked Sendable {
         var tracks = ["system": [String]()]
         if captureMic { tracks["mic"] = [] }
         manifest = SessionManifest(id: id, title: title, projectSlug: projectSlug, startedAt: startedAt,
-                                   tracks: tracks, micCaptured: captureMic)
+                                   tracks: tracks, micCaptured: captureMic,
+                                   calendarEventId: calendarEventId, attendees: attendees)
         sampleRate = manifest.sampleRate
         for track in tracks.keys { addTrack(track) }
         try manifest.save(to: directory)

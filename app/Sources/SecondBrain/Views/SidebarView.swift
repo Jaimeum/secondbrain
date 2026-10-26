@@ -88,6 +88,7 @@ private struct SidebarFooter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            MeetingBanner()   // MARK: v0.3 meetings
             QueueStatusLine()
             RecordButton(large: true)
             if let warning = state.recorderWarning {

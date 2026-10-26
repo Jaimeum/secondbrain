@@ -191,7 +191,8 @@ private struct EntryRow: View {
                     if entry.hasTime {
                         Text(Fmt.time(entry.date)).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                     }
-                    Text(entry.title)
+                    // v0.3: 📅 = recorded from a calendar event
+                    Text(entry.title + (entry.sourceId.flatMap { state.engine.source($0)?.calendarEventId } != nil ? " 📅" : ""))
                         .font(.body.weight(entry.kind == .meeting || entry.kind == .email || entry.kind == .milestone ? .medium : .regular))
                         .foregroundStyle(entry.kind == .task && isFuture ? Color.orange : .primary)
                         .fixedSize(horizontal: false, vertical: true)

@@ -229,7 +229,7 @@ struct ChatView: View {
     }
 }
 
-private struct MessageView: View {
+struct MessageView: View {   // v0.3: also used by MeetingPrepView
     @Environment(AppState.self) private var state
     let message: ChatMessage
     let baseRelPath: String

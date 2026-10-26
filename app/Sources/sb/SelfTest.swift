@@ -26,6 +26,7 @@ struct SelfTest: AsyncParsableCommand {
         t.group("integration-fixes") { testIntegrationFixes(t) }
         await t.groupAsync("v03-models") { await testV3Models(t, root: root.appendingPathComponent("v03")) }
         await t.groupAsync("accounts") { await testAccounts(t, root: root.appendingPathComponent("accounts")) }   // MARK: v0.3 accounts
+        await t.groupAsync("v03-meetings") { await testMeetings(t, root: root.appendingPathComponent("meetings")) }
         await t.groupAsync("engine") { await testEngine(t, root: root.appendingPathComponent("engine")) }
         await t.groupAsync("graph") { await testGraph(t, root: root.appendingPathComponent("graph")) }  // MARK: v0.3 graph
         await t.groupAsync("mail") { await testMail(t, root: root.appendingPathComponent("mail")) }   // MARK: v0.3 mail

@@ -23,6 +23,12 @@ struct SecondBrainApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .pasteboard) {
+                Divider()
+                Button(L("email.pasteMenu")) { state.requestEmail() }
+                    .keyboardShortcut("v", modifiers: [.command, .shift])
+                    .disabled(!state.config.onboardingComplete || !state.engineStarted)
+            }
         }
 
         MenuBarExtra {
@@ -44,14 +50,21 @@ struct SecondBrainApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        // Snapshot mode (development) must not take focus or show windows on the user's screen.
+        let snapshot = MainActor.assumeIsolated { DebugSnapshots.directory != nil }
+        NSApp.setActivationPolicy(snapshot ? .prohibited : .regular)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let snapshot = MainActor.assumeIsolated { DebugSnapshots.directory != nil }
         MainActor.assumeIsolated {
             AppState.shared.launch()
+            if snapshot {
+                NSApp.windows.forEach { $0.orderOut(nil) }
+                DebugSnapshots.runIfRequested(state: AppState.shared)
+            }
         }
-        NSApp.activate(ignoringOtherApps: true)
+        if !snapshot { NSApp.activate(ignoringOtherApps: true) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

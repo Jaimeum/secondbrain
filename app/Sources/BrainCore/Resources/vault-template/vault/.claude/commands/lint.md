@@ -37,16 +37,34 @@ Never ask questions. Never touch `raw/` or `_inbox/`.
 7. **Stale content**: overview "Estado actual" or topic "En breve" older than newer sources that
    changed it; decisions still `accepted` although a later decision supersedes them.
 8. **Tasks** (in `tasks.md`, the only live list; meeting pages are a snapshot of that day and are
-   not compared): open tasks whose date is before today (overdue); tasks without owner;
-   duplicates; tasks a later source says are done but still open; checkboxes outside `tasks.md`
-   (convert them to plain bullets).
-9. **Missing pages**: people, topics or terms mentioned in 3+ pages without a page of their own;
+   not compared): open tasks whose date is before today (overdue) — **split them into the
+   owner's ("Yo"/"Me" group) and other people's**; tasks without owner; duplicates; tasks a
+   later source says are done but still open; the owner's tasks outside the owner's group (or
+   that group not first); lines with more than one `📅`; commitments in a meeting or thread
+   page's `## Acuerdos` with no matching task; checkboxes outside `tasks.md` (convert them to
+   plain bullets).
+9. **Dates and timeline** (CLAUDE.md §9, §8.9): every meeting, email thread and dated source has
+   its line in `timeline.md` at its event date (compare with the page's `date`/`event_date` and
+   the raw `date:`); lines out of chronological order or under the wrong month heading;
+   lines not in the exact format `- YYYY-MM-DD[ HH:MM] · <emoji> …` (a month-only date like
+   `2027-01` is not allowed); tasks of `tasks.md` repeated as 📅 lines;
+   decisions missing or with a different date than their page; the overview "Estado actual"
+   describing an older event as current when a newer one changed it; Historia bullets out of
+   order; full timestamps in frontmatter without timezone offset or not matching the raw
+   `date:`; source pages missing `event_date`.
+10. **Emails** (CLAUDE.md §12): thread folders in `raw/emails/` without a page in
+    `wiki/emails/`; messages of a folder not listed in the thread page's `sources:`; thread
+    pages whose `messages` / `last_message` don't match; thread pages missing `## Acuerdos`;
+    email citations or timeline lines without ✉️ where the format asks for it.
+11. **Missing pages**: people, topics or terms mentioned in 3+ pages without a page of their own;
    glossary terms used but undefined.
-10. **Duplicates**: two pages about the same person/topic (aliases, accents, languages).
-11. **Unmapped speakers**: meetings with `person: null` labels where another source now gives
+12. **Duplicates**: two pages about the same person/topic (aliases, accents, languages).
+13. **Unmapped speakers**: meetings with `person: null` labels where another source now gives
     clear evidence (only report; map them only if the evidence meets CLAUDE.md §7).
-12. **Unprocessed sources**: raw files in the project with no source page in `wiki/meetings/` or
-    `wiki/sources/` (report only; the app ingests them).
+14. **Unprocessed sources**: raw files in the project with no source page in `wiki/meetings/`,
+    `wiki/emails/` or `wiki/sources/` (report only; the app ingests them).
+15. **Pages from a template**: source pages that still contain template comments (`<!--`) or
+    lack `## Acuerdos` / `## Fuente`. Never lint the `templates/` folder itself.
 
 ## Fix (only trivial, safe things)
 
@@ -55,7 +73,14 @@ Never ask questions. Never touch `raw/` or `_inbox/`.
 - Missing index lines → add them; index lines pointing to nothing → remove them.
 - Missing `updated`/`type`/`title` frontmatter → add from the page content.
 - Exact duplicate tasks in `tasks.md` → merge; tasks done in a source but open in `tasks.md` →
-  mark done with citation.
+  mark done with citation; the owner's tasks in the wrong group → move them to the owner's group;
+  a commitment in a page's Acuerdos missing from `tasks.md` → add it.
+- Timeline: missing lines for existing meetings/threads/decisions → add them at their event
+  date; lines out of order → reorder; `timeline.md` missing → create it (CLAUDE.md §8.9); a line
+  without a full day → move it to the overview's "Próximos hitos y fechas"; a 📅 line that
+  repeats a task → remove it.
+  Wrong dates in frontmatter that the raw `date:` makes obvious → fix them.
+- Template comments left in a page → remove them.
 - Orphan topic/decision → link it from the most relevant topic or the overview if the connection
   is clear from content.
 - Do NOT: resolve contradictions, merge different-looking people/topic pages, rewrite summaries,
@@ -84,13 +109,15 @@ language: es
 
 ## Para revisar
 - **Contradicción:** … (links)
-- **Pendiente vencido:** … — owner · 📅 date (link)
+- **Tus pendientes vencidos:** … · 📅 date (link)
+- **Pendientes vencidos de otros:** … — owner · 📅 date (link)
+- **Correo sin procesar / línea de tiempo:** … (links)
 
 ## Sugerencias
 - Sources or meetings that would fill gaps; questions worth asking; pages worth creating.
 
 ## Números
-Páginas: N · Reuniones: N · Fuentes: N · Decisiones: N · Pendientes abiertos: N (vencidos: N) · Conflictos abiertos: N
+Páginas: N · Reuniones: N · Hilos de correo: N · Fuentes: N · Decisiones: N · Pendientes abiertos: N (tuyos: N; vencidos: tuyos N, de otros N) · Conflictos abiertos: N
 ```
 
 Omit empty sections except "En breve" and "Números". Then append to the project `wiki/log.md`

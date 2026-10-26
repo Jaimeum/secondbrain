@@ -52,6 +52,8 @@ struct InboxView: View {
         .navigationTitle(L("inbox.title"))
         .navigationSubtitle(L("inbox.subtitle"))
         .toolbar {
+            Button { state.requestEmail(projectSlug: nil) } label: { Label(L("email.add"), systemImage: "envelope.badge") }
+                .help(L("email.addHelp"))
             Button { showNote = true } label: { Label(L("sources.newNote"), systemImage: "square.and.pencil") }
         }
         .sheet(isPresented: $showNote) { NoteSheet(projectSlug: nil) }
@@ -73,7 +75,8 @@ private struct InboxRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Image(systemName: source.kind.symbol).foregroundStyle(.secondary)
+                Image(systemName: source.kind.symbol).foregroundStyle(source.kind == .email ? Color.accentColor : .secondary)
+                    .help(source.kind.label)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(source.title).font(.body.weight(.medium))
                     Text(subtitle).font(.caption).foregroundStyle(.secondary)
@@ -121,7 +124,7 @@ private struct InboxRow: View {
     private var suggestedProject: Project? { state.project(source.suggestedProject) }
 
     private var subtitle: String {
-        var parts = [source.kind.label, Fmt.date(source.createdAt)]
+        var parts = [source.datesLine]
         if let d = source.durationSeconds, d > 0 { parts.append(Fmt.shortDuration(d)) }
         return parts.joined(separator: " · ")
     }

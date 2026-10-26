@@ -16,6 +16,8 @@ struct WikiBrowser: View {
 
     @ViewState private var pages: [WikiPage] = []
     @ViewState private var history: [String] = []
+    @ViewState private var export: ExportRequest?
+    @ViewState private var threadKey: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -36,6 +38,13 @@ struct WikiBrowser: View {
             }
         }
         .task(id: state.vaultRevision) { await reload() }
+        .sheet(item: $export) { ExportSheet(request: $0) }
+        .sheet(item: Binding(get: { threadKey.map(ThreadKeyItem.init) }, set: { threadKey = $0?.key })) { item in
+            ThreadSheet(threadKey: item.key) { path in
+                if let current = selection { history.append(current) }
+                selection = path
+            }
+        }
         .task {
             // Claude edits pages in the background; keep the list fresh without user action.
             while !Task.isCancelled {
@@ -88,6 +97,20 @@ struct WikiBrowser: View {
                 .lineLimit(1)
             Spacer()
             if let selection {
+                if let key = Self.threadKey(of: selection) {
+                    Button {
+                        threadKey = key
+                    } label: {
+                        Label(L("thread.viewEmails"), systemImage: "envelope")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                Button {
+                    export = ExportRequest(target: .page(path: selection, title: currentTitle))
+                } label: {
+                    Label(L("export.buttonEllipsis"), systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.borderless)
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting([state.engine.vault.url(for: selection)])
                 } label: {
@@ -98,6 +121,17 @@ struct WikiBrowser: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+
+    private var currentTitle: String {
+        pages.first { $0.path == selection }?.title
+            ?? selection.map { (($0 as NSString).lastPathComponent as NSString).deletingPathExtension } ?? ""
+    }
+
+    /// `projects/<p>/wiki/emails/<thread>.md` → the thread key.
+    static func threadKey(of path: String) -> String? {
+        guard path.contains("/wiki/emails/"), path.hasSuffix(".md") else { return nil }
+        return ((path as NSString).lastPathComponent as NSString).deletingPathExtension
     }
 
     /// Lists the pages off the main thread (it walks the vault folder) and applies the result only if the
@@ -124,8 +158,8 @@ struct WikiBrowser: View {
 enum WikiGrouping {
     struct Group { let key: String; let title: String; let pages: [WikiPage] }
 
-    private static let order = ["general", "meetings", "sources", "topics", "decisions", "people", "questions"]
-    private static let generalOrder = ["overview", "index", "tasks", "health", "log"]
+    private static let order = ["general", "meetings", "emails", "sources", "topics", "decisions", "people", "questions"]
+    private static let generalOrder = ["overview", "index", "tasks", "timeline", "health", "log"]
 
     static func groupKey(_ path: String) -> String {
         var rel = path
@@ -153,6 +187,7 @@ enum WikiGrouping {
                 }
                 // Dated pages (meetings, questions) newest first; everything else alphabetical.
                 if key == "meetings" || key == "questions" || key == "sources" { return a.path > b.path }
+                if key == "emails" { return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending }
                 return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
             }
             return Group(key: key, title: title(for: key), pages: sorted)
@@ -163,6 +198,7 @@ enum WikiGrouping {
         switch key {
         case "general": L("wikiGroup.general")
         case "meetings": L("wikiGroup.meetings")
+        case "emails": L("wikiGroup.emails")
         case "sources": L("wikiGroup.sources")
         case "topics": L("wikiGroup.topics")
         case "decisions": L("wikiGroup.decisions")
@@ -175,6 +211,7 @@ enum WikiGrouping {
     static func symbol(for path: String) -> String {
         switch groupKey(path) {
         case "meetings": return "waveform"
+        case "emails": return "envelope"
         case "sources": return "doc.text"
         case "topics": return "lightbulb"
         case "decisions": return "checkmark.seal"
@@ -185,6 +222,7 @@ enum WikiGrouping {
             case "overview": return "sparkles"
             case "index": return "list.bullet"
             case "tasks": return "checklist"
+            case "timeline": return "calendar"
             case "log": return "clock"
             case "health": return "stethoscope"
             default: return "doc"
@@ -195,4 +233,9 @@ enum WikiGrouping {
     static func defaultPage(in pages: [WikiPage]) -> WikiPage? {
         pages.first { baseName($0.path) == "overview" } ?? pages.first { baseName($0.path) == "index" } ?? pages.first
     }
+}
+
+private struct ThreadKeyItem: Identifiable {
+    let key: String
+    var id: String { key }
 }

@@ -29,5 +29,6 @@ updated: {{DATE}}
 ## Personas
 
 ## Línea de tiempo
+Lo más reciente primero. La historia completa está en la [[projects/{{PROJECT_SLUG}}/wiki/timeline|línea de tiempo]].
 
 ## Glosario

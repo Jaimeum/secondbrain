@@ -56,8 +56,9 @@ public enum TranscriptWriter {
         return slug.isEmpty ? stamp : "\(stamp)-\(slug)"
     }
 
+    /// `date:` = when the meeting happened (`manifest.startedAt`), `added:` = when it was added (CONTRACT §11.1).
     public static func render(transcript: Transcript, manifest: SessionManifest, title: String,
-                              projectSlug: String?, language: String) -> String {
+                              projectSlug: String?, language: String, addedAt: Date = Date()) -> String {
         let duration = transcript.durationSeconds > 0
             ? transcript.durationSeconds
             : (manifest.endedAt?.timeIntervalSince(manifest.startedAt) ?? 0)
@@ -68,7 +69,8 @@ public enum TranscriptWriter {
         source_id: \(manifest.id)
         title: \(YAML.scalar(title))
         project: \(YAML.scalar(projectSlug))
-        date: \(Fmt.iso8601Local(manifest.startedAt))
+        date: \(SBDate.iso(manifest.startedAt))
+        added: \(SBDate.iso(addedAt))
         duration: "\(Fmt.clock(duration))"
         language: \(YAML.scalar(transcript.language))
         speakers: \(YAML.list(speakers))
@@ -92,11 +94,12 @@ public enum TranscriptWriter {
     /// Writes the transcript into `dir` with a collision-free file name and returns its URL.
     @discardableResult
     public static func write(transcript: Transcript, manifest: SessionManifest, title: String,
-                             projectSlug: String?, language: String, to dir: URL) throws -> URL {
+                             projectSlug: String?, language: String, to dir: URL, addedAt: Date = Date()) throws -> URL {
         let fm = FileManager.default
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = fm.uniqueURL(in: dir, name: fileName(title: title, startedAt: manifest.startedAt), ext: "md")
-        let text = render(transcript: transcript, manifest: manifest, title: title, projectSlug: projectSlug, language: language)
+        let text = render(transcript: transcript, manifest: manifest, title: title, projectSlug: projectSlug, language: language,
+                          addedAt: addedAt)
         try text.write(to: url, atomically: true, encoding: .utf8)
         return url
     }

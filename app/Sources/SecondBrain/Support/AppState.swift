@@ -9,6 +9,15 @@ enum SidebarItem: Hashable {
     case inbox
     case people
     case brain
+    case myTasks
+    case templates
+}
+
+/// "Agregar correo": which thread (fixed when adding the next email of a thread) and project to start with.
+struct EmailRequest: Identifiable, Equatable {
+    let id = UUID()
+    var threadKey: String?
+    var projectSlug: String?
 }
 
 struct QueueStatus: Equatable {
@@ -52,6 +61,31 @@ final class AppState {
     var recordingTitle = "" {
         didSet { if isRecording { recorder.updateCurrent(title: recordingTitleOrNil, projectSlug: recordingProjectSlug) } }
     }
+    /// "Formato" chosen in the menu bar panel (nil = the project's default).
+    var recordingTemplateId: String? {
+        didSet {
+            if isRecording, let id = currentRecordingId { engine.setTemplate(sourceId: id, templateId: recordingTemplateId) }
+        }
+    }
+    @ObservationIgnored private var currentRecordingId: String?
+
+    /// Templates ("formatos") of the vault, refreshed after every change.
+    private(set) var templates: [TemplateInfo] = []
+    /// My overdue tasks across every project (sidebar badge of "Mis pendientes").
+    private(set) var overdueCount = 0
+    /// Bumped when tasks changed (a checkbox toggled here, or Claude finished a job).
+    private(set) var tasksRevision = 0
+    /// Open the "Agregar correo" sheet (menu bar, ⌘⇧V, sidebar, thread view).
+    var emailRequest: EmailRequest?
+    /// The vault was updated to the new version and kept something of the user's (engine.migrationNotice).
+    var migrationNotice: String? {
+        guard let notice = engine.migrationNotice, notice != dismissedMigrationNotice else { return nil }
+        return notice
+    }
+    private var dismissedMigrationNotice = UserDefaults.standard.string(forKey: "migration.dismissed")
+    /// A page to open when the selected project appears (from "Mis pendientes" or the global timeline).
+    var pendingPage: String?
+    @ObservationIgnored private var overdueReload: Task<Void, Never>?
 
     @ObservationIgnored private var modelTask: Task<Void, Never>?
     @ObservationIgnored private var hotKey: GlobalHotKey?
@@ -93,6 +127,8 @@ final class AppState {
         }
         engine.start()
         reloadProjectsNow()
+        reloadTemplates()
+        refreshTasks()
         for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
             engine.recordingFinished(manifest)
         }
@@ -206,6 +242,8 @@ final class AppState {
 
     private func didSwitchVault() {
         reloadProjectsNow()
+        reloadTemplates()
+        refreshTasks()
         if case .project(let slug) = selection, project(slug) == nil { selection = .brain }
         if let slug = recordingProjectSlug, project(slug) == nil { recordingProjectSlug = nil }
         vaultGeneration += 1
@@ -306,6 +344,60 @@ final class AppState {
 
     var inboxCount: Int { engine.sources.filter { $0.status == .needsProject }.count }
 
+    // MARK: Templates, tasks, emails (v0.2)
+
+    /// Read once per vault: remembered so the same notice doesn't come back on every launch.
+    func dismissMigrationNotice() {
+        let notice = engine.migrationNotice
+        UserDefaults.standard.set(notice, forKey: "migration.dismissed")
+        dismissedMigrationNotice = notice
+        engine.dismissMigrationNotice()
+    }
+
+    func reloadTemplates() {
+        guard engineStarted else { return }
+        let list = engine.templates(scope: nil)
+        if list != templates { templates = list }
+    }
+
+    /// Templates usable for a kind of source (scope matches or "any"), builtin "estándar" first.
+    func templates(for scope: TemplateScope) -> [TemplateInfo] {
+        templates.filter { $0.scope == scope || $0.scope == .any }
+    }
+
+    func template(_ id: String?) -> TemplateInfo? {
+        guard let id else { return nil }
+        return templates.first { $0.id == id }
+    }
+
+    /// Re-reads tasks (my overdue count) off the main thread's critical path; also tells task lists to reload.
+    func refreshTasks() {
+        guard engineStarted else { return }
+        tasksRevision += 1
+        overdueReload?.cancel()
+        let engine = self.engine
+        overdueReload = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            let all = await engine.tasks(projectSlug: nil)
+            guard let self, !Task.isCancelled, engine === self.engine else { return }
+            let count = all.filter { $0.isMine && $0.isOverdue }.count
+            if count != self.overdueCount { self.overdueCount = count }
+        }
+    }
+
+    /// "Agregar correo" from anywhere: starts in the project being viewed.
+    func requestEmail(threadKey: String? = nil, projectSlug: String? = nil) {
+        var slug = projectSlug
+        if slug == nil, threadKey == nil, case .project(let current) = selection { slug = current }
+        emailRequest = EmailRequest(threadKey: threadKey, projectSlug: slug)
+    }
+
+    /// The source a `[[key]]` citation points at: the raw file name, or an email thread key.
+    func source(forKey key: String) -> SourceRecord? {
+        engine.sources.first { $0.sourceKey == key } ?? engine.sources.last { $0.threadKey == key }
+    }
+
     func bumpVault() { vaultRevision += 1 }
     func bumpHistory() { historyRevision += 1; vaultRevision += 1 }
 
@@ -353,6 +445,8 @@ final class AppState {
             let manifest = try await recorder.start(title: recordingTitleOrNil, projectSlug: recordingProjectSlug,
                                                     captureMic: config.captureMic)
             engine.recordingStarted(manifest)
+            currentRecordingId = manifest.id
+            if let template = recordingTemplateId { engine.setTemplate(sourceId: manifest.id, templateId: template) }
         } catch {
             let permissions = await Recorder.permissions()
             if !permissions.screenAudio {
@@ -367,6 +461,7 @@ final class AppState {
         do {
             let manifest = try await recorder.stop()
             engine.recordingFinished(manifest)
+            currentRecordingId = nil
             recordingTitle = ""
         } catch {
             recordingError = L("record.couldNotStop")
@@ -388,7 +483,11 @@ final class AppState {
             case .classify: return QueueStatus(text: L("queue.classifying", title), progress: nil)
             case .lint: return QueueStatus(text: L("queue.linting"), progress: nil)
             case .saveAnswer: return QueueStatus(text: L("queue.savingAnswer"), progress: nil)
-            case .reformat, .makeTemplate, .manualEdit: return QueueStatus(text: job.message ?? "", progress: nil)  // TODO v0.2 strings
+            case .reformat: return QueueStatus(text: L("queue.reformatting", title), progress: nil)
+            case .makeTemplate:
+                let name = job.payload["name"] ?? ""
+                return QueueStatus(text: name.isEmpty ? L("queue.makingTemplateUnnamed") : L("queue.makingTemplate", name), progress: nil)
+            case .manualEdit: return QueueStatus(text: L("queue.savingEdit"), progress: nil)
             }
         }
         let queued = jobs.filter { $0.status == .queued }
@@ -412,6 +511,7 @@ final class AppState {
             case .done:
                 vaultRevision += 1
                 reloadProjects()
+                refreshTasks()
                 notifyOnce("done-\(source.id)-\(source.historyId ?? "")",
                            title: L("notify.doneTitle"), body: L("notify.doneBody", source.title))
             case .failed:
@@ -432,6 +532,8 @@ final class AppState {
                        title: L("notify.rateTitle"), body: L("notify.rateBody", Fmt.time(until)))
         case .historyAdded(let entry):
             bumpHistory()
+            refreshTasks()
+            if entry.kind == .makeTemplate || entry.kind == .reformat { reloadTemplates() }
             switch entry.kind {
             case .lint: notifyOnce("hist-\(entry.id)", title: L("notify.lintTitle"), body: L("notify.lintBody", entry.changes.count))
             case .saveAnswer: notifyOnce("hist-\(entry.id)", title: L("notify.savedTitle"), body: entry.title)

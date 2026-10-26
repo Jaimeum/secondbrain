@@ -14,22 +14,6 @@ public final class VaultStore: @unchecked Sendable {
         return Bundle.module.url(forResource: "vault-template", withExtension: nil)
     }
 
-    /// Copies `vault-template/vault/` into the vault when it is empty or lacks CLAUDE.md. Never overwrites.
-    public func installTemplateIfNeeded() throws {
-        let fm = FileManager.default
-        try fm.createDirectory(at: root, withIntermediateDirectories: true)
-        guard !fm.fileExists(atPath: root.appendingPathComponent("CLAUDE.md").path) else { return }
-        guard let template = Self.templateURL?.appendingPathComponent("vault"), fm.isDirectory(template) else {
-            Log.error("vault template not found in bundle")
-            return
-        }
-        try Self.copyTree(from: template, to: root, overwrite: false)
-        for dir in ["_inbox/meetings", "_inbox/docs", "_inbox/notes", "projects", "people"] {
-            try fm.createDirectory(at: root.appendingPathComponent(dir), withIntermediateDirectories: true)
-        }
-        Log.info("installed vault template into \(root.path)")
-    }
-
     /// Recursively copies files, creating folders; existing files are kept unless `overwrite`.
     /// `transform` may rewrite text of .md files on the way.
     static func copyTree(from src: URL, to dest: URL, overwrite: Bool, transform: ((String) -> String)? = nil) throws {
@@ -74,8 +58,9 @@ public final class VaultStore: @unchecked Sendable {
             case "index.md": return 0
             case "overview.md": return 1
             case "tasks.md": return 2
-            case "log.md": return 3
-            default: return 4
+            case "timeline.md": return 3
+            case "log.md": return 4
+            default: return 5
             }
         }
         return paths
@@ -195,6 +180,9 @@ public final class VaultStore: @unchecked Sendable {
         }
         return out
     }
+
+    /// Every markdown file in the vault (vault-relative), except hidden folders and CLAUDE.md schemas.
+    public func allMarkdownPaths() -> [String] { allMarkdown() }
 
     /// Every markdown file in the vault except hidden folders and CLAUDE.md schemas.
     func allMarkdown() -> [String] {

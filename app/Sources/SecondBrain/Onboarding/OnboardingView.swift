@@ -76,6 +76,7 @@ struct OnboardingView: View {
         case .project:
             StepHeader(symbol: "folder.badge.plus", title: L("onb.project.title"), message: L("onb.project.message"))
             OwnerNameField().padding(.top, 24)
+            OwnerEmailsField().padding(.top, 8)
             ProjectFormFields(form: $form).padding(.top, 16)
             if let projectError { Text(projectError).foregroundStyle(.red).padding(.top, 8) }
         case .done: DoneStep()

@@ -8,6 +8,12 @@ public enum EngineError: Error, LocalizedError {
     case busy
     case alreadyIngested
     case download(String)
+    case taskNotFound(String)
+    case invalidTemplate(String)
+    case emptyEmail
+    case duplicateEmail(String)
+    case threadNotFound(String)
+    case invalidDate
 
     public var errorDescription: String? {
         let lang = Lang(AppConfig.load().uiLanguage)
@@ -21,6 +27,15 @@ public enum EngineError: Error, LocalizedError {
         case .alreadyIngested: return lang.t("Ya aprendí de esta fuente. Deshaz ese cambio en Actividad para moverla.",
                                              "I already learned from this source. Undo that change in Activity to move it.")
         case .download(let msg): return msg
+        case .taskNotFound(let text):
+            return lang.t("No encontré el pendiente «\(text)»: puede que Claude lo haya cambiado. Vuelve a abrir la lista.",
+                          "I couldn't find the task “\(text)”: Claude may have changed it. Reopen the list.")
+        case .invalidTemplate(let msg): return msg
+        case .emptyEmail: return lang.t("El correo está vacío.", "The email is empty.")
+        case .duplicateEmail(let title):
+            return lang.t("Ese correo ya estaba guardado (en «\(title)»).", "That email was already saved (in “\(title)”).")
+        case .threadNotFound(let key): return lang.t("No encontré el hilo de correo «\(key)».", "Email thread not found: \(key)")
+        case .invalidDate: return lang.t("Esa fecha no es válida.", "That date isn't valid.")
         }
     }
 }
@@ -55,9 +70,13 @@ private final class ConfigBox: @unchecked Sendable {
     /// When false the queue only runs through `runUntilIdle()` (CLI commands that just enqueue).
     public var autoProcess = true
 
+    /// Set when opening the vault upgraded it and something needs the user's attention (e.g. their edited
+    /// CLAUDE.md was kept and the new manual was written next to it). Human, localized; nil = nothing to say.
+    public internal(set) var migrationNotice: String?
+
     @ObservationIgnored private var transcriber: Transcribing
     @ObservationIgnored private var sourceStore: SourceStore
-    @ObservationIgnored private var queue: JobQueue
+    @ObservationIgnored var queue: JobQueue
     @ObservationIgnored private var queueLock: QueueLock
     @ObservationIgnored private let configBox: ConfigBox
     @ObservationIgnored private var loopTask: Task<Void, Never>?
@@ -68,13 +87,13 @@ private final class ConfigBox: @unchecked Sendable {
     /// `runUntilIdle` calls in progress (they hold the queue lock too).
     @ObservationIgnored private var activeRuns = 0
     /// Bumped on every local write of sources/jobs, so a background disk read never overwrites newer state.
-    @ObservationIgnored private var writeGeneration = 0
+    @ObservationIgnored var writeGeneration = 0
     @ObservationIgnored private var watchers: [DispatchSourceFileSystemObject] = []
     @ObservationIgnored private var syncTask: Task<Void, Never>?
     /// Started while another process owned the queue: crash repairs run when we first get the lock.
     @ObservationIgnored private var needsRepair = false
 
-    private var lang: Lang { Lang(config.uiLanguage) }
+    var lang: Lang { Lang(config.uiLanguage) }
 
     public init(config: AppConfig, transcriber: Transcribing) {
         self.config = config
@@ -103,12 +122,13 @@ private final class ConfigBox: @unchecked Sendable {
         started = true
         stopping = false
         do { try paths.ensureExist() } catch { Log.error("could not create data folders: \(error)") }
-        do { try vault.installTemplateIfNeeded() } catch { Log.error("could not install vault template: \(error)") }
+        migrateVault()
         // Crash repairs (stale `running` jobs, half-done sources) belong to whoever owns the queue: another
         // live process may be running those jobs right now.
         let owner = queueLock.tryLock()
         for entry in history.recoverInterrupted() { Log.info("recovered interrupted change \(entry.id): \(entry.title)") }
         sources = sourceStore.loadAll()
+        migrateSourceDates()
         queue.load(resetRunning: owner)
         jobs = queue.jobs
         if owner { repairInterruptedSources() }
@@ -188,6 +208,7 @@ private final class ConfigBox: @unchecked Sendable {
         var src = source(m.id) ?? SourceRecord(id: m.id, kind: .meeting, title: meetingTitle(m), projectSlug: m.projectSlug,
                                                status: .recording, createdAt: m.startedAt)
         src.status = .recording
+        if src.eventDate == nil { src.eventDate = m.startedAt }
         upsert(&src)
     }
 
@@ -198,6 +219,7 @@ private final class ConfigBox: @unchecked Sendable {
         if let slug = m.projectSlug { src.projectSlug = slug }
         src.status = .queued
         src.error = nil
+        if src.eventDate == nil { src.eventDate = m.startedAt }
         if let end = m.endedAt { src.durationSeconds = end.timeIntervalSince(m.startedAt) }
         upsert(&src)
         let id = src.id
@@ -209,44 +231,57 @@ private final class ConfigBox: @unchecked Sendable {
 
     /// Documents become raw files; audio/video (`AudioPrep.isMedia`) become meetings that get transcribed.
     public func importFile(_ url: URL, projectSlug: String?) throws {
+        try importFile(url, projectSlug: projectSlug, eventDate: nil, templateId: nil)
+    }
+
+    /// `eventDate` = when it happened, if the user knows it (nil: a recording's own creation date, a document's
+    /// date, CONTRACT §11.1). `templateId` = format for a recording's page (nil = default).
+    public func importFile(_ url: URL, projectSlug: String?, eventDate: Date?, templateId: String? = nil) throws {
         let project = validProject(projectSlug)
         if AudioPrep.isMedia(url) {
-            try importMedia(url, project: project)
+            try importMedia(url, project: project, eventDate: eventDate, templateId: templateId)
             return
         }
-        let imported = try Importer.importFile(url, into: rawDir(.document, project), project: project)
-        addImported(kind: .document, title: imported.title, rawURL: imported.rawURL, sourceId: imported.sourceId, project: project)
+        let imported = try Importer.importFile(url, into: rawDir(.document, project), project: project, eventDate: eventDate)
+        addImported(kind: .document, imported, project: project, templateId: templateId)
     }
 
     /// `importFile` with the text extraction (PDF, DOCX…) off the main thread.
     public func importFileAsync(_ url: URL, projectSlug: String?) async throws {
+        try await importFileAsync(url, projectSlug: projectSlug, eventDate: nil, templateId: nil)
+    }
+
+    public func importFileAsync(_ url: URL, projectSlug: String?, eventDate: Date?, templateId: String? = nil) async throws {
         let project = validProject(projectSlug)
         if await Task.detached(operation: { AudioPrep.isMedia(url) }).value {
-            try importMedia(url, project: project)
+            try importMedia(url, project: project, eventDate: eventDate, templateId: templateId)
             return
         }
         let dir = rawDir(.document, project)
         let imported = Importer.mainThreadText.contains(url.pathExtension.lowercased())
-            ? try Importer.importFile(url, into: dir, project: project)
-            : try await Task.detached(priority: .userInitiated) { try Importer.importFile(url, into: dir, project: project) }.value
-        addImported(kind: .document, title: imported.title, rawURL: imported.rawURL, sourceId: imported.sourceId, project: project)
+            ? try Importer.importFile(url, into: dir, project: project, eventDate: eventDate)
+            : try await Task.detached(priority: .userInitiated) {
+                try Importer.importFile(url, into: dir, project: project, eventDate: eventDate)
+            }.value
+        addImported(kind: .document, imported, project: project, templateId: templateId)
     }
 
     /// An audio/video file becomes a meeting: a session folder with `import.json` pointing at the file (plus an
     /// APFS clone when possible, so moving/deleting the original before the job runs doesn't matter). The WAV
     /// conversion happens at the start of the transcribe job, off the main thread. The original is never touched.
-    private func importMedia(_ url: URL, project: String?) throws {
+    private func importMedia(_ url: URL, project: String?, eventDate: Date? = nil, templateId: String? = nil) throws {
         let fm = FileManager.default
         guard fm.isReadableFile(atPath: url.path), !fm.isDirectory(url) else { throw EngineError.rawMissing(url.path) }
         let id = SessionManifest.newId()
         let dir = sessionDir(id)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        var media = MediaImport(originalPath: url.path, clonedFile: nil)
+        var media = MediaImport(originalPath: url.path, clonedFile: nil, eventDateFromUser: eventDate != nil)
         let ext = url.pathExtension.isEmpty ? "" : "." + url.pathExtension.lowercased()
         let clone = dir.appendingPathComponent(MediaImport.clonePrefix + ext)
         if clonefile(url.path, clone.path, 0) == 0 { media.clonedFile = clone.lastPathComponent }
-        let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate
-        let startedAt = min(created ?? Date(), Date())
+        // The user's date, else the file's date for now; the transcribe job refines it from the recording's own
+        // creation-date metadata (needs an async AVAsset load).
+        let startedAt = eventDate ?? min(FileDates.fileDate(url) ?? Date(), Date())
         let title = url.deletingPathExtension().lastPathComponent
         do {
             try media.save(to: dir)
@@ -258,26 +293,41 @@ private final class ConfigBox: @unchecked Sendable {
             throw error
         }
         var src = SourceRecord(id: id, kind: .meeting, title: title, projectSlug: project, status: .queued)
+        src.eventDate = startedAt
+        src.templateId = templateId
         upsert(&src)
         enqueue(Job(kind: .transcribe, sourceId: id, projectSlug: project))
         Log.info("imported media \(url.lastPathComponent) as meeting \(id) (clone: \(media.clonedFile != nil))")
     }
 
     public func importURL(_ url: URL, projectSlug: String?) async throws {
+        try await importURL(url, projectSlug: projectSlug, eventDate: nil)
+    }
+
+    /// `eventDate` nil = the page's published date when it declares one, else now.
+    public func importURL(_ url: URL, projectSlug: String?, eventDate: Date?) async throws {
         let project = validProject(projectSlug)
-        let imported = try await Importer.importURL(url, into: rawDir(.url, project), project: project)
-        addImported(kind: .url, title: imported.title, rawURL: imported.rawURL, sourceId: imported.sourceId, project: project)
+        let imported = try await Importer.importURL(url, into: rawDir(.url, project), project: project, eventDate: eventDate)
+        addImported(kind: .url, imported, project: project, templateId: nil)
     }
 
     public func addNote(title: String, body: String, projectSlug: String?) throws {
-        let project = validProject(projectSlug)
-        let imported = try Importer.writeNote(title: title, body: body, into: rawDir(.note, project), project: project)
-        addImported(kind: .note, title: imported.title, rawURL: imported.rawURL, sourceId: imported.sourceId, project: project)
+        try addNote(title: title, body: body, projectSlug: projectSlug, eventDate: nil)
     }
 
-    private func addImported(kind: SourceKind, title: String, rawURL: URL, sourceId: String, project: String?) {
-        var src = SourceRecord(id: sourceId, kind: kind, title: title, projectSlug: project, status: .queued,
-                               rawPath: rawURL.relativePath(from: vault.root))
+    /// `eventDate` nil = now (when the note is written).
+    public func addNote(title: String, body: String, projectSlug: String?, eventDate: Date?) throws {
+        let project = validProject(projectSlug)
+        let imported = try Importer.writeNote(title: title, body: body, into: rawDir(.note, project), project: project,
+                                              eventDate: eventDate)
+        addImported(kind: .note, imported, project: project, templateId: nil)
+    }
+
+    private func addImported(kind: SourceKind, _ imported: Importer.Imported, project: String?, templateId: String?) {
+        var src = SourceRecord(id: imported.sourceId, kind: kind, title: imported.title, projectSlug: project, status: .queued,
+                               rawPath: imported.rawURL.relativePath(from: vault.root))
+        src.eventDate = imported.eventDate
+        src.templateId = templateId
         enqueueAfterRaw(&src)
     }
 
@@ -287,6 +337,10 @@ private final class ConfigBox: @unchecked Sendable {
     public func assign(sourceId: String, to projectSlug: String) throws {
         guard var src = source(sourceId) else { throw EngineError.sourceNotFound(sourceId) }
         guard projects.get(projectSlug) != nil else { throw ProjectError.notFound(projectSlug) }
+        if src.kind == .email, let key = src.threadKey {
+            try assignThread(key, to: projectSlug)   // the whole thread moves
+            return
+        }
         guard src.historyId == nil || src.status != .done else { throw EngineError.alreadyIngested }
         // A running classify only reads; its result is ignored once the source has a project.
         guard !runningAnywhere({ $0.sourceId == sourceId && $0.kind != .classify }) else { throw EngineError.busy }
@@ -343,6 +397,7 @@ private final class ConfigBox: @unchecked Sendable {
                 try? fm.removeItem(at: url.deletingLastPathComponent().appendingPathComponent(original))
             }
             try? fm.removeItem(at: url)
+            if src.kind == .email { forgetEmail(rawPath: raw) }
         }
         writeGeneration += 1
         sourceStore.delete(id: sourceId)
@@ -369,7 +424,7 @@ private final class ConfigBox: @unchecked Sendable {
     /// Undoing an ingest also detaches it from its source, so the source can be learned from again
     /// (`retry`) or moved to another project.
     public func undo(historyId: String, force: Bool = false) throws {
-        guard !runningAnywhere({ [.ingest, .lint, .saveAnswer].contains($0.kind) }) else { throw EngineError.busy }
+        guard !runningAnywhere({ [.ingest, .lint, .saveAnswer, .reformat, .makeTemplate].contains($0.kind) }) else { throw EngineError.busy }
         try history.undo(entryId: historyId, force: force)
         guard var src = sources.first(where: { $0.historyId == historyId }) else { return }
         src.historyId = nil
@@ -413,7 +468,7 @@ private final class ConfigBox: @unchecked Sendable {
 
     public func source(_ id: String) -> SourceRecord? { sources.first { $0.id == id } }
 
-    private func enqueue(_ job: Job) {
+    func enqueue(_ job: Job) {
         writeGeneration += 1
         queue.upsert(job)
         jobs = queue.jobs
@@ -422,7 +477,7 @@ private final class ConfigBox: @unchecked Sendable {
         kick()
     }
 
-    private func kick() {
+    func kick() {
         guard started, autoProcess, !stopping else { return }
         if loopTask == nil {
             loopTask = Task { [weak self] in await self?.loop() }
@@ -449,7 +504,7 @@ private final class ConfigBox: @unchecked Sendable {
     }
 
     /// A matching job is running here, or (when another process owns the queue) according to the files on disk.
-    private func runningAnywhere(_ predicate: (Job) -> Bool) -> Bool {
+    func runningAnywhere(_ predicate: (Job) -> Bool) -> Bool {
         if queue.jobs.contains(where: { $0.status == .running && predicate($0) }) { return true }
         guard !queueLock.isHeld else { return false }
         return JobQueue.readAll(dir: paths.jobs).contains { $0.status == .running && predicate($0) }
@@ -582,7 +637,9 @@ private final class ConfigBox: @unchecked Sendable {
             case .classify: try await runClassify(job)
             case .lint: try await runLint(job)
             case .saveAnswer: try await runSaveAnswer(job)
-            case .reformat, .makeTemplate, .manualEdit: fatalError("TODO v0.2")
+            case .reformat: try await runReformat(job)
+            case .makeTemplate: try await runMakeTemplate(job)
+            case .manualEdit: break   // recorded directly by the app (e.g. `setTask`), never queued
             }
             return .success
         } catch let error as ClaudeError {
@@ -684,8 +741,12 @@ private final class ConfigBox: @unchecked Sendable {
 
         src = source(sourceId) ?? src        // the user may have assigned a project meanwhile
         let project = validProject(src.projectSlug)
-        let url = try TranscriptWriter.write(transcript: transcript, manifest: manifest, title: src.title,
-                                             projectSlug: project, language: config.uiLanguage, to: rawDir(.meeting, project))
+        // The user may have corrected when it happened (`setEventDate`): the transcript's `date:` and name follow it.
+        var dated = manifest
+        if let event = src.eventDate { dated.startedAt = event }
+        let url = try TranscriptWriter.write(transcript: transcript, manifest: dated, title: src.title,
+                                             projectSlug: project, language: config.uiLanguage, to: rawDir(.meeting, project),
+                                             addedAt: src.createdAt)
         guard let written = try? String(contentsOf: url, encoding: .utf8), !written.isEmpty else {
             throw EngineError.rawMissing(url.path)
         }
@@ -733,6 +794,15 @@ private final class ConfigBox: @unchecked Sendable {
             }
         }
         var manifest = manifest
+        if !media.eventDateFromUser {
+            // When it was recorded: the file's own creation-date metadata beats the file system date.
+            let recorded = await FileDates.mediaEventDate(input)
+            manifest.startedAt = recorded
+            if var src = source(sourceId), src.eventDate != recorded {
+                src.eventDate = recorded
+                upsert(&src)
+            }
+        }
         manifest.tracks = ["system": converted.files]
         manifest.micCaptured = false
         manifest.endedAt = manifest.startedAt.addingTimeInterval(converted.duration)
@@ -754,9 +824,10 @@ private final class ConfigBox: @unchecked Sendable {
         src.status = .ingesting
         src.error = nil
         upsert(&src)
+        let args = claudeArguments(raw: raw, templateId: templateId(for: src))
         let entry = try await tracked(job, title: lang.learnedFrom(src.title), kind: .ingest,
                                       sourceId: src.id, projectSlug: src.projectSlug) {
-            try await self.runClaude(job, command: "ingest", arguments: raw, mode: .edit, model: self.config.ingestModel)
+            try await self.runClaude(job, command: "ingest", arguments: args, mode: .edit, model: self.config.ingestModel)
         }
         src = source(src.id) ?? src
         src.status = .done
@@ -798,7 +869,7 @@ private final class ConfigBox: @unchecked Sendable {
 
     /// Wraps a vault-editing Claude run in a history entry. Partial edits are recorded even when the run fails,
     /// so they can be undone.
-    private func tracked(_ job: Job, title: String, kind: JobKind, sourceId: String?, projectSlug: String?,
+    func tracked(_ job: Job, title: String, kind: JobKind, sourceId: String?, projectSlug: String?,
                          body: () async throws -> String) async throws -> HistoryEntry? {
         let history = self.history
         let snapshot = try await Task.detached {
@@ -829,7 +900,7 @@ private final class ConfigBox: @unchecked Sendable {
     }
 
     /// Consumes a Claude stream, mirroring tool use into the job's message. Returns the final result text.
-    private func runClaude(_ job: Job, command: String, arguments: String, mode: ClaudeMode, model: String) async throws -> String {
+    func runClaude(_ job: Job, command: String, arguments: String, mode: ClaudeMode, model: String) async throws -> String {
         var steps = 0
         for try await event in claude.run(command: command, arguments: arguments, mode: mode, model: model) {
             switch event {
@@ -862,7 +933,7 @@ private final class ConfigBox: @unchecked Sendable {
         return nil
     }
 
-    private func enqueueAfterRaw(_ src: inout SourceRecord) {
+    func enqueueAfterRaw(_ src: inout SourceRecord) {
         if src.projectSlug != nil {
             src.status = .queued
             upsert(&src)
@@ -918,7 +989,7 @@ private final class ConfigBox: @unchecked Sendable {
         return dest.relativePath(from: vault.root) ?? raw
     }
 
-    private func rawDir(_ kind: SourceKind, _ projectSlug: String?) -> URL {
+    func rawDir(_ kind: SourceKind, _ projectSlug: String?) -> URL {
         let sub: String
         switch kind {
         case .meeting: sub = "meetings"
@@ -930,12 +1001,12 @@ private final class ConfigBox: @unchecked Sendable {
         return vault.root.appendingPathComponent("_inbox/\(sub)")
     }
 
-    private func validProject(_ slug: String?) -> String? {
+    func validProject(_ slug: String?) -> String? {
         guard let slug, !slug.isEmpty, projects.get(slug) != nil else { return nil }
         return slug
     }
 
-    private func sessionDir(_ id: String) -> URL { paths.sessions.appendingPathComponent(id) }
+    func sessionDir(_ id: String) -> URL { paths.sessions.appendingPathComponent(id) }
 
     private func meetingTitle(_ m: SessionManifest) -> String {
         if let t = m.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
@@ -965,7 +1036,13 @@ private final class ConfigBox: @unchecked Sendable {
         case .classify: return lang.t("Buscando a qué proyecto pertenece…", "Figuring out which project it belongs to…")
         case .lint: return lang.t("Revisando tu cerebro…", "Checking your brain…")
         case .saveAnswer: return lang.t("Guardando la respuesta en el wiki…", "Saving the answer to the wiki…")
-        case .reformat, .makeTemplate, .manualEdit: return ""   // TODO v0.2
+        case .reformat:
+            let title = job.sourceId.flatMap(source)?.title ?? ""
+            let format = job.payload["templateId"].flatMap { vault.template(id: $0)?.name } ?? job.payload["templateId"] ?? ""
+            return lang.t("Aplicando el formato «\(format)» a «\(title)»…", "Applying the “\(format)” format to “\(title)”…")
+        case .makeTemplate:
+            return lang.t("Creando el formato «\(job.payload["name"] ?? "")»…", "Creating the “\(job.payload["name"] ?? "")” format…")
+        case .manualEdit: return lang.t("Guardando tu cambio…", "Saving your change…")
         }
     }
 
@@ -977,7 +1054,7 @@ private final class ConfigBox: @unchecked Sendable {
         }
     }
 
-    private func updateJob(_ id: String, message: String?, progress: Double? = nil) {
+    func updateJob(_ id: String, message: String?, progress: Double? = nil) {
         guard var job = queue.job(id: id) else { return }
         if let message { job.message = message }
         if let progress { job.progress = progress }
@@ -992,13 +1069,13 @@ private final class ConfigBox: @unchecked Sendable {
         onJobUpdate?(job)
     }
 
-    private func removeJobs(for sourceId: String, where predicate: (Job) -> Bool) {
+    func removeJobs(for sourceId: String, where predicate: (Job) -> Bool) {
         writeGeneration += 1
         for job in queue.jobs where job.sourceId == sourceId && predicate(job) { queue.remove(id: job.id) }
         jobs = queue.jobs
     }
 
-    private func upsert(_ src: inout SourceRecord, persist: Bool = true) {
+    func upsert(_ src: inout SourceRecord, persist: Bool = true) {
         writeGeneration += 1
         src.updatedAt = Date()
         if persist {
@@ -1021,6 +1098,19 @@ struct MediaImport: Codable {
     var originalPath: String
     /// Clone of the original inside the session folder (APFS `clonefile`), removed after conversion.
     var clonedFile: String?
+    /// The user gave the event date at import: don't replace it with the file's metadata.
+    var eventDateFromUser = false
+
+    init(originalPath: String, clonedFile: String?, eventDateFromUser: Bool = false) {
+        self.originalPath = originalPath; self.clonedFile = clonedFile; self.eventDateFromUser = eventDateFromUser
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        originalPath = try c.decode(String.self, forKey: .originalPath)
+        clonedFile = try c.decodeIfPresent(String.self, forKey: .clonedFile)
+        eventDateFromUser = try c.decodeIfPresent(Bool.self, forKey: .eventDateFromUser) ?? false
+    }
 
     static func load(from dir: URL) -> MediaImport? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return nil }

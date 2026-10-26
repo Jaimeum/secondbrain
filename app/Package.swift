@@ -13,10 +13,12 @@ let package = Package(
         .package(url: "https://github.com/argmaxinc/argmax-oss-swift.git", from: "1.1.1"),
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
+        .package(url: "https://github.com/apple/swift-markdown.git", from: "0.9.0"),
     ],
     targets: [
         .target(
             name: "BrainCore",
+            dependencies: [.product(name: "Markdown", package: "swift-markdown")],
             resources: [.copy("Resources/vault-template")]
         ),
         .target(

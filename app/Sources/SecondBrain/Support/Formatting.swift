@@ -34,6 +34,122 @@ enum Fmt {
     static func percent(_ fraction: Double) -> String {
         "\(Int((fraction * 100).rounded()))%"
     }
+
+    // MARK: Calendar dates (v0.2: when it happened vs. when it was added)
+
+    private static func formatter(_ template: String) -> DateFormatter {
+        let key = Localizer.language + "|" + template
+        if let cached = formatters[key] { return cached }
+        let f = DateFormatter()
+        f.locale = Localizer.locale
+        f.timeZone = .autoupdatingCurrent   // cached: must follow the Mac's time zone if it changes (travel)
+        f.setLocalizedDateFormatFromTemplate(template)
+        formatters[key] = f
+        return f
+    }
+    nonisolated(unsafe) private static var formatters: [String: DateFormatter] = [:]
+
+    private static var calendar: Calendar { Calendar.current }
+
+    /// "lun 26 de oct" / "Mon, Oct 26" (adds the year when it isn't this year).
+    static func day(_ date: Date) -> String {
+        let sameYear = calendar.isDate(date, equalTo: Date(), toGranularity: .year)
+        return formatter(sameYear ? "EEEdMMM" : "EEEdMMMy").string(from: date)
+    }
+
+    /// "26 oct 2026".
+    static func longDay(_ date: Date) -> String { formatter("dMMMy").string(from: date) }
+
+    /// "26 oct 2026, 15:30" — or only the day when the hour is unknown.
+    static func eventDate(_ date: Date, hasTime: Bool = true) -> String {
+        hasTime ? formatter("dMMMyjm").string(from: date) : longDay(date)
+    }
+
+    /// "hoy 10:02", "ayer 18:40", "26 oct, 15:30", "26 oct 2025, 15:30".
+    static func dayTime(_ date: Date, hasTime: Bool = true) -> String {
+        let cal = calendar
+        if cal.isDateInToday(date) { return hasTime ? L("date.todayAt", time(date)) : L("date.today") }
+        if cal.isDateInYesterday(date) { return hasTime ? L("date.yesterdayAt", time(date)) : L("date.yesterday") }
+        if cal.isDateInTomorrow(date) { return hasTime ? L("date.tomorrowAt", time(date)) : L("date.tomorrow") }
+        let sameYear = cal.isDate(date, equalTo: Date(), toGranularity: .year)
+        if hasTime { return formatter(sameYear ? "dMMMjm" : "dMMMyjm").string(from: date) }
+        return formatter(sameYear ? "dMMM" : "dMMMy").string(from: date)
+    }
+
+    /// "octubre de 2026".
+    static func month(_ date: Date) -> String { formatter("MMMMy").string(from: date) }
+
+    /// "lunes, 26 de octubre".
+    static func weekdayLong(_ date: Date) -> String {
+        let sameYear = calendar.isDate(date, equalTo: Date(), toGranularity: .year)
+        return formatter(sameYear ? "EEEEdMMMM" : "EEEEdMMMMy").string(from: date)
+    }
+
+    /// Whole days from today to `date` (negative = past), ignoring the hour.
+    static func daysFromToday(_ date: Date) -> Int {
+        let cal = calendar
+        return cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: date)).day ?? 0
+    }
+
+    /// Day-granular relative text: "hoy", "mañana", "ayer", "en 4 días", "hace 3 días".
+    static func relativeDay(_ date: Date) -> String {
+        let days = daysFromToday(date)
+        switch days {
+        case 0: return L("date.today")
+        case 1: return L("date.tomorrow")
+        case -1: return L("date.yesterday")
+        case 2...: return L("date.inDays", days)
+        default: return L("date.daysAgo", -days)
+        }
+    }
+
+    /// "2026-10-26" for file names.
+    static func fileDay(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
+    }
+}
+
+extension SourceRecord {
+    /// When it happened ("Reunión: …", "Enviado: …").
+    var eventLabel: String {
+        switch kind {
+        case .meeting: L("dates.meeting")
+        case .email: L("dates.sent")
+        case .document: L("dates.document")
+        case .note: L("dates.note")
+        case .url: L("dates.url")
+        }
+    }
+
+    /// When it was added ("Agregada: …" / "Agregado: …").
+    var addedLabel: String {
+        switch kind {
+        case .meeting, .note, .url: L("dates.addedF")
+        case .email, .document: L("dates.addedM")
+        }
+    }
+
+    /// "Reunión: 26 oct 2026, 15:30 · Agregada: hoy 10:02". When both are practically the same moment
+    /// (a live recording), only the event is shown.
+    var datesLine: String {
+        let event = "\(eventLabel): \(Fmt.dayTime(timelineDate))"
+        guard abs(createdAt.timeIntervalSince(timelineDate)) > 30 * 60 else { return event }
+        return "\(event) · \(addedLabel): \(Fmt.dayTime(createdAt))"
+    }
+
+    /// Added much later than it happened (an old recording or email added today).
+    var addedLater: Bool { createdAt.timeIntervalSince(timelineDate) > 36 * 3600 }
+
+    /// The source key: the raw file name without extension (`[[key]]` in citations).
+    var sourceKey: String? {
+        guard let rawPath else { return nil }
+        return ((rawPath as NSString).lastPathComponent as NSString).deletingPathExtension
+    }
+
+    var emoji: String { kind.emoji }
 }
 
 extension SourceStatus {
@@ -75,7 +191,17 @@ extension SourceKind {
         case .document: "doc.text"
         case .note: "note.text"
         case .url: "link"
-        case .email: "envelope"
+        case .email: "envelope.fill"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .meeting: "🎙️"
+        case .document: "📄"
+        case .note: "📝"
+        case .url: "🔗"
+        case .email: "✉️"
         }
     }
 
@@ -88,6 +214,61 @@ extension SourceKind {
         case .email: L("kind.email")
         }
     }
+}
+
+extension TimelineKind {
+    static let allKinds: [TimelineKind] = [.meeting, .email, .document, .note, .url, .decision, .milestone, .task]
+
+    var emoji: String {
+        switch self {
+        case .meeting: "🎙️"
+        case .email: "✉️"
+        case .document: "📄"
+        case .note: "📝"
+        case .url: "🔗"
+        case .decision: "⚖️"
+        case .milestone: "🚩"
+        case .task: "📅"   // a due date, not a done task (✅ means done in tasks.md)
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .meeting: L("tl.kind.meeting")
+        case .email: L("tl.kind.email")
+        case .document: L("tl.kind.document")
+        case .note: L("tl.kind.note")
+        case .url: L("tl.kind.url")
+        case .decision: L("tl.kind.decision")
+        case .milestone: L("tl.kind.milestone")
+        case .task: L("tl.kind.task")
+        }
+    }
+}
+
+extension TemplateScope {
+    var label: String {
+        switch self {
+        case .meeting: L("tpl.scope.meeting")
+        case .email: L("tpl.scope.email")
+        case .any: L("tpl.scope.any")
+        }
+    }
+}
+
+extension ExportFormat {
+    var label: String {
+        switch self {
+        case .docx: L("export.fmt.docx")
+        case .pdf: L("export.fmt.pdf")
+        case .markdown: L("export.fmt.markdown")
+        case .text: L("export.fmt.text")
+        case .html: L("export.fmt.html")
+        case .rtf: L("export.fmt.rtf")
+        }
+    }
+
+    static let menuOrder: [ExportFormat] = [.docx, .pdf, .markdown, .text, .html, .rtf]
 }
 
 /// Human wording for errors that bubble up from the engine, Claude or the recorder.
@@ -103,6 +284,8 @@ enum FriendlyError {
             case .failed(let detail): return L("error.claudeFailed", detail)
             }
         }
+        if let engine = error as? EngineError, case .busy = engine { return L("error.busyProject") }
+        if let described = (error as? LocalizedError)?.errorDescription, !described.isEmpty { return described }
         let text = (error as NSError).localizedDescription
         return text.isEmpty ? L("error.generic") : text
     }

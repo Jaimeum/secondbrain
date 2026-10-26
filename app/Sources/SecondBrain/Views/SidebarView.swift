@@ -11,17 +11,26 @@ struct SidebarView: View {
             Section {
                 Label(L("sidebar.brain"), systemImage: "brain.head.profile")
                     .tag(SidebarItem.brain)
+                Label(L("mytasks.title"), systemImage: "checklist")
+                    .badge(overdueBadge)
+                    .tag(SidebarItem.myTasks)
+                    .help(state.overdueCount > 0 ? L("mytasks.overdueHelp", state.overdueCount) : "")
                 Label(L("inbox.title"), systemImage: "tray")
                     .badge(state.inboxCount)
                     .tag(SidebarItem.inbox)
                 Label(L("sidebar.people"), systemImage: "person.2")
                     .tag(SidebarItem.people)
+                Label(L("tpl.title"), systemImage: "doc.richtext")
+                    .tag(SidebarItem.templates)
             }
 
             Section(L("sidebar.projects")) {
                 ForEach(state.projects) { project in
                     ProjectRow(project: project, inProgress: state.inProgressCount(project.slug))
                         .tag(SidebarItem.project(project.slug))
+                        .contextMenu {
+                            Button(L("email.addEllipsis")) { state.requestEmail(projectSlug: project.slug) }
+                        }
                 }
                 Button {
                     showNewProject = true
@@ -33,9 +42,20 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .contextMenu {
+            Button(L("email.addEllipsis")) { state.requestEmail() }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SidebarFooter()
         }
+    }
+}
+
+private extension SidebarView {
+    /// Red count of my overdue tasks (a plain badge can't be tinted, so it's text).
+    var overdueBadge: Text? {
+        guard state.overdueCount > 0 else { return nil }
+        return Text("\(state.overdueCount)").foregroundStyle(.red)
     }
 }
 

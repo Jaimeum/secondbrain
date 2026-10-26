@@ -51,30 +51,15 @@ public final class ProjectManager: @unchecked Sendable {
         }
         let project = Project(slug: slug, name: name, description: description, emoji: emoji.isEmpty ? "📁" : emoji)
         let dir = projectsDir.appendingPathComponent(slug)
-        let date = Fmt.local(project.createdAt, "yyyy-MM-dd")
-        // Placeholders inside quoted YAML values (`title: "{{PROJECT_NAME}} — índice"`) need `"` and `\` escaped.
-        func substitute(_ line: String, quoted: Bool) -> String {
-            let escape: (String) -> String = {
-                quoted ? $0.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") : $0
-            }
-            return line.replacingOccurrences(of: "{{PROJECT_NAME}}", with: escape(name))
-                .replacingOccurrences(of: "{{PROJECT_SLUG}}", with: slug)
-                .replacingOccurrences(of: "{{PROJECT_DESCRIPTION}}", with: escape(description))
-                .replacingOccurrences(of: "{{DATE}}", with: date)
-        }
-        let fill: (String) -> String = { text in
-            let yamlEnd = Frontmatter.split(text).yaml.map { $0.components(separatedBy: "\n").count + 1 } ?? 0
-            return text.components(separatedBy: "\n").enumerated().map { i, line in
-                substitute(line, quoted: i <= yamlEnd && line.contains("\"{{"))
-            }.joined(separator: "\n")
-        }
+        let fill = Self.placeholderFiller(name: name, slug: slug, description: description,
+                                          date: Fmt.local(project.createdAt, "yyyy-MM-dd"))
         if let template = VaultStore.templateURL?.appendingPathComponent("project"), fm.isDirectory(template) {
             try VaultStore.copyTree(from: template, to: dir, overwrite: false, transform: fill)
         } else {
             Log.error("project template not found; creating bare structure")
         }
-        for sub in ["raw/meetings", "raw/docs", "raw/notes", "raw/assets",
-                    "wiki/meetings", "wiki/topics", "wiki/decisions", "wiki/questions"] {
+        for sub in ["raw/meetings", "raw/docs", "raw/notes", "raw/emails", "raw/assets",
+                    "wiki/meetings", "wiki/sources", "wiki/emails", "wiki/topics", "wiki/decisions", "wiki/questions"] {
             try fm.createDirectory(at: dir.appendingPathComponent(sub), withIntermediateDirectories: true)
         }
         let index = dir.appendingPathComponent("wiki/index.md")
@@ -85,6 +70,26 @@ public final class ProjectManager: @unchecked Sendable {
         try addToGlobalIndex(project)
         Log.info("created project \(slug)")
         return project
+    }
+
+    /// Fills `{{PROJECT_NAME}}`, `{{PROJECT_SLUG}}`, `{{PROJECT_DESCRIPTION}}`, `{{DATE}}` in a template .md.
+    static func placeholderFiller(name: String, slug: String, description: String, date: String) -> (String) -> String {
+        // Placeholders inside quoted YAML values (`title: "{{PROJECT_NAME}} — índice"`) need `"` and `\` escaped.
+        func substitute(_ line: String, quoted: Bool) -> String {
+            let escape: (String) -> String = {
+                quoted ? $0.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") : $0
+            }
+            return line.replacingOccurrences(of: "{{PROJECT_NAME}}", with: escape(name))
+                .replacingOccurrences(of: "{{PROJECT_SLUG}}", with: slug)
+                .replacingOccurrences(of: "{{PROJECT_DESCRIPTION}}", with: escape(description))
+                .replacingOccurrences(of: "{{DATE}}", with: date)
+        }
+        return { text in
+            let yamlEnd = Frontmatter.split(text).yaml.map { $0.components(separatedBy: "\n").count + 1 } ?? 0
+            return text.components(separatedBy: "\n").enumerated().map { i, line in
+                substitute(line, quoted: i <= yamlEnd && line.contains("\"{{"))
+            }.joined(separator: "\n")
+        }
     }
 
     public func update(_ project: Project) throws {

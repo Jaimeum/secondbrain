@@ -10,6 +10,7 @@ enum Importer {
         var sourceId: String
         var title: String
         var rawURL: URL
+        var eventDate: Date
     }
 
     private static let plainText: Set<String> = ["md", "markdown", "txt", "text", "csv", "json", "yaml", "yml"]
@@ -17,15 +18,17 @@ enum Importer {
     /// Formats whose NSAttributedString importer uses WebKit and must run on the main thread.
     static let mainThreadText: Set<String> = ["html", "htm", "webarchive"]
 
+    /// `eventDate` nil = the document's own date (PDF metadata > file dates) or now (CONTRACT §11.1).
     static func importFile(_ file: URL, into dir: URL, project: String?, sourceURL: URL? = nil,
-                           kind: SourceKind = .document, title: String? = nil) throws -> Imported {
+                           kind: SourceKind = .document, title: String? = nil, eventDate: Date? = nil) throws -> Imported {
         let fm = FileManager.default
         guard !fm.isDirectory(file) else { throw CocoaError(.fileReadUnsupportedScheme, userInfo: [NSFilePathErrorKey: file.path]) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let id = SessionManifest.newId()
         let title = title ?? file.deletingPathExtension().lastPathComponent
         let ext = file.pathExtension.lowercased()
-        let base = fileBase(title: title)
+        let when = eventDate ?? (sourceURL == nil ? FileDates.documentEventDate(file) : nil) ?? Date()
+        let base = fileBase(title: title, date: when)
 
         var original: String?
         var body: String
@@ -58,12 +61,12 @@ enum Importer {
         if let sourceURL { fields.append(("source_url", YAML.scalar(sourceURL.absoluteString))) }
         let raw = try writeRaw(type: kind == .url ? "url" : "document", id: id, title: title, project: project,
                                extra: fields.filter { $0.1 != "null" },
-                               body: body, dir: dir, base: base)
-        return Imported(sourceId: id, title: title, rawURL: raw)
+                               body: body, dir: dir, base: base, eventDate: when)
+        return Imported(sourceId: id, title: title, rawURL: raw, eventDate: when)
     }
 
     @MainActor
-    static func importURL(_ url: URL, into dir: URL, project: String?) async throws -> Imported {
+    static func importURL(_ url: URL, into dir: URL, project: String?, eventDate: Date? = nil) async throws -> Imported {
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.setValue("Mozilla/5.0 (Macintosh) SecondBrain", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -82,7 +85,8 @@ enum Importer {
             let file = tmp.appendingPathComponent(name)
             try data.write(to: file)
             let title = (name as NSString).deletingPathExtension
-            return try importFile(file, into: dir, project: project, sourceURL: url, kind: .url, title: title)
+            return try importFile(file, into: dir, project: project, sourceURL: url, kind: .url, title: title,
+                                  eventDate: eventDate ?? Date())
         }
 
         let html = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
@@ -90,20 +94,24 @@ enum Importer {
         let title = isHTML ? (htmlTitle(html) ?? fallbackTitle) : fallbackTitle
         let body = isHTML ? htmlToText(html) : html
         let id = SessionManifest.newId()
-        let base = fileBase(title: title)
+        // A web page: the date the user gave, else its published date when it declares one, else now.
+        let when = eventDate ?? (isHTML ? htmlPublishedDate(html) : nil) ?? Date()
+        let base = fileBase(title: title, date: when)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let raw = try writeRaw(type: "url", id: id, title: title, project: project,
-                               extra: [("source_url", YAML.scalar(url.absoluteString))], body: body, dir: dir, base: base)
-        return Imported(sourceId: id, title: title, rawURL: raw)
+                               extra: [("source_url", YAML.scalar(url.absoluteString))], body: body, dir: dir, base: base,
+                               eventDate: when)
+        return Imported(sourceId: id, title: title, rawURL: raw, eventDate: when)
     }
 
-    static func writeNote(title: String, body: String, into dir: URL, project: String?) throws -> Imported {
+    static func writeNote(title: String, body: String, into dir: URL, project: String?, eventDate: Date? = nil) throws -> Imported {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let id = SessionManifest.newId()
-        let title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Fmt.local(Date(), "yyyy-MM-dd HH:mm") : title
+        let when = eventDate ?? Date()
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Fmt.local(when, "yyyy-MM-dd HH:mm") : title
         let raw = try writeRaw(type: "note", id: id, title: title, project: project, extra: [], body: body,
-                               dir: dir, base: fileBase(title: title))
-        return Imported(sourceId: id, title: title, rawURL: raw)
+                               dir: dir, base: fileBase(title: title, date: when), eventDate: when)
+        return Imported(sourceId: id, title: title, rawURL: raw, eventDate: when)
     }
 
     // MARK: Helpers
@@ -114,21 +122,24 @@ enum Importer {
         return DispatchQueue.main.sync { MainActor.assumeIsolated { body() } }
     }
 
-    private static func fileBase(title: String) -> String {
+    /// `YYYY-MM-DD-<slug>`, dated by when it happened (the event date).
+    private static func fileBase(title: String, date: Date) -> String {
         let slug = slugify(title)
-        let date = Fmt.local(Date(), "yyyy-MM-dd")
+        let date = Fmt.local(date, "yyyy-MM-dd")
         return slug.isEmpty ? date : "\(date)-\(slug)"
     }
 
+    /// Raw frontmatter: `date:` = when it happened, `added:` = now (both ISO 8601 with the local offset).
     private static func writeRaw(type: String, id: String, title: String, project: String?, extra: [(String, String)],
-                                 body: String, dir: URL, base: String) throws -> URL {
+                                 body: String, dir: URL, base: String, eventDate: Date) throws -> URL {
         var front = """
         ---
         type: \(type)
         source_id: \(id)
         title: \(YAML.scalar(title))
         project: \(YAML.scalar(project))
-        date: \(Fmt.iso8601Local(Date()))
+        date: \(SBDate.iso(eventDate))
+        added: \(SBDate.iso(Date()))
 
         """
         for (k, v) in extra { front += "\(k): \(v)\n" }
@@ -147,6 +158,18 @@ enum Importer {
             }
         }
         return pages.isEmpty ? nil : pages.joined(separator: "\n\n")
+    }
+
+    /// `<meta property="article:published_time" content="…">` / JSON-LD `"datePublished": "…"`.
+    static func htmlPublishedDate(_ html: String) -> Date? {
+        let patterns = [#"(?is)<meta[^>]+(?:property|name|itemprop)\s*=\s*["'](?:article:published_time|datePublished|date|pubdate|publishdate|dc\.date)["'][^>]*content\s*=\s*["']([^"']+)["']"#,
+                        #"(?is)<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]*(?:property|name|itemprop)\s*=\s*["'](?:article:published_time|datePublished)["']"#,
+                        #"(?is)"datePublished"\s*:\s*"([^"]+)""#]
+        for p in patterns {
+            if let m = EmailParser.firstMatch(p, in: html, options: []), let v = m[1],
+               let d = SBDate.parseISO(v)?.date ?? EmailParser.parseDate(v), FileDates.plausible(d) { return d }
+        }
+        return nil
     }
 
     @MainActor

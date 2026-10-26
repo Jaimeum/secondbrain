@@ -22,15 +22,27 @@ what you have.
      `projects/<slug>/wiki/overview.md`.
    - scope = `global` → Read `index.md`, then the `wiki/index.md` of the projects that look
      relevant (if unsure, of all projects).
-3. Open the pages the index points to (topics, decisions, meetings, people, `tasks.md`). Grep the
-   wiki for names, terms and synonyms in both Spanish and English when the index isn't enough.
-   For people questions, read `people/<name>.md`.
+3. Open the pages the index points to (topics, decisions, meetings, email threads, people,
+   `tasks.md`, `timeline.md`). Grep the wiki for names, terms and synonyms in both Spanish and
+   English when the index isn't enough. For people questions, read `people/<name>.md`.
+   - **"¿Qué me toca?" / "what do I have to do?"**: the owner's tasks are the `### Yo — …` /
+     `### Me — …` group of `## Abiertas` in each `tasks.md` (global scope: every project's
+     `tasks.md`; the owner's name is in `people/README.md`). Group them by due date against
+     today's date — **Vencidos** (date before today), **Hoy**, **Esta semana**, **Más adelante**,
+     **Sin fecha** (omit empty groups; count each group correctly) — with the project when there
+     are several. Tasks of others only if asked ("¿qué le toca a Ana?", "¿qué me deben?").
+   - **"¿Cuándo…?" / "when…?"**: use event dates (CLAUDE.md §9): when the meeting took place, when
+     the email was sent, the `date:` of the decision page — from `timeline.md`, the page's
+     `date`/`event_date`, the Historia bullets. The date something was *added* (`added:`) is a
+     different thing: mention it only if asked or if it explains a gap ("la reunión fue el 1 de
+     octubre, pero la agregaste el 26").
+   - **Emails**: email threads live in `wiki/emails/` and their messages are cited by message key.
 4. Go to the raw source (transcript, document) only when you need an exact detail the wiki page
    lacks (an exact quote, a number, who said what). Use the timestamp from the citation to find
    the turn with Grep instead of reading the whole transcript when possible.
 5. Check freshness: if pages disagree or there is a `> [!conflict]`, present both versions with
    their dates and sources instead of picking one silently. Prefer the most recent explicit change
-   and say so.
+   (by when it happened, not when it was added) and say so.
 
 ## Answer
 
@@ -43,7 +55,13 @@ what you have.
   does: `([[2026-10-26-1530-kickoff]] 00:12:30)`, `([[plan-de-lanzamiento]])`. Only link pages
   that exist.
 - Use people's names, not file names; dates as "3 de noviembre de 2026 (2026-11-03)" or
-  "November 3, 2026" — human and unambiguous.
+  "November 3, 2026" — human and unambiguous. For "when" questions, give the date it happened
+  and say what kind of source it was ("en la reunión del 20 de octubre", "por correo el 21 de
+  octubre").
+- Say when something comes from an email: start the citation with ✉️, e.g.
+  "Ana lo confirmó por correo ✉️ ([[2026-10-21-1015-ana-garcia]])". Meetings and documents
+  need no icon.
+- Talking to the owner about their own tasks, use the second person ("Te toca…", "You need to…").
 - If the wiki does not contain the answer, say so plainly in the first sentence ("No lo tengo
   registrado en el wiki." / "The wiki doesn't have this yet."), share whatever partial
   information exists with citations, and suggest what source would fill the gap (e.g. "Si grabas

@@ -28,7 +28,10 @@ struct SettingsView: View {
                     Text("English").tag("en")
                 }
                 if state.menuLanguageNeedsRestart { MenuLanguageNotice() }
-                if state.engineStarted { OwnerNameField().id(state.vaultGeneration) }
+                if state.engineStarted {
+                    OwnerNameField().id(state.vaultGeneration)
+                    OwnerEmailsField().id(state.vaultGeneration)
+                }
                 Toggle(L("settings.captureMic"), isOn: binding(\.captureMic))
                 Toggle(L("settings.hotkey"), isOn: binding(\.hotkeyEnabled))
             }

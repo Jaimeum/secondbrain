@@ -12,9 +12,10 @@ Una página por persona, compartida por todos los proyectos. *One page per perso
 
 ## Dueño de este cerebro
 
-En las transcripciones, «Yo» (o «Me») es siempre la persona que graba.
+En las transcripciones, «Yo» (o «Me») es siempre la persona que graba. En los correos, son suyos los que salen de sus direcciones.
 
 - **Nombre:** _aún no identificado_
+- **Correo:** _aún no registrado_
 
 ## Todas las personas
 

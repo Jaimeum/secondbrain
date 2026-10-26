@@ -237,6 +237,9 @@ private struct MessageView: View {
     var onSave: () -> Void
     var onReconnect: () -> Void
 
+    /// Citations that point at emails get a ✉️ so it's clear the answer comes from a mail.
+    @ViewState private var emailTargets: Set<String> = []
+
     var body: some View {
         switch message.role {
         case .user:
@@ -260,7 +263,7 @@ private struct MessageView: View {
                     }
                 }
                 if !message.text.isEmpty {
-                    MarkdownText(markdown: message.text)
+                    MarkdownText(markdown: message.text, emailTargets: emailTargets)
                         .environment(\.openURL, OpenURLAction { url in
                             guard url.scheme == "sbwiki" else { return .systemAction }
                             let target = url.absoluteString.replacingOccurrences(of: "sbwiki://link/", with: "")
@@ -296,7 +299,16 @@ private struct MessageView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .task(id: message.isStreaming) { await findEmailCitations() }
         }
+    }
+
+    private func findEmailCitations() async {
+        guard !message.isStreaming, !message.text.isEmpty else { return }
+        let targets = WikiWebView.Coordinator.wikilinkTargets(in: message.text)
+        guard !targets.isEmpty else { return }
+        let resolved = await state.engine.vault.resolveWikilinksAsync(targets, from: baseRelPath)
+        emailTargets = Set(resolved.filter { $0.value.contains("/emails/") }.keys)
     }
 
     @ViewBuilder private func failureView(_ failure: ChatMessage.Failure) -> some View {
@@ -322,6 +334,8 @@ private struct MessageView: View {
 /// `[[wikilinks]]` become `sbwiki://link/<target>` links resolved on click.
 struct MarkdownText: View {
     let markdown: String
+    /// Wikilink targets that resolve to emails: shown with ✉️.
+    var emailTargets: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -399,7 +413,7 @@ struct MarkdownText: View {
     }
 
     private func inline(_ text: String) -> Text {
-        let linked = Self.linkifyWikilinks(text)
+        let linked = Self.linkifyWikilinks(text, emailTargets: emailTargets)
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         if let attributed = try? AttributedString(markdown: linked, options: options) {
             return Text(attributed)
@@ -407,10 +421,15 @@ struct MarkdownText: View {
         return Text(text)
     }
 
-    static func linkifyWikilinks(_ text: String) -> String {
+    static func linkifyWikilinks(_ text: String, emailTargets: Set<String> = []) -> String {
         text.replacing(#/\[\[([^\[\]\|\n]+?)(?:\|([^\[\]\n]+))?\]\]/#) { match in
             let target = String(match.1).split(separator: "#").first.map(String.init) ?? String(match.1)
-            let label = match.2.map(String.init) ?? target
+            var label = match.2.map(String.init) ?? target
+            let trimmed = target.trimmingCharacters(in: .whitespaces)
+            if emailTargets.contains(trimmed) || emailTargets.contains(String(match.1).trimmingCharacters(in: .whitespaces))
+                || trimmed.contains("emails/") {
+                label = "✉️ " + label
+            }
             let encoded = target.trimmingCharacters(in: .whitespaces)
                 .addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? target
             return "[\(label)](sbwiki://link/\(encoded))"

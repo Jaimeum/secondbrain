@@ -11,7 +11,8 @@ struct SB: AsyncParsableCommand {
         discussion: "Set SB_CONFIG=/path/config.json to use an alternate configuration.",
         subcommands: [Init.self, ProjectCmd.self, Projects.self, Owner.self, Simulate.self, Run.self, Status.self, Import.self,
                       Note.self, Assign.self, Retry.self, Delete.self, Ask.self, Lint.self, History.self, Diff.self,
-                      Undo.self, Models.self]
+                      Undo.self, Models.self, EmailCmd.self, TasksCmd.self, TaskCmd.self, TemplatesCmd.self, TemplateCmd.self,
+                      Reformat.self, TimelineCmd.self, SetDate.self, Export.self, SelfTest.self]
     )
 }
 
@@ -214,6 +215,7 @@ struct Status: AsyncParsableCommand {
         if engine.sources.isEmpty { print("  (none)") }
         for s in engine.sources.prefix(limit) {
             var line = "  \(s.id)  \(s.kind.rawValue)\t\(s.status.rawValue)\t\(s.projectSlug ?? "—")\t\(s.title)"
+            line += "  (happened \(stamp(s.timelineDate)), added \(stamp(s.createdAt)))"
             if let sug = s.suggestedProject { line += "  [suggested: \(sug)]" }
             if let err = s.error { line += "  ! \(err)" }
             print(line)
@@ -233,16 +235,19 @@ struct Import: AsyncParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Import a file or URL as a source.")
     @Argument var target: String
     @Option var project: String?
+    @Option(help: "When it happened (default: the file's own date)") var date: String?
+    @Option(help: "Format (template id) for a recording's page") var template: String?
     @Flag(help: "Process the queue right away") var run = false
 
     @MainActor func run() async throws {
         let engine = makeEngine()
+        let eventDate = try date.map(parseUserDate)
         if let url = URL(string: target), let scheme = url.scheme, ["http", "https"].contains(scheme.lowercased()) {
-            try await engine.importURL(url, projectSlug: project)
+            try await engine.importURL(url, projectSlug: project, eventDate: eventDate)
         } else {
             let path = (target as NSString).expandingTildeInPath
             guard FileManager.default.fileExists(atPath: path) else { throw CLIError("File not found: \(path)") }
-            try await engine.importFileAsync(URL(fileURLWithPath: path), projectSlug: project)
+            try await engine.importFileAsync(URL(fileURLWithPath: path), projectSlug: project, eventDate: eventDate, templateId: template)
         }
         if let s = engine.sources.first {
             let target = s.kind == .meeting ? "meeting, to transcribe" : (s.rawPath ?? "?")
@@ -257,11 +262,12 @@ struct Note: AsyncParsableCommand {
     @Argument var title: String
     @Argument var text: String
     @Option var project: String?
+    @Option(help: "When it happened (default: now)") var date: String?
     @Flag(help: "Process the queue right away") var run = false
 
     @MainActor func run() async throws {
         let engine = makeEngine()
-        try engine.addNote(title: title, body: text, projectSlug: project)
+        try engine.addNote(title: title, body: text, projectSlug: project, eventDate: try date.map(parseUserDate))
         if let s = engine.sources.first { print("Note \(s.title) [\(s.id)] → \(s.rawPath ?? "?") (\(s.status.rawValue))") }
         if run { await runQueue(engine) }
     }
@@ -312,10 +318,12 @@ struct Simulate: AsyncParsableCommand {
     @Option var project: String?
     @Option var title: String?
     @Option(help: "Seconds per chunk") var chunkSeconds = 300
+    @Option(help: "When the recording started (ISO or e.g. 2026-10-20 10:00; default: now minus its duration)") var started: String?
     @Flag(help: "Process the queue right away") var run = false
 
     @MainActor func run() async throws {
         let engine = makeEngine()
+        let startOverride = try started.map(parseUserDate)
         let rate = 16_000
         var systemSamples = try await AudioPrep.loadMono16k(URL(fileURLWithPath: (system as NSString).expandingTildeInPath))
         var micSamples: [Int16]?
@@ -325,8 +333,8 @@ struct Simulate: AsyncParsableCommand {
         if let m = micSamples { micSamples = m + [Int16](repeating: 0, count: total - m.count) }
 
         let duration = Double(total) / Double(rate)
-        let end = Date()
-        let start = end.addingTimeInterval(-duration)
+        let end = startOverride.map { $0.addingTimeInterval(duration) } ?? Date()
+        let start = startOverride ?? end.addingTimeInterval(-duration)
         let id = SessionManifest.newId(at: start)
         let dir = engine.paths.sessions.appendingPathComponent(id)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

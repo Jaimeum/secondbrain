@@ -8,11 +8,22 @@ struct NewProjectSheet: View {
 
     @ViewState private var form = ProjectForm()
     @ViewState private var error: String?
+    @ViewState private var templateId: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text(L("newProject.title")).font(.title2.weight(.semibold))
             ProjectFormFields(form: $form)
+            VStack(alignment: .leading, spacing: 4) {
+                Picker(L("tpl.projectDefault"), selection: $templateId) {
+                    Text(L("tpl.standard")).tag(String?.none)
+                    Divider()
+                    ForEach(state.templates(for: .meeting).filter { $0.id != TemplateInfo.standardId }) { t in
+                        Text(t.name).tag(Optional(t.id))
+                    }
+                }
+                Text(L("tpl.projectDefaultHint")).font(.caption).foregroundStyle(.secondary)
+            }
             if let error {
                 Text(error).foregroundStyle(.red).font(.callout)
             }
@@ -32,7 +43,12 @@ struct NewProjectSheet: View {
 
     private func create() {
         do {
-            let project = try state.createProject(name: form.trimmedName, description: form.description, emoji: form.emoji)
+            var project = try state.createProject(name: form.trimmedName, description: form.description, emoji: form.emoji)
+            if let templateId {
+                try? state.engine.setDefaultTemplate(projectSlug: project.slug, templateId: templateId)
+                project.defaultTemplate = templateId
+                state.reloadProjects()
+            }
             onCreated(project)
             dismiss()
         } catch {

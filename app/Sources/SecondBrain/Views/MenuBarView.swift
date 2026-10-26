@@ -38,6 +38,8 @@ struct MenuBarView: View {
                             Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
                         }
                     }
+                    TemplatePicker(scope: .meeting, selection: $state.recordingTemplateId,
+                                   projectSlug: state.recordingProjectSlug, label: L("tpl.pickerShort"))
                     TextField(L("menu.titlePlaceholder"), text: $state.recordingTitle)
                         .textFieldStyle(.roundedBorder)
                 }
@@ -59,6 +61,17 @@ struct MenuBarView: View {
             }
 
             Divider()
+
+            if state.config.onboardingComplete {
+                Button {
+                    openWindow(id: "main")
+                    NSApp.activate(ignoringOtherApps: true)
+                    state.requestEmail(projectSlug: state.recordingProjectSlug)
+                } label: {
+                    Label(L("email.pasteMenu"), systemImage: "envelope.badge")
+                }
+                .buttonStyle(.borderless)
+            }
 
             HStack {
                 Button(L("menu.open")) {

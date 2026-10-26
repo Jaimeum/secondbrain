@@ -71,7 +71,20 @@ enum Frontmatter {
     static func field(_ key: String, in text: String) -> String? {
         guard let yaml = split(text).yaml else { return nil }
         for line in yaml.components(separatedBy: "\n") where line.hasPrefix(key + ":") {
-            var value = String(line.dropFirst(key.count + 1))
+            var value = String(line.dropFirst(key.count + 1)).trimmingCharacters(in: .whitespaces)
+            // Quoted: up to the closing quote (a " #" inside is text, e.g. `subject: "Factura #123"`, not a comment).
+            if let q = value.first, q == "\"" || q == "'" {
+                var out = "", escaped = false, closed = false
+                let inner = q == "'" && value.count > 2 ? value.dropFirst().replacingOccurrences(of: "''", with: "\u{0}") : String(value.dropFirst())
+                for ch in inner {
+                    if ch == "\u{0}" { out.append("'"); continue }   // YAML single-quote escape ''
+                    if escaped { out.append(ch); escaped = false; continue }
+                    if q == "\"", ch == "\\" { escaped = true; continue }
+                    if ch == q { closed = true; break }
+                    out.append(ch)
+                }
+                if closed { return out.isEmpty ? nil : out }
+            }
             if let hash = value.range(of: " #") { value = String(value[..<hash.lowerBound]) }
             value = value.trimmingCharacters(in: .whitespaces)
             if value.count >= 2, let f = value.first, f == "\"" || f == "'", value.last == f {

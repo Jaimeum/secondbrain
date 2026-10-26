@@ -149,6 +149,32 @@ public final class HistoryStore: @unchecked Sendable {
         return entry
     }
 
+    /// A small edit made by the app itself (e.g. checking a task): writes `after` to `path` and records a
+    /// `.manualEdit` entry with before/after copies, without a vault snapshot. Undoable like any other entry.
+    @discardableResult
+    public func recordManualEdit(title: String, sourceId: String? = nil, projectSlug: String?, path: String,
+                                 before: String?, after: String) throws -> HistoryEntry {
+        let id = SessionManifest.newId()
+        let dir = historyDir.appendingPathComponent(id)
+        let fm = FileManager.default
+        let target = vaultRoot.appendingPathComponent(path)
+        if let before {
+            let b = dir.appendingPathComponent("before/\(path)")
+            try fm.createDirectory(at: b.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try before.write(to: b, atomically: true, encoding: .utf8)
+        }
+        try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try after.write(to: target, atomically: true, encoding: .utf8)
+        try copy(target, to: dir.appendingPathComponent("after/\(path)"))
+        let entry = HistoryEntry(id: id, title: title, kind: .manualEdit, sourceId: sourceId, projectSlug: projectSlug,
+                                 changes: [FileChange(path: path, change: before == nil ? .added : .modified)],
+                                 createdAt: Date(), undone: false)
+        try save(entry)
+        gitCommit(message: title)
+        Log.info("history \(id): manual edit of \(path) — \(title)")
+        return entry
+    }
+
     /// Drops a snapshot without recording anything.
     public func discard(_ snapshot: HistorySnapshot) {
         let dir = historyDir.appendingPathComponent(snapshot.id)

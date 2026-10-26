@@ -16,6 +16,9 @@ struct MainView: View {
         .sheet(isPresented: $showNewProject) {
             NewProjectSheet { project in state.selection = .project(project.slug) }
         }
+        .sheet(item: $state.emailRequest) { request in
+            AddEmailSheet(request: request)
+        }
         .safeAreaInset(edge: .top, spacing: 0) {
             if state.isSwitchingVault {
                 VaultSwitchingNotice()
@@ -25,6 +28,8 @@ struct MainView: View {
                     .background(Color.accentColor.opacity(0.1))
             } else if state.restartNeeded {
                 RestartBanner()
+            } else if let notice = state.migrationNotice {
+                MigrationBanner(notice: notice)
             }
         }
     }
@@ -43,6 +48,10 @@ struct MainView: View {
             InboxView()
         case .people:
             PeopleView()
+        case .myTasks:
+            MyTasksView()
+        case .templates:
+            TemplatesView()
         case .brain, nil:
             BrainView()
         }
@@ -65,6 +74,36 @@ struct RestartBanner: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.orange.opacity(0.12))
+    }
+}
+
+/// After an update the vault got new things (formats, timeline…). If the user had edited the brain's rules
+/// (CLAUDE.md), we kept theirs and left the new version beside it: explain it calmly.
+struct MigrationBanner: View {
+    @Environment(AppState.self) private var state
+    let notice: String
+    @ViewState private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
+                Text(L("migration.title")).font(.callout.weight(.medium))
+                Spacer()
+                Button(expanded ? L("migration.less") : L("migration.more")) { expanded.toggle() }
+                    .buttonStyle(.borderless)
+                Button(L("migration.dismiss")) { state.dismissMigrationNotice() }
+            }
+            if expanded {
+                Text(L("migration.explain")).font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(notice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.accentColor.opacity(0.08))
     }
 }
 

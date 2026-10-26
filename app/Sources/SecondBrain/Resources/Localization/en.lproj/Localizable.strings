@@ -107,7 +107,7 @@
 
 /* Meetings & sources */
 "sources.emptyTitle" = "Nothing here yet";
-"sources.emptyMessage" = "Record a meeting, drop in files (PDF, Word, text) or paste a link. I'll learn from all of it and organize it in the wiki.";
+"sources.emptyMessage" = "Record a meeting, drop files (PDF, Word, text, audio or video) or paste a link. Recordings are transcribed automatically. I’ll learn from all of it and organize it in the wiki.";
 "sources.dropHere" = "Drop to add to this project";
 "sources.linkPlaceholder" = "Paste a link for me to read…";
 "sources.addLink" = "Add link";
@@ -293,7 +293,7 @@
 "onb.perm.allow" = "Allow";
 "onb.perm.openSettings" = "Open Settings";
 "onb.perm.granted" = "Done";
-"onb.perm.restartHint" = "If you already turned it on in Settings and it doesn't show here, restart SecondBrain.";
+"onb.perm.restartHint" = "Already turned it on in Settings but it doesn't show here? macOS needs SecondBrain to reopen. You'll come back to this same step.";
 "onb.claude.title" = "Connect Claude";
 "onb.claude.message" = "I use your Claude account (Pro or Max) to understand your meetings. No technical knowledge needed.";
 "onb.models.title" = "Getting transcription ready";
@@ -345,3 +345,12 @@
 "owner.label" = "Your name";
 "owner.placeholder" = "e.g. Jamie Smith";
 "owner.hint" = "So Claude knows that “Me” in your meetings is you.";
+
+"restart.menuLanguage" = "Restart SecondBrain to change the language of the menus.";
+"restart.whileRecording" = "Stop the recording before restarting.";
+"onb.perm.reopen" = "Reopen SecondBrain";
+"sources.importing" = "Importing…";
+"sources.dropHint" = "Documents, audio or video. Recordings are transcribed automatically.";
+"sources.addFilesHelp" = "Documents (PDF, Word, text) or audio and video recordings. Recordings are transcribed automatically.";
+"sources.panelMessage" = "Choose documents or audio/video recordings. Recordings are transcribed automatically.";
+"vault.switching" = "Finishing the current task… then I’ll open the new brain folder.";

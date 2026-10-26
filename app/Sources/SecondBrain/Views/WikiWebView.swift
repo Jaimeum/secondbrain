@@ -38,6 +38,7 @@ struct WikiWebView: NSViewRepresentable {
         weak var webView: WKWebView?
         private var loaded = false
         private var shownPath: String?
+        private weak var shownVault: VaultStore?
         private var shownModified: Date?
         private var watchTimer: Timer?
         private var renderGeneration = 0
@@ -45,8 +46,10 @@ struct WikiWebView: NSViewRepresentable {
         init(parent: WikiWebView) { self.parent = parent }
 
         func show(_ path: String?) {
-            guard path != shownPath else { return }
+            // A different vault (switched in Settings) with the same relative path is a different page.
+            guard path != shownPath || parent.vault !== shownVault else { return }
             shownPath = path
+            shownVault = parent.vault
             render(keepScroll: false)
             startWatching()
         }
@@ -99,7 +102,7 @@ struct WikiWebView: NSViewRepresentable {
                 let page = await Task.detached { () -> [String: Any] in
                     let markdown = (try? vault.read(path)) ?? ""
                     let targets = Self.wikilinkTargets(in: markdown)
-                    let resolved = vault.resolveWikilinks(targets, from: path)
+                    let resolved = vault.resolveWikilinks(targets, from: path)  // already off the main thread
                     var links: [String: Any] = [:]
                     for target in targets { links[target] = resolved[target] ?? NSNull() }
                     let backlinks = vault.backlinks(to: path).filter { $0.path != path }.map { ["path": $0.path, "title": $0.title] }
@@ -146,10 +149,15 @@ struct WikiWebView: NSViewRepresentable {
                 return decisionHandler(.cancel)
             }
             if url.isFileURL, url.lastPathComponent != "wiki.html" {
-                // A plain markdown link like [x](other-page.md): resolve it like a wikilink.
+                // A plain markdown link like [x](other-page.md): resolve it like a wikilink (walks the vault: off main).
                 let name = url.deletingPathExtension().lastPathComponent
-                if let path = shownPath, let target = parent.vault.resolveWikilink(name, from: path) {
-                    parent.onNavigate(target)
+                if let path = shownPath {
+                    let vault = parent.vault
+                    Task {
+                        let resolved = await vault.resolveWikilinksAsync([name], from: path)
+                        guard let target = resolved[name], vault === self.parent.vault else { return }
+                        self.parent.onNavigate(target)
+                    }
                 }
                 return decisionHandler(.cancel)
             }

@@ -45,12 +45,24 @@ public final class JobQueue: @unchecked Sendable {
 
     public init(dir: URL) { self.dir = dir }
 
-    /// Loads jobs from disk; anything left `running` by a crash goes back to `queued`.
-    public func load() {
+    /// Loads jobs from disk. With `resetRunning` (only the process holding the queue lock may do this),
+    /// anything left `running` by a crash goes back to `queued`.
+    public func load(resetRunning: Bool = true) {
+        replace(with: Self.readAll(dir: dir), resetRunning: resetRunning)
+    }
+
+    /// Jobs on disk, oldest first (no side effects; safe from any thread).
+    public static func readAll(dir: URL) -> [Job] {
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-        jobs = files.filter { $0.pathExtension == "json" }
+        return files.filter { $0.pathExtension == "json" }
             .compactMap { try? JSONDecoder.sb.decode(Job.self, from: Data(contentsOf: $0)) }
             .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// Replaces the in-memory list (e.g. after another process changed the queue).
+    public func replace(with loaded: [Job], resetRunning: Bool) {
+        jobs = loaded
+        guard resetRunning else { return }
         for i in jobs.indices where jobs[i].status == .running {
             jobs[i].status = .queued
             jobs[i].updatedAt = Date()
@@ -125,4 +137,62 @@ public final class JobQueue: @unchecked Sendable {
             Log.error("could not save job \(job.id): \(error)")
         }
     }
+}
+
+/// Cross-process "one queue processor" lock: `flock` on `data/queue.lock` (CONTRACT [P-core]). The kernel drops
+/// it when the process dies, so a crash never leaves the queue locked. The file holds the owner's pid.
+public final class QueueLock: @unchecked Sendable {
+    public let url: URL
+    private let mutex = NSLock()
+    private var fd: Int32 = -1
+
+    public init(url: URL) { self.url = url }
+
+    public var isHeld: Bool { mutex.lock(); defer { mutex.unlock() }; return fd >= 0 }
+
+    /// Non-blocking. True when this instance holds the lock (already or now).
+    public func tryLock() -> Bool {
+        mutex.lock()
+        defer { mutex.unlock() }
+        if fd >= 0 { return true }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let f = open(url.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        guard f >= 0 else {
+            Log.error("could not open queue lock \(url.path): errno \(errno)")
+            return false
+        }
+        guard flock(f, LOCK_EX | LOCK_NB) == 0 else {
+            close(f)
+            return false
+        }
+        let pid = Array(String(ProcessInfo.processInfo.processIdentifier).utf8)
+        _ = ftruncate(f, 0)
+        _ = pid.withUnsafeBytes { pwrite(f, $0.baseAddress, $0.count, 0) }
+        fd = f
+        return true
+    }
+
+    public func unlock() {
+        mutex.lock()
+        defer { mutex.unlock() }
+        guard fd >= 0 else { return }
+        _ = flock(fd, LOCK_UN)
+        close(fd)
+        fd = -1
+    }
+
+    /// Pid written by the current (or last) holder.
+    public func holderPid() -> Int32? {
+        (try? String(contentsOf: url, encoding: .utf8)).flatMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    }
+
+    /// Executable name of the live holder ("sb", "SecondBrain"), nil when nobody holds the lock.
+    public func holderName() -> String? {
+        guard let pid = holderPid(), pid > 0, kill(pid, 0) == 0 else { return nil }
+        var buffer = [CChar](repeating: 0, count: 256)
+        guard proc_name(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        return String(cString: buffer)
+    }
+
+    deinit { if fd >= 0 { close(fd) } }
 }

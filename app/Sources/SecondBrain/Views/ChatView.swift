@@ -265,8 +265,13 @@ private struct MessageView: View {
                             guard url.scheme == "sbwiki" else { return .systemAction }
                             let target = url.absoluteString.replacingOccurrences(of: "sbwiki://link/", with: "")
                                 .removingPercentEncoding ?? ""
-                            if let path = state.engine.vault.resolveWikilink(target, from: baseRelPath) {
-                                onOpenPage(path)
+                            // Resolving walks the vault: do it off the main thread.
+                            let vault = state.engine.vault
+                            let base = baseRelPath
+                            Task {
+                                if let path = await vault.resolveWikilinksAsync([target], from: base)[target] {
+                                    onOpenPage(path)
+                                }
                             }
                             return .handled
                         })

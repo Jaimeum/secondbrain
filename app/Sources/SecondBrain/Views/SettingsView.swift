@@ -27,7 +27,8 @@ struct SettingsView: View {
                     Text("Español").tag("es")
                     Text("English").tag("en")
                 }
-                if state.engineStarted { OwnerNameField() }
+                if state.menuLanguageNeedsRestart { MenuLanguageNotice() }
+                if state.engineStarted { OwnerNameField().id(state.vaultGeneration) }
                 Toggle(L("settings.captureMic"), isOn: binding(\.captureMic))
                 Toggle(L("settings.hotkey"), isOn: binding(\.hotkeyEnabled))
             }
@@ -37,12 +38,14 @@ struct SettingsView: View {
                     HStack {
                         Text(state.config.vaultPath).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                         Button(L("onb.vault.change")) { VaultPicker.choose(state: state) }
+                            .disabled(state.isSwitchingVault)
                         Button {
                             NSWorkspace.shared.activateFileViewerSelecting([state.config.vaultURL])
                         } label: { Image(systemName: "folder") }
                             .help(L("wiki.showInFinder"))
                     }
                 }
+                if state.isSwitchingVault { VaultSwitchingNotice() }
                 LabeledContent(L("settings.dataFolder")) {
                     Button(L("settings.reveal")) {
                         NSWorkspace.shared.activateFileViewerSelecting([state.config.dataURL])

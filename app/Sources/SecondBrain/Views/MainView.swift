@@ -17,7 +17,15 @@ struct MainView: View {
             NewProjectSheet { project in state.selection = .project(project.slug) }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if state.restartNeeded { RestartBanner() }
+            if state.isSwitchingVault {
+                VaultSwitchingNotice()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.accentColor.opacity(0.1))
+            } else if state.restartNeeded {
+                RestartBanner()
+            }
         }
     }
 
@@ -27,7 +35,9 @@ struct MainView: View {
             if let project = state.project(slug) {
                 ProjectView(project: project).id(slug)
             } else {
-                EmptyStateView(symbol: "folder", title: L("project.missing"), message: "")
+                // Deleted on disk or not in this vault: offer a way out instead of a blank page.
+                EmptyStateView(symbol: "folder", title: L("project.missing"), message: "",
+                               actionTitle: L("sidebar.brain")) { state.selection = .brain }
             }
         case .inbox:
             InboxView()
@@ -50,10 +60,37 @@ struct RestartBanner: View {
             Button(L("restart.now")) { state.relaunch() }
                 .buttonStyle(.borderedProminent)
                 .disabled(state.isRecording)
+                .help(state.isRecording ? L("restart.whileRecording") : "")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.orange.opacity(0.12))
+    }
+}
+
+/// Shown while the engine finishes its current job before moving to the newly chosen vault.
+struct VaultSwitchingNotice: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(L("vault.switching")).font(.callout).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Menus (Edit, View, Window…) keep the launch language until SecondBrain restarts.
+struct MenuLanguageNotice: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "globe").foregroundStyle(.secondary)
+            Text(L("restart.menuLanguage")).font(.callout).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button(L("restart.now")) { state.relaunch() }
+                .disabled(state.isRecording)
+                .help(state.isRecording ? L("restart.whileRecording") : "")
+        }
     }
 }
 

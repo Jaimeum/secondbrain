@@ -24,19 +24,7 @@ public final class ClaudeRunner: Sendable {
         let config = configProvider()
         let vault = vaultURL
         return AsyncThrowingStream { continuation in
-            let tools = mode == .readOnly ? "Read,Glob,Grep" : "Read,Glob,Grep,Write,Edit,MultiEdit"
-            // Edits are NOT pre-approved: `acceptEdits` only auto-accepts them inside the working directory
-            // (the vault), so a prompt injected through a source can't make Claude write elsewhere on disk.
-            let args = [
-                "-p",
-                "--output-format", "stream-json", "--verbose",
-                "--model", model,
-                "--permission-mode", "acceptEdits",
-                "--tools", tools,
-                "--allowedTools", "Read,Glob,Grep",
-                "--disallowedTools", "Bash,WebFetch,WebSearch",
-                "--strict-mcp-config",
-            ]
+            let args = Self.arguments(mode: mode, model: model)
             let session = ClaudeProcess(arguments: args, prompt: prompt, cwd: vault,
                                         parser: ClaudeStreamParser(vaultURL: vault, language: config.uiLanguage),
                                         continuation: continuation)
@@ -54,6 +42,38 @@ public final class ClaudeRunner: Sendable {
         }
     }
 
+    /// CLI arguments for a run confined to the vault (the process cwd).
+    ///
+    /// No tool is pre-approved (`--allowedTools`): Claude Code already lets Read/Glob/Grep touch the working
+    /// directory, and `acceptEdits` auto-accepts Write/Edit/MultiEdit only there. Anything outside the vault
+    /// would need a permission prompt, which `-p` mode denies — so a prompt injected through a source can't
+    /// read `~/.ssh` or other documents into the wiki, nor write elsewhere on disk (verified with `claude -p`).
+    /// `--setting-sources project` drops the user's own `~/.claude/settings*.json` (whose allow rules or
+    /// `additionalDirectories` could widen that) while still loading the vault's CLAUDE.md. The deny list is
+    /// only a backstop for the most sensitive folders.
+    static func arguments(mode: ClaudeMode, model: String) -> [String] {
+        let tools = mode == .readOnly ? "Read,Glob,Grep" : "Read,Glob,Grep,Write,Edit,MultiEdit"
+        return [
+            "-p",
+            "--output-format", "stream-json", "--verbose",
+            "--model", model,
+            "--permission-mode", "acceptEdits",
+            "--tools", tools,
+            "--disallowedTools", "Bash,WebFetch,WebSearch",
+            "--setting-sources", "project",
+            "--settings", backstopSettings,
+            "--strict-mcp-config",
+        ]
+    }
+
+    static let backstopSettings: String = {
+        let paths = ["~/.ssh", "~/.aws", "~/.gnupg", "~/.config", "~/.claude", "~/Library/Keychains"]
+        let deny = paths.flatMap { p in ["Read(\(p)/**)", "Edit(\(p)/**)"] }
+        let json: [String: Any] = ["permissions": ["deny": deny]]
+        let data = (try? JSONSerialization.data(withJSONObject: json, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
+        return String(decoding: data, as: UTF8.self)
+    }()
+
     /// Stops every Claude process this app started (on quit, so none keeps editing the vault unattended).
     public static func terminateAll() {
         ClaudeProcess.terminateAll()
@@ -61,8 +81,15 @@ public final class ClaudeRunner: Sendable {
 
     // MARK: Environment shared with ClaudeSetup
 
+    /// The process's home: `$HOME` when set (so an isolated HOME is honoured end to end, like the installer
+    /// does), else the account's home directory.
+    static var homeDirectory: String {
+        if let home = ProcessInfo.processInfo.environment["HOME"], home.hasPrefix("/") { return home }
+        return FileManager.default.homeDirectoryForCurrentUser.path
+    }
+
     static var extraPathDirs: [String] {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = homeDirectory
         return ["\(home)/.local/bin", "\(home)/.claude/local", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
     }
 
@@ -72,8 +99,11 @@ public final class ClaudeRunner: Sendable {
         var path = extraPathDirs
         for p in existing where !path.contains(p) { path.append(p) }
         env["PATH"] = path.joined(separator: ":")
-        if env["HOME"] == nil { env["HOME"] = FileManager.default.homeDirectoryForCurrentUser.path }
-        if let token = ClaudeSetup.loadToken() { env["CLAUDE_CODE_OAUTH_TOKEN"] = token }
+        if env["HOME"] == nil { env["HOME"] = homeDirectory }
+        // A token set explicitly in the environment (e.g. `sb` from a shell, tests) wins over the Keychain one.
+        if (env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "").isEmpty, let token = ClaudeSetup.loadToken() {
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+        }
         // Running from inside another Claude Code session must not look like a nested one.
         env.removeValue(forKey: "CLAUDECODE")
         return env

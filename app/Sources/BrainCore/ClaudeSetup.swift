@@ -23,11 +23,14 @@ public enum ClaudeSetup {
         return nil
     }
 
+    /// The official installer. It installs into `$HOME/.local/bin` of the environment it runs with.
+    static let installCommand = "curl -fsSL https://claude.ai/install.sh | bash"
+
     /// Runs the official installer (`curl -fsSL https://claude.ai/install.sh | bash`), streaming its output.
     public static func install(log: @escaping @Sendable (String) -> Void) async throws -> URL {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", "curl -fsSL https://claude.ai/install.sh | bash"]
+        process.arguments = ["-c", installCommand]
         process.environment = ClaudeRunner.environment()
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -101,11 +104,20 @@ public enum ClaudeSetup {
 
     /// Pulls the last `sk-ant-oat…` token out of terminal output, tolerating ANSI codes and hard line wraps.
     public static func extractToken(from terminalOutput: String) -> String? {
-        let clean = terminalOutput
-            .replacingOccurrences(of: #"\u{1B}\[[0-9;?]*[ -/]*[@-~]"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"\u{1B}\][^\u{07}]*\u{07}"#, with: "", options: .regularExpression)
+        let clean = stripANSI(terminalOutput)
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
+            .map { $0.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression) }
+            .joined(separator: "\n")
+        if let token = scanToken(in: clean) { return token }
+        // The wrap may even split the `sk-ant-oat` prefix: glue single line breaks between token characters.
+        let glued = clean.replacingOccurrences(of: #"(?<=[A-Za-z0-9_-])\n[ \t]*(?=[A-Za-z0-9_-])"#, with: "",
+                                               options: .regularExpression)
+        return scanToken(in: glued)
+    }
+
+    private static func scanToken(in clean: String) -> String? {
         let tokenChars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
         guard let start = clean.range(of: "sk-ant-oat", options: .backwards) else { return nil }
         var token = ""
@@ -119,6 +131,16 @@ public enum ClaudeSetup {
             if prefix.count < line.unicodeScalars.count { break }
         }
         return token.count > "sk-ant-oat".count + 10 ? token : nil
+    }
+
+    /// Removes terminal escape sequences: CSI (`ESC[…m`, cursor moves), OSC (`ESC]…BEL` / `ESC]…ESC\`),
+    /// charset designations (`ESC(B`) and other two-byte escapes.
+    static func stripANSI(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\x{1B}\[[0-?]*[ -/]*[@-~]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\x{1B}\][^\x{07}\x{1B}]*(?:\x{07}|\x{1B}\\)"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\x{1B}[()*+][0-9A-Za-z]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\x{1B}[@-_=>78]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\x{9B}[0-?]*[ -/]*[@-~]"#, with: "", options: .regularExpression)
     }
 
     // MARK: Helpers

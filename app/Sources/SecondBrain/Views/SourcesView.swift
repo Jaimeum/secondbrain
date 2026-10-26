@@ -15,6 +15,7 @@ struct SourcesView: View {
     @ViewState private var dropTargeted = false
     @ViewState private var error: String?
     @ViewState private var pendingDelete: SourceRecord?
+    @ViewState private var importing = 0
 
     private var sources: [SourceRecord] {
         state.engine.sources.filter { $0.projectSlug == projectSlug }
@@ -40,7 +41,12 @@ struct SourcesView: View {
                 RoundedRectangle(cornerRadius: 14)
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
                     .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
-                    .overlay { Label(L("sources.dropHere"), systemImage: "arrow.down.doc").font(.title3.weight(.semibold)) }
+                    .overlay {
+                        VStack(spacing: 6) {
+                            Label(L("sources.dropHere"), systemImage: "arrow.down.doc").font(.title3.weight(.semibold))
+                            Text(L("sources.dropHint")).font(.callout).foregroundStyle(.secondary)
+                        }
+                    }
                     .padding(10)
                     .allowsHitTesting(false)
             }
@@ -87,8 +93,16 @@ struct SourcesView: View {
             .padding(.vertical, 7)
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
 
+            if importing > 0 {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(L("sources.importing")).font(.callout).foregroundStyle(.secondary)
+                }
+                .fixedSize()
+            }
             Button { showNote = true } label: { Label(L("sources.newNote"), systemImage: "square.and.pencil") }
             Button(action: chooseFiles) { Label(L("sources.addFiles"), systemImage: "doc.badge.plus") }
+                .help(L("sources.addFilesHelp"))
         }
         .padding(12)
     }
@@ -118,22 +132,32 @@ struct SourcesView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.prompt = L("sources.addFiles")
+        panel.message = L("sources.panelMessage")
         if panel.runModal() == .OK { importURLs(panel.urls) }
     }
 
+    /// Files (documents, audio, video) and links. Extraction and copying run off the main thread; audio and
+    /// video become meetings that show up below and get transcribed by the queue.
     private func importURLs(_ urls: [URL]) {
-        for url in urls {
-            if url.isFileURL {
-                do { try state.engine.importFile(url, projectSlug: projectSlug) } catch {
-                    self.error = L("sources.importFailed", url.lastPathComponent)
-                }
-            } else {
-                Task {
-                    do { try await state.engine.importURL(url, projectSlug: projectSlug) } catch {
-                        self.error = L("sources.linkFailed")
+        guard !urls.isEmpty else { return }
+        importing += 1
+        Task {
+            defer { importing -= 1 }
+            var failed: [String] = []
+            for url in urls {
+                do {
+                    if url.isFileURL {
+                        try await state.engine.importFileAsync(url, projectSlug: projectSlug)
+                    } else {
+                        try await state.engine.importURL(url, projectSlug: projectSlug)
                     }
+                } catch let engineError as EngineError {
+                    failed.append(engineError.errorDescription ?? L("sources.importFailed", url.lastPathComponent))
+                } catch {
+                    failed.append(url.isFileURL ? L("sources.importFailed", url.lastPathComponent) : L("sources.linkFailed"))
                 }
             }
+            if !failed.isEmpty { self.error = failed.joined(separator: "\n") }
         }
     }
 }

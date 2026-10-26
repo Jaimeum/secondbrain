@@ -40,9 +40,10 @@ func stamp(_ d: Date) -> String {
     return f.string(from: d)
 }
 
-/// Prints queue progress while `runUntilIdle` works.
+/// Prints queue progress while `runUntilIdle` works. Only one process works through the queue at a time
+/// (`data/queue.lock`): if the app (or another `sb`) has it, this says so and returns, or waits with `wait`.
 @MainActor
-func runQueue(_ engine: BrainEngine) async {
+func runQueue(_ engine: BrainEngine, wait: Bool = false) async {
     var lastMessage: [String: String] = [:]
     var lastStatus: [String: SourceStatus] = [:]
     engine.onJobUpdate = { job in
@@ -69,13 +70,28 @@ func runQueue(_ engine: BrainEngine) async {
             if let summary = engine.history.summary(entryId: e.id) { print(summary.split(separator: "\n").map { "    " + $0 }.joined(separator: "\n")) }
         }
     }
-    await engine.runUntilIdle()
+    if engine.queueBusyElsewhere, wait { print(busyMessage(engine) + " " + (es(engine) ? "Esperando…" : "Waiting…")) }
+    guard await engine.runUntilIdle(waitForLock: wait) else {
+        print(busyMessage(engine) + " " + (es(engine) ? "Lo que encolaste lo procesará esa instancia (o usa --wait)."
+                                                      : "That instance will process what you queued (or use --wait)."))
+        return
+    }
     let waiting = engine.jobs.filter { $0.status == .queued }
     if !waiting.isEmpty {
         print("\(waiting.count) job(s) still waiting" + (waiting.compactMap(\.notBefore).min().map { " until \(stamp($0))" } ?? ""))
     } else {
         print("Queue is empty.")
     }
+}
+
+@MainActor func es(_ engine: BrainEngine) -> Bool { !engine.config.uiLanguage.lowercased().hasPrefix("en") }
+
+@MainActor func busyMessage(_ engine: BrainEngine) -> String {
+    let otherSB = engine.queueHolderName() == "sb"
+    if es(engine) {
+        return otherSB ? "Otra instancia (otro `sb`) está procesando la cola." : "Otra instancia (la app) está procesando la cola."
+    }
+    return otherSB ? "Another instance (another `sb`) is processing the queue." : "Another instance (the app) is processing the queue."
 }
 
 // MARK: - Setup
@@ -150,8 +166,42 @@ struct Owner: AsyncParsableCommand {
 // MARK: - Pipeline
 
 struct Run: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Process the job queue until it is idle.")
-    @MainActor func run() async throws { await runQueue(makeEngine()) }
+    static let configuration = CommandConfiguration(abstract: "Process the job queue until it is idle.",
+                                                    discussion: "If the app (or another sb) is processing the queue, exits 0 unless --wait.")
+    @Flag(help: "Wait until the other instance releases the queue") var wait = false
+    @Option(help: ArgumentHelp("Behave like the app for N seconds (auto-processing + watching data/); for tests", visibility: .hidden))
+    var serve: Int?
+    @Option(help: ArgumentHelp("With --serve: after 3 s switch to this config via reload(config:)", visibility: .hidden))
+    var reloadConfig: String?
+
+    @MainActor func run() async throws {
+        guard let serve else { return await runQueue(makeEngine(), wait: wait) }
+        let config = AppConfig.load()
+        let transcriber = WhisperTranscriber(modelName: config.whisperModel, modelsDir: DataPaths(root: config.dataURL).models)
+        transcriber.messageLanguage = config.uiLanguage
+        let engine = BrainEngine(config: config, transcriber: transcriber)
+        engine.onEvent = { event in
+            if case .sourceUpdated(let s) = event { print("  · \(s.title) [\(s.id)] → \(s.status.rawValue)") }
+        }
+        engine.onJobUpdate = { job in print("[\(job.kind.rawValue)] \(job.status.rawValue)") }
+        engine.start()
+        var wasBusy: Bool?
+        for tick in 0..<(serve * 2) {
+            if tick == 6, let reloadConfig {
+                let data = try Data(contentsOf: URL(fileURLWithPath: reloadConfig))
+                let next = try JSONDecoder().decode(AppConfig.self, from: data)
+                print("reloading: \(engine.sources.count) sources at \(engine.paths.root.path)")
+                try await engine.reload(config: next)
+                print("reloaded: \(engine.sources.count) sources at \(engine.paths.root.path), vault \(engine.vault.root.path)")
+            }
+            if wasBusy != engine.queueBusyElsewhere {
+                wasBusy = engine.queueBusyElsewhere
+                print("queueBusyElsewhere=\(engine.queueBusyElsewhere) processing=\(engine.isProcessing)")
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        print("serve done: \(engine.jobs.count) job(s) left")
+    }
 }
 
 struct Status: AsyncParsableCommand {
@@ -192,9 +242,12 @@ struct Import: AsyncParsableCommand {
         } else {
             let path = (target as NSString).expandingTildeInPath
             guard FileManager.default.fileExists(atPath: path) else { throw CLIError("File not found: \(path)") }
-            try engine.importFile(URL(fileURLWithPath: path), projectSlug: project)
+            try await engine.importFileAsync(URL(fileURLWithPath: path), projectSlug: project)
         }
-        if let s = engine.sources.first { print("Imported \(s.title) [\(s.id)] → \(s.rawPath ?? "?") (\(s.status.rawValue))") }
+        if let s = engine.sources.first {
+            let target = s.kind == .meeting ? "meeting, to transcribe" : (s.rawPath ?? "?")
+            print("Imported \(s.title) [\(s.id)] → \(target) (\(s.status.rawValue))")
+        }
         if run { await runQueue(engine) }
     }
 }
@@ -264,8 +317,9 @@ struct Simulate: AsyncParsableCommand {
     @MainActor func run() async throws {
         let engine = makeEngine()
         let rate = 16_000
-        var systemSamples = try AudioPrep.loadMono16k(URL(fileURLWithPath: (system as NSString).expandingTildeInPath))
-        var micSamples = try mic.map { try AudioPrep.loadMono16k(URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)) }
+        var systemSamples = try await AudioPrep.loadMono16k(URL(fileURLWithPath: (system as NSString).expandingTildeInPath))
+        var micSamples: [Int16]?
+        if let mic { micSamples = try await AudioPrep.loadMono16k(URL(fileURLWithPath: (mic as NSString).expandingTildeInPath)) }
         let total = max(systemSamples.count, micSamples?.count ?? 0)
         systemSamples += [Int16](repeating: 0, count: total - systemSamples.count)
         if let m = micSamples { micSamples = m + [Int16](repeating: 0, count: total - m.count) }

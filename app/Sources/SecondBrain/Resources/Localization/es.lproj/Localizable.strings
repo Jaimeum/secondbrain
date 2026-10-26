@@ -107,7 +107,7 @@
 
 /* Reuniones y fuentes */
 "sources.emptyTitle" = "Nada por aquí todavía";
-"sources.emptyMessage" = "Graba una reunión, arrastra archivos (PDF, Word, texto) o pega un enlace. Aprenderé de todo y lo ordenaré en el wiki.";
+"sources.emptyMessage" = "Graba una reunión, arrastra archivos (PDF, Word, texto, audio o video) o pega un enlace. Las grabaciones se transcriben automáticamente. Aprenderé de todo y lo ordenaré en el wiki.";
 "sources.dropHere" = "Suelta para agregar al proyecto";
 "sources.linkPlaceholder" = "Pega un enlace para que lo lea…";
 "sources.addLink" = "Agregar enlace";
@@ -293,7 +293,7 @@
 "onb.perm.allow" = "Permitir";
 "onb.perm.openSettings" = "Abrir Ajustes";
 "onb.perm.granted" = "Listo";
-"onb.perm.restartHint" = "Si ya activaste el permiso en Ajustes y aquí no aparece, reinicia SecondBrain.";
+"onb.perm.restartHint" = "¿Ya lo activaste en Ajustes y aquí no aparece? macOS necesita que reabras SecondBrain. Volverás a este mismo paso.";
 "onb.claude.title" = "Conecta a Claude";
 "onb.claude.message" = "Uso tu cuenta de Claude (Pro o Max) para entender tus reuniones. No necesitas saber nada técnico.";
 "onb.models.title" = "Preparando la transcripción";
@@ -345,3 +345,12 @@
 "owner.label" = "Tu nombre";
 "owner.placeholder" = "Ej. Jaime Pérez";
 "owner.hint" = "Así Claude sabe que «Yo» en las reuniones eres tú.";
+
+"restart.menuLanguage" = "Reinicia SecondBrain para cambiar el idioma de los menús.";
+"restart.whileRecording" = "Detén la grabación antes de reiniciar.";
+"onb.perm.reopen" = "Reabrir SecondBrain";
+"sources.importing" = "Importando…";
+"sources.dropHint" = "Documentos, audio o video. Las grabaciones se transcriben automáticamente.";
+"sources.addFilesHelp" = "Documentos (PDF, Word, texto) o grabaciones de audio y video. Las grabaciones se transcriben automáticamente.";
+"sources.panelMessage" = "Elige documentos o grabaciones de audio/video. Las grabaciones se transcriben automáticamente.";
+"vault.switching" = "Terminando la tarea actual… luego abro la nueva carpeta del cerebro.";

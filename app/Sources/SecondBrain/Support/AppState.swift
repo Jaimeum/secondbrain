@@ -31,6 +31,10 @@ final class AppState {
     private(set) var vaultRevision = 0
     private(set) var historyRevision = 0
     private(set) var engineStarted = false
+    /// Waiting for the running job to finish before the engine moves to another vault ("Terminando la tarea actual…").
+    private(set) var isSwitchingVault = false
+    /// Bumped after the engine moved to another vault: views holding pages, chats or history start fresh.
+    private(set) var vaultGeneration = 0
 
     private(set) var modelProgress: ModelPrepProgress?
     private(set) var modelsReady = false
@@ -52,10 +56,13 @@ final class AppState {
     @ObservationIgnored private var modelTask: Task<Void, Never>?
     @ObservationIgnored private var hotKey: GlobalHotKey?
     @ObservationIgnored private var notified = Set<String>()
+    @ObservationIgnored private var vaultSwitch: Task<Void, Never>?
+    @ObservationIgnored private var projectsReload: Task<Void, Never>?
 
     private init() {
         let config = AppConfig.load()
         self.config = config
+        menuLanguageAtLaunch = config.uiLanguage
         Localizer.language = config.uiLanguage
         let paths = DataPaths(root: config.dataURL)
         let transcriber = WhisperTranscriber(modelName: config.whisperModel, modelsDir: paths.models)
@@ -85,7 +92,7 @@ final class AppState {
             Task { @MainActor in self?.handle(event) }
         }
         engine.start()
-        reloadProjects()
+        reloadProjectsNow()
         for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
             engine.recordingFinished(manifest)
         }
@@ -97,18 +104,38 @@ final class AppState {
         prepareModels()
     }
 
+    /// Quits and opens SecondBrain again. The new instance starts only after this process has exited, so two
+    /// engines never share the queue (a quick `open -n` while we are still shutting down could run a job twice).
     func relaunch() {
-        let target = Bundle.main.bundleURL.pathExtension == "app" ? Bundle.main.bundlePath : nil
+        let pid = String(ProcessInfo.processInfo.processIdentifier)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        if let target {
-            process.arguments = ["-c", "sleep 1; /usr/bin/open -n \"$0\"", target]
+        let wait = "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; "
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            process.arguments = ["-c", wait + "/usr/bin/open -n \"$0\"", Bundle.main.bundlePath, pid]
         } else if let exe = Bundle.main.executablePath {
-            process.arguments = ["-c", "sleep 1; \"$0\" >/dev/null 2>&1 &", exe]
+            // Bare `swift build` binary (development): start it detached, keeping the environment (SB_CONFIG).
+            process.arguments = ["-c", wait + "nohup \"$0\" >/dev/null 2>&1 &", exe, pid]
+        } else {
+            return
         }
-        try? process.run()
+        do { try process.run() } catch { return }
         NSApp.terminate(nil)
     }
+
+    // MARK: Menu language
+
+    /// The language AppKit/SwiftUI menus (Edit, View, Window…) were built with at launch.
+    let menuLanguageAtLaunch: String
+
+    /// Menus follow `AppleLanguages`, read once when the app launches: set it before NSApplication finishes launching.
+    nonisolated static func applyMenuLanguage(_ language: String) {
+        let lang = language == "en" ? "en" : "es"
+        UserDefaults.standard.set([lang], forKey: "AppleLanguages")
+    }
+
+    /// The UI switched language live, but the system menus keep the launch language until a restart.
+    var menuLanguageNeedsRestart: Bool { config.uiLanguage != menuLanguageAtLaunch }
 
     // MARK: Config
 
@@ -123,16 +150,66 @@ final class AppState {
         if next.uiLanguage != old.uiLanguage {
             Localizer.language = next.uiLanguage
             transcriber.messageLanguage = next.uiLanguage
+            Self.applyMenuLanguage(next.uiLanguage)
         }
         if next.hotkeyEnabled != old.hotkeyEnabled { applyHotKey() }
 
-        let structural = next.vaultPath != old.vaultPath || next.dataPath != old.dataPath || next.whisperModel != old.whisperModel
-        if structural {
-            // A running engine owns the vault and the queue; swapping it live risks two queues. Ask for a restart instead.
-            if engineStarted { restartNeeded = true } else { rebuildEngine(modelChanged: next.whisperModel != old.whisperModel) }
-        } else if engineStarted {
+        let modelChanged = next.whisperModel != old.whisperModel
+        if !engineStarted {
+            if next.dataPath != old.dataPath || modelChanged || next.vaultPath != old.vaultPath {
+                rebuildEngine(modelChanged: next.dataPath != old.dataPath || modelChanged)
+            }
+        } else if next.dataPath != old.dataPath {
+            // The recorder writes sessions under the data folder for the life of the app: restart for this one.
+            restartNeeded = true
+        } else if next.vaultPath != old.vaultPath || modelChanged {
+            switchEngine(to: next, modelChanged: modelChanged)
+        } else {
             try? engine.updateConfig(next)
         }
+    }
+
+    /// Moves the running engine to another vault (or transcription model) without a restart: it stops taking
+    /// jobs, lets the current one finish (the UI says "Terminando la tarea actual…"), then reopens everything.
+    private func switchEngine(to next: AppConfig, modelChanged: Bool) {
+        var newTranscriber: WhisperTranscriber?
+        if modelChanged {
+            modelTask?.cancel()
+            modelTask = nil
+            modelsReady = false
+            modelProgress = nil
+            modelError = nil
+            let t = WhisperTranscriber(modelName: next.whisperModel, modelsDir: DataPaths(root: next.dataURL).models)
+            t.messageLanguage = next.uiLanguage
+            transcriber = t
+            newTranscriber = t
+        }
+        let previous = vaultSwitch
+        isSwitchingVault = true
+        vaultSwitch = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            do {
+                try await self.engine.reload(config: next, transcriber: newTranscriber)
+            } catch {
+                // Could not save the config: fall back to the old behaviour (apply on restart).
+                self.restartNeeded = true
+            }
+            // A newer change may have arrived while waiting; only the last one settles the UI.
+            guard self.config.vaultPath == next.vaultPath, self.config.whisperModel == next.whisperModel else { return }
+            self.isSwitchingVault = false
+            self.vaultSwitch = nil
+            self.didSwitchVault()
+            if modelChanged { self.prepareModels() }
+        }
+    }
+
+    private func didSwitchVault() {
+        reloadProjectsNow()
+        if case .project(let slug) = selection, project(slug) == nil { selection = .brain }
+        if let slug = recordingProjectSlug, project(slug) == nil { recordingProjectSlug = nil }
+        vaultGeneration += 1
+        bumpHistory()
     }
 
     private func rebuildEngine(modelChanged: Bool) {
@@ -178,14 +255,35 @@ final class AppState {
 
     // MARK: Projects
 
+    /// Re-reads `projects/*/project.json` off the main thread (called after every finished job).
     func reloadProjects() {
         guard engineStarted else { return }
-        projects = engine.projects.list().sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        projectsReload?.cancel()
+        let manager = engine.projects
+        projectsReload = Task { [weak self] in
+            let list = await manager.listAsync()
+            guard let self, !Task.isCancelled, manager === self.engine.projects else { return }
+            let sorted = Self.sorted(list)
+            if sorted != self.projects { self.projects = sorted }
+        }
+    }
+
+    /// Synchronous variant for the moments the UI needs the list right away (start, vault switch).
+    private func reloadProjectsNow() {
+        guard engineStarted else { return }
+        projectsReload?.cancel()
+        projects = Self.sorted(engine.projects.list())
+    }
+
+    private static func sorted(_ list: [Project]) -> [Project] {
+        list.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     @discardableResult
     func createProject(name: String, description: String, emoji: String) throws -> Project {
         let project = try engine.projects.create(name: name, description: description, emoji: emoji)
+        // Callers select the new project immediately: it must already be in the list.
+        projects = Self.sorted(projects.filter { $0.slug != project.slug } + [project])
         reloadProjects()
         vaultRevision += 1
         return project

@@ -8,6 +8,7 @@
 # Env overrides: SB_SIGN_IDENTITY ("-" forces ad-hoc), SB_SCRATCH (SwiftPM --scratch-path),
 # SB_HARDENED=1 (sign with the hardened runtime), SB_SKIP_BUILD=1 (reuse the last build products).
 set -euo pipefail
+trap 'echo >&2; echo "ERROR: build-app.sh falló en la línea $LINENO (ver arriba) / build failed at line $LINENO" >&2' ERR
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPTS="$ROOT/scripts"
@@ -37,9 +38,16 @@ with_timeout() { local secs=$1; shift; perl -e 'alarm shift; exec @ARGV' "$secs"
 SWIFT_ARGS=(-c "$CONFIG" --package-path "$PKG")
 [[ -n "${SB_SCRATCH:-}" ]] && SWIFT_ARGS+=(--scratch-path "$SB_SCRATCH")
 
+if [[ $PACKAGE == 1 && ( "$CONFIG" != release || "${SB_SKIP_BUILD:-0}" == 1 ) ]]; then
+    echo "ERROR: --release siempre compila en modo release (sin --debug ni SB_SKIP_BUILD)" >&2; exit 64
+fi
 if [[ "${SB_SKIP_BUILD:-0}" != 1 ]]; then
     step "Compilando $APP_NAME $VERSION ($CONFIG)"
-    swift build "${SWIFT_ARGS[@]}" --product "$APP_NAME"
+    if ! swift build "${SWIFT_ARGS[@]}" --product "$APP_NAME"; then
+        echo >&2
+        echo "ERROR: la compilación ($CONFIG) falló; no se generó la app. / The $CONFIG build failed." >&2
+        exit 1
+    fi
 fi
 BIN="$(swift build "${SWIFT_ARGS[@]}" --show-bin-path)"
 [[ -x "$BIN/$APP_NAME" ]] || { echo "ERROR: no existe $BIN/$APP_NAME" >&2; exit 1; }
@@ -167,10 +175,33 @@ if [[ $PACKAGE == 1 ]]; then
     STAGE="$(mktemp -d "${TMPDIR:-/tmp}/sb-dmg.XXXXXX")"
     ditto "$APP" "$STAGE/$APP_NAME.app"
     ln -s /Applications "$STAGE/Applications"
-    hdiutil create -volname "$APP_NAME $VERSION" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG" 2>&1 >/dev/null | grep -v deprecated >&2 || true
-    [[ -f "$DMG" ]] || { echo "ERROR: no se pudo crear el dmg" >&2; exit 1; }
+    if ! HDI_OUT="$(hdiutil create -volname "$APP_NAME $VERSION" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG" 2>&1)"; then
+        echo "$HDI_OUT" >&2
+        echo "ERROR: no se pudo crear el dmg" >&2; exit 1
+    fi
     rm -rf "$STAGE"
-    [[ "$IDENTITY" != "-" ]] && with_timeout 60 codesign --force --sign "$IDENTITY" --timestamp=none "$DMG" || true
+    [[ -s "$DMG" ]] || { echo "ERROR: no se pudo crear el dmg" >&2; exit 1; }
+    if [[ "$IDENTITY" != "-" ]]; then
+        with_timeout 60 codesign --force --sign "$IDENTITY" --timestamp=none "$DMG" || echo "   (dmg sin firmar)"
+    fi
+
+    # What the user sees on opening it: the app (validly signed) next to an Applications alias.
+    step "Verificando $DMG"
+    hdiutil verify -quiet "$DMG"
+    MNT="$(mktemp -d "${TMPDIR:-/tmp}/sb-dmg-mnt.XXXXXX")"
+    ATTACH_OUT="$(hdiutil attach -nobrowse -readonly -noverify -mountpoint "$MNT" "$DMG" 2>&1)" \
+        || { echo "$ATTACH_OUT" >&2; echo "ERROR: no se pudo montar el dmg" >&2; exit 1; }
+    DMG_OK=1
+    [[ -d "$MNT/$APP_NAME.app" ]] || { echo "ERROR: el dmg no contiene $APP_NAME.app" >&2; DMG_OK=0; }
+    [[ -L "$MNT/Applications" && "$(readlink "$MNT/Applications")" == /Applications ]] \
+        || { echo "ERROR: el dmg no tiene el alias a Aplicaciones" >&2; DMG_OK=0; }
+    codesign --verify --strict "$MNT/$APP_NAME.app" || { echo "ERROR: la app del dmg no pasa codesign --verify" >&2; DMG_OK=0; }
+    [[ "$(plutil -extract CFBundleShortVersionString raw "$MNT/$APP_NAME.app/Contents/Info.plist")" == "$VERSION" ]] \
+        || { echo "ERROR: la versión de la app del dmg no es $VERSION" >&2; DMG_OK=0; }
+    hdiutil detach -quiet "$MNT" || hdiutil detach -force -quiet "$MNT"
+    rmdir "$MNT" 2>/dev/null || true
+    [[ $DMG_OK == 1 ]] || exit 1
+    echo "   ok: $APP_NAME.app + Applications → /Applications"
 
     echo
     ls -lh "$ZIP" "$DMG"

@@ -13,7 +13,8 @@ enum AppResources {
         for case let url? in candidates {
             if let bundle = Bundle(url: url) { return bundle }
         }
-        return Bundle.module
+        // Not `Bundle.module`: its accessor traps when the bundle is missing. Without it, keys show instead of a crash.
+        return Bundle.main
     }()
 
     static var webDirectory: URL {
@@ -38,7 +39,8 @@ enum Localizer {
 
     static func string(_ key: String) -> String {
         if current == nil { language = "es" }
-        return current!.bundle.localizedString(forKey: key, value: key, table: "Localizable")
+        let bundle = current?.bundle ?? AppResources.bundle
+        return bundle.localizedString(forKey: key, value: key, table: "Localizable")
     }
 }
 

@@ -35,12 +35,13 @@ struct WikiBrowser: View {
                 }
             }
         }
-        .task(id: state.vaultRevision) { reload() }
+        .task(id: state.vaultRevision) { await reload() }
         .task {
             // Claude edits pages in the background; keep the list fresh without user action.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(8))
-                reload()
+                if Task.isCancelled { break }
+                await reload()
             }
         }
     }
@@ -56,7 +57,7 @@ struct WikiBrowser: View {
 
     private var pageList: some View {
         List(selection: $selection) {
-            ForEach(WikiGrouping.groups(for: pages, scope: scope), id: \.title) { group in
+            ForEach(WikiGrouping.groups(for: pages, scope: scope), id: \.key) { group in
                 Section(group.title) {
                     ForEach(group.pages) { page in
                         Label(page.title, systemImage: WikiGrouping.symbol(for: page.path))
@@ -99,15 +100,20 @@ struct WikiBrowser: View {
         .padding(.vertical, 8)
     }
 
-    private func reload() {
+    /// Lists the pages off the main thread (it walks the vault folder) and applies the result only if the
+    /// vault is still the same one.
+    private func reload() async {
         guard state.engineStarted else { return }
         let vault = state.engine.vault
-        let all: [WikiPage]
+        var all: [WikiPage]
         switch scope {
-        case .project(let slug): all = vault.pages(projectSlug: slug)
-        case .global: all = vault.pages(projectSlug: nil)
-        case .people: all = vault.pages(projectSlug: nil).filter { $0.path.hasPrefix("people/") && !$0.path.hasSuffix("README.md") }
+        case .project(let slug): all = await vault.pagesAsync(projectSlug: slug)
+        case .global: all = await vault.pagesAsync(projectSlug: nil)
+        case .people:
+            all = await vault.pagesAsync(projectSlug: nil)
+            all = all.filter { $0.path.hasPrefix("people/") && !$0.path.hasSuffix("README.md") }
         }
+        guard !Task.isCancelled, vault === state.engine.vault else { return }
         if all != pages { pages = all }
         if selection == nil {
             selection = WikiGrouping.defaultPage(in: all)?.path
@@ -116,7 +122,7 @@ struct WikiBrowser: View {
 }
 
 enum WikiGrouping {
-    struct Group { let title: String; let pages: [WikiPage] }
+    struct Group { let key: String; let title: String; let pages: [WikiPage] }
 
     private static let order = ["general", "meetings", "sources", "topics", "decisions", "people", "questions"]
     private static let generalOrder = ["overview", "index", "tasks", "health", "log"]
@@ -139,7 +145,7 @@ enum WikiGrouping {
             return ia == ib ? a < b : ia < ib
         }
         return keys.map { key in
-            let sorted = grouped[key]!.sorted { a, b in
+            let sorted = (grouped[key] ?? []).sorted { a, b in
                 if key == "general" {
                     let ia = generalOrder.firstIndex(of: baseName(a.path)) ?? 2
                     let ib = generalOrder.firstIndex(of: baseName(b.path)) ?? 2
@@ -149,7 +155,7 @@ enum WikiGrouping {
                 if key == "meetings" || key == "questions" || key == "sources" { return a.path > b.path }
                 return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
             }
-            return Group(title: title(for: key), pages: sorted)
+            return Group(key: key, title: title(for: key), pages: sorted)
         }
     }
 

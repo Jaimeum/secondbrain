@@ -7,6 +7,12 @@ struct SecondBrainApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ViewState private var state = AppState.shared
 
+    init() {
+        // System menus (Edit, View, Window…) are localized by AppKit from AppleLanguages when the app finishes
+        // launching, so the preference has to be in place before that.
+        AppState.applyMenuLanguage(AppState.shared.config.uiLanguage)
+    }
+
     var body: some Scene {
         WindowGroup(id: "main") {
             RootView()
@@ -75,7 +81,8 @@ struct RootView: View {
     var body: some View {
         Group {
             if state.config.onboardingComplete {
-                MainView()
+                // A vault switch rebuilds the window content so no page, chat or list from the old vault lingers.
+                MainView().id(state.vaultGeneration)
             } else {
                 OnboardingView()
             }
@@ -99,7 +106,7 @@ struct MenuBarLabel: View {
     private static let recordingImage: NSImage = {
         let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
             .applying(.init(paletteColors: [.white, .systemRed]))
-        let image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "Recording")?
+        let image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: L("status.recording"))?
             .withSymbolConfiguration(config) ?? NSImage()
         image.isTemplate = false
         return image

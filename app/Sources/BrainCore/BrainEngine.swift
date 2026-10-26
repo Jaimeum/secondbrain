@@ -37,27 +37,42 @@ private final class ConfigBox: @unchecked Sendable {
 /// record → transcribe → ingest pipeline (CONTRACT §4, §5.3).
 @MainActor @Observable public final class BrainEngine {
     public private(set) var config: AppConfig
-    public let paths: DataPaths
-    public let vault: VaultStore
-    public let projects: ProjectManager
-    public let history: HistoryStore
-    public let claude: ClaudeRunner
+    // `var` only so `reload(config:)` can rebind them; read them as before.
+    public private(set) var paths: DataPaths
+    public private(set) var vault: VaultStore
+    public private(set) var projects: ProjectManager
+    public private(set) var history: HistoryStore
+    public private(set) var claude: ClaudeRunner
     public private(set) var sources: [SourceRecord] = []
     public private(set) var jobs: [Job] = []
     public private(set) var isProcessing = false
+    /// Another process (the app or `sb run`) holds `data/queue.lock` and is processing the queue; this engine
+    /// waits and retries on its own.
+    public private(set) var queueBusyElsewhere = false
     public var onEvent: ((EngineEvent) -> Void)?
     /// Fires on every job change (status, progress, human message such as "Editando …").
     public var onJobUpdate: ((Job) -> Void)?
     /// When false the queue only runs through `runUntilIdle()` (CLI commands that just enqueue).
     public var autoProcess = true
 
-    @ObservationIgnored private let transcriber: Transcribing
-    @ObservationIgnored private let sourceStore: SourceStore
-    @ObservationIgnored private let queue: JobQueue
+    @ObservationIgnored private var transcriber: Transcribing
+    @ObservationIgnored private var sourceStore: SourceStore
+    @ObservationIgnored private var queue: JobQueue
+    @ObservationIgnored private var queueLock: QueueLock
     @ObservationIgnored private let configBox: ConfigBox
     @ObservationIgnored private var loopTask: Task<Void, Never>?
     @ObservationIgnored private var sleepTask: Task<Void, Never>?
     @ObservationIgnored private var started = false
+    /// Set by `reload`: no new jobs start.
+    @ObservationIgnored private var stopping = false
+    /// `runUntilIdle` calls in progress (they hold the queue lock too).
+    @ObservationIgnored private var activeRuns = 0
+    /// Bumped on every local write of sources/jobs, so a background disk read never overwrites newer state.
+    @ObservationIgnored private var writeGeneration = 0
+    @ObservationIgnored private var watchers: [DispatchSourceFileSystemObject] = []
+    @ObservationIgnored private var syncTask: Task<Void, Never>?
+    /// Started while another process owned the queue: crash repairs run when we first get the lock.
+    @ObservationIgnored private var needsRepair = false
 
     private var lang: Lang { Lang(config.uiLanguage) }
 
@@ -68,13 +83,15 @@ private final class ConfigBox: @unchecked Sendable {
         self.paths = paths
         self.vault = VaultStore(root: config.vaultURL)
         self.projects = ProjectManager(vaultRoot: config.vaultURL)
-        self.history = HistoryStore(vaultRoot: config.vaultURL, historyDir: paths.history)
-        self.history.gitEnabled = config.gitEnabled
+        let history = HistoryStore(vaultRoot: config.vaultURL, historyDir: paths.history)
+        history.gitEnabled = config.gitEnabled
+        self.history = history
         let box = ConfigBox(config)
         self.configBox = box
         self.claude = ClaudeRunner(configProvider: { box.get() }, vaultURL: config.vaultURL)
         self.sourceStore = SourceStore(dir: paths.sources)
         self.queue = JobQueue(dir: paths.jobs)
+        self.queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
         Log.configure(logsDir: paths.logs)
     }
 
@@ -84,23 +101,85 @@ private final class ConfigBox: @unchecked Sendable {
     public func start() {
         guard !started else { return }
         started = true
+        stopping = false
         do { try paths.ensureExist() } catch { Log.error("could not create data folders: \(error)") }
         do { try vault.installTemplateIfNeeded() } catch { Log.error("could not install vault template: \(error)") }
+        // Crash repairs (stale `running` jobs, half-done sources) belong to whoever owns the queue: another
+        // live process may be running those jobs right now.
+        let owner = queueLock.tryLock()
         for entry in history.recoverInterrupted() { Log.info("recovered interrupted change \(entry.id): \(entry.title)") }
         sources = sourceStore.loadAll()
-        queue.load()
+        queue.load(resetRunning: owner)
         jobs = queue.jobs
-        repairInterruptedSources()
-        Log.info("engine started: \(sources.count) sources, \(jobs.count) jobs, vault=\(config.vaultURL.path)")
+        if owner { repairInterruptedSources() }
+        needsRepair = !owner
+        queueBusyElsewhere = !owner
+        Log.info("engine started: \(sources.count) sources, \(jobs.count) jobs, vault=\(config.vaultURL.path)"
+                 + (owner ? "" : " (queue owned by pid \(queueLock.holderPid().map(String.init) ?? "?"))"))
+        if autoProcess { startWatching() }
+        pruneHistory()
         kick()
+        releaseQueueIfIdle()
     }
 
-    /// Saves the config. A different vault/data path needs a new engine.
+    /// Saves the config. A different vault/data path needs `reload(config:)` (or a new engine).
     public func updateConfig(_ c: AppConfig) throws {
         try c.save()
         config = c
         configBox.set(c)
         history.gitEnabled = c.gitEnabled
+    }
+
+    /// Switches to another config (vault/data paths included) without recreating the engine: stops taking jobs,
+    /// waits for the running one to finish, releases the queue lock, rebinds every store to the new paths, saves
+    /// the config and starts again if the engine was started. Pass a `transcriber` when the model or the data
+    /// folder (where models live) changed. Interactive `ask` streams already running keep the old vault.
+    public func reload(config newConfig: AppConfig, transcriber newTranscriber: Transcribing? = nil) async throws {
+        try newConfig.save()
+        let wasStarted = started
+        stopping = true
+        sleepTask?.cancel()
+        while loopTask != nil || isProcessing || activeRuns > 0 {
+            sleepTask?.cancel()
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        stopWatching()
+        syncTask?.cancel()
+        syncTask = nil
+        queueLock.unlock()
+
+        config = newConfig
+        configBox.set(newConfig)
+        if let newTranscriber { transcriber = newTranscriber }
+        let paths = DataPaths(root: newConfig.dataURL)
+        self.paths = paths
+        vault = VaultStore(root: newConfig.vaultURL)
+        projects = ProjectManager(vaultRoot: newConfig.vaultURL)
+        history = HistoryStore(vaultRoot: newConfig.vaultURL, historyDir: paths.history)
+        history.gitEnabled = newConfig.gitEnabled
+        let box = configBox
+        claude = ClaudeRunner(configProvider: { box.get() }, vaultURL: newConfig.vaultURL)
+        sourceStore = SourceStore(dir: paths.sources)
+        queue = JobQueue(dir: paths.jobs)
+        queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
+        Log.configure(logsDir: paths.logs)
+        writeGeneration += 1
+        sources = []
+        jobs = []
+        queueBusyElsewhere = false
+        started = false
+        stopping = false
+        Log.info("engine reloaded: vault=\(newConfig.vaultURL.path) data=\(newConfig.dataURL.path)")
+        if wasStarted { start() }
+    }
+
+    /// Executable name of the process holding the queue lock ("sb", "SecondBrain"), if any.
+    public func queueHolderName() -> String? { queueLock.holderName() }
+
+    /// Re-reads sources and jobs from disk (changes made by `sb` or another window). The engine already does this
+    /// when it takes the queue lock and when `data/sources` or `data/jobs` change while it runs `autoProcess`.
+    public func refreshFromDisk() async {
+        await syncFromDisk(resetRunning: false)
     }
 
     // MARK: Recording pipeline
@@ -128,10 +207,60 @@ private final class ConfigBox: @unchecked Sendable {
 
     // MARK: Imports
 
+    /// Documents become raw files; audio/video (`AudioPrep.isMedia`) become meetings that get transcribed.
     public func importFile(_ url: URL, projectSlug: String?) throws {
         let project = validProject(projectSlug)
+        if AudioPrep.isMedia(url) {
+            try importMedia(url, project: project)
+            return
+        }
         let imported = try Importer.importFile(url, into: rawDir(.document, project), project: project)
         addImported(kind: .document, title: imported.title, rawURL: imported.rawURL, sourceId: imported.sourceId, project: project)
+    }
+
+    /// `importFile` with the text extraction (PDF, DOCX…) off the main thread.
+    public func importFileAsync(_ url: URL, projectSlug: String?) async throws {
+        let project = validProject(projectSlug)
+        if await Task.detached(operation: { AudioPrep.isMedia(url) }).value {
+            try importMedia(url, project: project)
+            return
+        }
+        let dir = rawDir(.document, project)
+        let imported = Importer.mainThreadText.contains(url.pathExtension.lowercased())
+            ? try Importer.importFile(url, into: dir, project: project)
+            : try await Task.detached(priority: .userInitiated) { try Importer.importFile(url, into: dir, project: project) }.value
+        addImported(kind: .document, title: imported.title, rawURL: imported.rawURL, sourceId: imported.sourceId, project: project)
+    }
+
+    /// An audio/video file becomes a meeting: a session folder with `import.json` pointing at the file (plus an
+    /// APFS clone when possible, so moving/deleting the original before the job runs doesn't matter). The WAV
+    /// conversion happens at the start of the transcribe job, off the main thread. The original is never touched.
+    private func importMedia(_ url: URL, project: String?) throws {
+        let fm = FileManager.default
+        guard fm.isReadableFile(atPath: url.path), !fm.isDirectory(url) else { throw EngineError.rawMissing(url.path) }
+        let id = SessionManifest.newId()
+        let dir = sessionDir(id)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        var media = MediaImport(originalPath: url.path, clonedFile: nil)
+        let ext = url.pathExtension.isEmpty ? "" : "." + url.pathExtension.lowercased()
+        let clone = dir.appendingPathComponent(MediaImport.clonePrefix + ext)
+        if clonefile(url.path, clone.path, 0) == 0 { media.clonedFile = clone.lastPathComponent }
+        let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+        let startedAt = min(created ?? Date(), Date())
+        let title = url.deletingPathExtension().lastPathComponent
+        do {
+            try media.save(to: dir)
+            // `endedAt` set so the recorder's crash recovery leaves it alone; fixed after conversion.
+            try SessionManifest(id: id, title: title, projectSlug: project, startedAt: startedAt, endedAt: startedAt,
+                                tracks: [:], micCaptured: false).save(to: dir)
+        } catch {
+            try? fm.removeItem(at: dir)
+            throw error
+        }
+        var src = SourceRecord(id: id, kind: .meeting, title: title, projectSlug: project, status: .queued)
+        upsert(&src)
+        enqueue(Job(kind: .transcribe, sourceId: id, projectSlug: project))
+        Log.info("imported media \(url.lastPathComponent) as meeting \(id) (clone: \(media.clonedFile != nil))")
     }
 
     public func importURL(_ url: URL, projectSlug: String?) async throws {
@@ -160,9 +289,7 @@ private final class ConfigBox: @unchecked Sendable {
         guard projects.get(projectSlug) != nil else { throw ProjectError.notFound(projectSlug) }
         guard src.historyId == nil || src.status != .done else { throw EngineError.alreadyIngested }
         // A running classify only reads; its result is ignored once the source has a project.
-        guard !queue.jobs.contains(where: { $0.sourceId == sourceId && $0.status == .running && $0.kind != .classify }) else {
-            throw EngineError.busy
-        }
+        guard !runningAnywhere({ $0.sourceId == sourceId && $0.kind != .classify }) else { throw EngineError.busy }
 
         src.projectSlug = projectSlug
         src.suggestedProject = nil
@@ -205,7 +332,7 @@ private final class ConfigBox: @unchecked Sendable {
     /// Removes the record, pending jobs and leftover audio. Raw files are kept once ingested.
     public func delete(sourceId: String) throws {
         guard let src = source(sourceId) else { throw EngineError.sourceNotFound(sourceId) }
-        guard !queue.jobs.contains(where: { $0.sourceId == sourceId && $0.status == .running }) else { throw EngineError.busy }
+        guard !runningAnywhere({ $0.sourceId == sourceId }) else { throw EngineError.busy }
         removeJobs(for: sourceId) { _ in true }
         let fm = FileManager.default
         let session = sessionDir(sourceId)
@@ -217,6 +344,7 @@ private final class ConfigBox: @unchecked Sendable {
             }
             try? fm.removeItem(at: url)
         }
+        writeGeneration += 1
         sourceStore.delete(id: sourceId)
         sources.removeAll { $0.id == sourceId }
         Log.info("deleted source \(sourceId)")
@@ -241,9 +369,7 @@ private final class ConfigBox: @unchecked Sendable {
     /// Undoing an ingest also detaches it from its source, so the source can be learned from again
     /// (`retry`) or moved to another project.
     public func undo(historyId: String, force: Bool = false) throws {
-        guard !queue.jobs.contains(where: { $0.status == .running && [.ingest, .lint, .saveAnswer].contains($0.kind) }) else {
-            throw EngineError.busy
-        }
+        guard !runningAnywhere({ [.ingest, .lint, .saveAnswer].contains($0.kind) }) else { throw EngineError.busy }
         try history.undo(entryId: historyId, force: force)
         guard var src = sources.first(where: { $0.historyId == historyId }) else { return }
         src.historyId = nil
@@ -254,22 +380,41 @@ private final class ConfigBox: @unchecked Sendable {
 
     /// Processes the queue until nothing is runnable. Waits for retry backoffs that are due within
     /// five minutes; longer waits (e.g. a Claude usage limit) are left queued.
+    /// Waits for the queue lock if another process holds it.
     public func runUntilIdle() async {
+        _ = await runUntilIdle(waitForLock: true)
+    }
+
+    /// Like `runUntilIdle()`; with `waitForLock == false` it returns false right away (doing nothing) when another
+    /// process is processing the queue.
+    @discardableResult
+    public func runUntilIdle(waitForLock: Bool) async -> Bool {
         if !started { start() }
-        while true {
+        activeRuns += 1
+        defer {
+            activeRuns -= 1
+            releaseQueueIfIdle()
+        }
+        while !(await acquireQueue()) {
+            guard waitForLock, !stopping else { return false }
+            try? await Task.sleep(for: .seconds(2))
+        }
+        while !stopping {
             if await runNext() { continue }
             if isProcessing {
                 try? await Task.sleep(for: .milliseconds(200))
                 continue
             }
-            guard let wake = queue.nextWakeDate(), wake.timeIntervalSinceNow < 300 else { return }
+            guard let wake = queue.nextWakeDate(), wake.timeIntervalSinceNow < 300 else { break }
             try? await Task.sleep(for: .seconds(max(0.1, wake.timeIntervalSinceNow)))
         }
+        return true
     }
 
     public func source(_ id: String) -> SourceRecord? { sources.first { $0.id == id } }
 
     private func enqueue(_ job: Job) {
+        writeGeneration += 1
         queue.upsert(job)
         jobs = queue.jobs
         onJobUpdate?(job)
@@ -278,7 +423,7 @@ private final class ConfigBox: @unchecked Sendable {
     }
 
     private func kick() {
-        guard started, autoProcess else { return }
+        guard started, autoProcess, !stopping else { return }
         if loopTask == nil {
             loopTask = Task { [weak self] in await self?.loop() }
         } else {
@@ -286,21 +431,134 @@ private final class ConfigBox: @unchecked Sendable {
         }
     }
 
+    /// Holds the queue lock while there is work (backoff waits included); releases it once idle.
     private func loop() async {
-        while !Task.isCancelled {
+        while !Task.isCancelled, !stopping {
+            guard await acquireQueue() else {
+                // Another process is working through the queue: retry while we still see work for us.
+                guard hasWork else { break }
+                await nap(seconds: 3)
+                continue
+            }
             if await runNext() { continue }
             guard !isProcessing, let wake = queue.nextWakeDate() else { break }
-            let nap = Task { _ = try? await Task.sleep(for: .seconds(max(0.1, wake.timeIntervalSinceNow))) }
-            sleepTask = nap
-            await nap.value
-            sleepTask = nil
+            await nap(seconds: wake.timeIntervalSinceNow)
         }
         loopTask = nil
+        releaseQueueIfIdle()
+    }
+
+    /// A matching job is running here, or (when another process owns the queue) according to the files on disk.
+    private func runningAnywhere(_ predicate: (Job) -> Bool) -> Bool {
+        if queue.jobs.contains(where: { $0.status == .running && predicate($0) }) { return true }
+        guard !queueLock.isHeld else { return false }
+        return JobQueue.readAll(dir: paths.jobs).contains { $0.status == .running && predicate($0) }
+    }
+
+    private var hasWork: Bool { queue.nextRunnable() != nil || queue.nextWakeDate() != nil }
+
+    /// Cancellable sleep (`kick()` cuts it short).
+    private func nap(seconds: TimeInterval) async {
+        let nap = Task { _ = try? await Task.sleep(for: .seconds(max(0.1, seconds))) }
+        sleepTask = nap
+        await nap.value
+        sleepTask = nil
+    }
+
+    /// Takes the cross-process queue lock. On first acquisition, reloads the queue from disk (another process may
+    /// have changed it) and requeues jobs a dead owner left `running`.
+    private func acquireQueue() async -> Bool {
+        if queueLock.isHeld { return true }
+        guard queueLock.tryLock() else {
+            if !queueBusyElsewhere { Log.info("queue is being processed by pid \(queueLock.holderPid().map(String.init) ?? "?"); waiting") }
+            queueBusyElsewhere = true
+            return false
+        }
+        queueBusyElsewhere = false
+        await syncFromDisk(resetRunning: true)
+        if needsRepair, queueLock.isHeld, !isProcessing {
+            needsRepair = false
+            repairInterruptedSources()
+        }
+        return queueLock.isHeld
+    }
+
+    private func releaseQueueIfIdle() {
+        guard loopTask == nil, activeRuns == 0, !isProcessing, queueLock.isHeld else { return }
+        queueLock.unlock()
+    }
+
+    /// Replaces sources/jobs with what is on disk. The read runs off the main thread and is dropped (and retried)
+    /// if this engine wrote something meanwhile. Never while a job runs here.
+    private func syncFromDisk(resetRunning: Bool) async {
+        for _ in 0..<3 {
+            guard !isProcessing else { return }
+            let generation = writeGeneration
+            let store = sourceStore, jobsDir = paths.jobs
+            let (loadedSources, loadedJobs) = await Task.detached(priority: .utility) {
+                (store.loadAll(), JobQueue.readAll(dir: jobsDir))
+            }.value
+            guard store === sourceStore else { return }   // reloaded meanwhile
+            guard generation == writeGeneration, !isProcessing else { continue }
+            queue.replace(with: loadedJobs, resetRunning: resetRunning && queueLock.isHeld)
+            if jobs != queue.jobs { jobs = queue.jobs }
+            if loadedSources != sources {
+                let old = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                sources = loadedSources
+                for src in loadedSources where old[src.id] != src { onEvent?(.sourceUpdated(src)) }
+            }
+            return
+        }
+    }
+
+    /// Watches `data/sources` and `data/jobs` (atomic writes show up as directory changes) so work enqueued or
+    /// finished by `sb` shows up in the app and gets processed.
+    private func startWatching() {
+        stopWatching()
+        for dir in [paths.sources, paths.jobs] {
+            let fd = open(dir.path, O_EVTONLY)
+            guard fd >= 0 else { continue }
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete],
+                                                                   queue: .main)
+            source.setEventHandler { [weak self] in
+                MainActor.assumeIsolated { self?.diskChanged() }
+            }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            watchers.append(source)
+        }
+    }
+
+    private func stopWatching() {
+        for w in watchers { w.cancel() }
+        watchers = []
+    }
+
+    private func diskChanged() {
+        guard syncTask == nil else { return }
+        syncTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))   // debounce bursts of writes
+            guard let self, !Task.isCancelled else { return }
+            if !self.isProcessing {
+                await self.syncFromDisk(resetRunning: false)
+                if !self.queueLock.isHeld, self.queueBusyElsewhere, self.queueLock.tryLock() {
+                    self.queueBusyElsewhere = false
+                    self.releaseQueueIfIdle()
+                }
+                if self.hasWork { self.kick() }
+            }
+            self.syncTask = nil
+        }
+    }
+
+    private func pruneHistory() {
+        let history = self.history
+        Task.detached(priority: .background) { history.prune() }
     }
 
     /// Runs the next due job, if any and if nothing else is running.
     private func runNext() async -> Bool {
-        guard !isProcessing, var job = queue.nextRunnable() else { return false }
+        guard !isProcessing, !stopping, queueLock.isHeld, var job = queue.nextRunnable() else { return false }
         isProcessing = true
         defer { isProcessing = false }
         job.status = .running
@@ -346,6 +604,7 @@ private final class ConfigBox: @unchecked Sendable {
         var job = job
         switch outcome {
         case .success:
+            writeGeneration += 1
             queue.remove(id: job.id)
             jobs = queue.jobs
             onJobUpdate?(job)
@@ -392,12 +651,17 @@ private final class ConfigBox: @unchecked Sendable {
             return
         }
         let dir = sessionDir(src.id)
-        guard let manifest = try? SessionManifest.load(from: dir) else { throw EngineError.sessionMissing(src.id) }
+        guard var manifest = try? SessionManifest.load(from: dir) else { throw EngineError.sessionMissing(src.id) }
         src.status = .transcribing
         src.progress = 0
         upsert(&src)
 
         let jobId = job.id, sourceId = src.id
+        let transcriptExists = FileManager.default.fileExists(atPath: dir.appendingPathComponent("transcript.json").path)
+        if !hasAudio(dir, manifest), !transcriptExists, let media = MediaImport.load(from: dir) {
+            manifest = try await convertImported(media, manifest: manifest, dir: dir, jobId: jobId, sourceId: sourceId)
+            src = source(sourceId) ?? src
+        }
         if !transcriber.isReady {
             updateJob(jobId, message: lang.t("Preparando el modelo de transcripción…", "Preparing the transcription model…"))
             try await transcriber.prepare { [weak self] p in
@@ -439,6 +703,46 @@ private final class ConfigBox: @unchecked Sendable {
             return
         }
         enqueueAfterRaw(&src)
+    }
+
+    /// Turns an imported audio/video file into the session's `system_NNN.wav` chunks (CONTRACT §3).
+    private func convertImported(_ media: MediaImport, manifest: SessionManifest, dir: URL, jobId: String,
+                                 sourceId: String) async throws -> SessionManifest {
+        let fm = FileManager.default
+        let input = media.clonedFile.map { dir.appendingPathComponent($0) }.flatMap { fm.fileExists(atPath: $0.path) ? $0 : nil }
+            ?? URL(fileURLWithPath: media.originalPath)
+        guard fm.fileExists(atPath: input.path) else { throw EngineError.rawMissing(media.originalPath) }
+        updateJob(jobId, message: lang.t("Preparando el audio…", "Preparing the audio…"), progress: 0)
+        let chunkSeconds = manifest.chunkSeconds, rate = manifest.sampleRate
+        let report: @Sendable (Double) -> Void = { [weak self] fraction in
+            Task { @MainActor in self?.updateJob(jobId, message: nil, progress: fraction) }
+        }
+        let converted: AudioPrep.Converted
+        do {
+            converted = try await Task.detached(priority: .userInitiated) {
+                try await AudioPrep.convertToChunks(input, prefix: "system", chunkSeconds: chunkSeconds, sampleRate: rate,
+                                                    dir: dir, progress: report)
+            }.value
+        } catch let error as AudioPrepError {
+            // Fatal (retrying won't help); name the user's file, not our clone.
+            let name = (media.originalPath as NSString).lastPathComponent
+            switch error {
+            case .noAudio: throw EngineError.download(AudioPrepError.noAudio(name).localizedDescription)
+            case .unreadable: throw EngineError.download(AudioPrepError.unreadable(name).localizedDescription)
+            }
+        }
+        var manifest = manifest
+        manifest.tracks = ["system": converted.files]
+        manifest.micCaptured = false
+        manifest.endedAt = manifest.startedAt.addingTimeInterval(converted.duration)
+        try manifest.save(to: dir)
+        if let clone = media.clonedFile { try? fm.removeItem(at: dir.appendingPathComponent(clone)) }
+        if var src = source(sourceId) {
+            src.durationSeconds = converted.duration
+            upsert(&src)
+        }
+        Log.info("converted \((media.originalPath as NSString).lastPathComponent): \(String(format: "%.1f", converted.duration)) s in \(converted.files.count) chunk(s)")
+        return manifest
     }
 
     private func runIngest(_ job: Job) async throws {
@@ -510,6 +814,7 @@ private final class ConfigBox: @unchecked Sendable {
         }
         let entry = try await Task.detached { try history.commit(snapshot) }.value
         if let entry { record(entry, summary: summary, jobId: job.id) }
+        pruneHistory()
         return entry
     }
 
@@ -678,17 +983,20 @@ private final class ConfigBox: @unchecked Sendable {
     }
 
     private func saveJob(_ job: Job) {
+        writeGeneration += 1
         queue.upsert(job)
         jobs = queue.jobs
         onJobUpdate?(job)
     }
 
     private func removeJobs(for sourceId: String, where predicate: (Job) -> Bool) {
+        writeGeneration += 1
         for job in queue.jobs where job.sourceId == sourceId && predicate(job) { queue.remove(id: job.id) }
         jobs = queue.jobs
     }
 
     private func upsert(_ src: inout SourceRecord, persist: Bool = true) {
+        writeGeneration += 1
         src.updatedAt = Date()
         if persist {
             do { try sourceStore.save(src) } catch { Log.error("could not save source \(src.id): \(error)") }
@@ -700,5 +1008,23 @@ private final class ConfigBox: @unchecked Sendable {
             sources.sort { $0.createdAt > $1.createdAt }
         }
         onEvent?(.sourceUpdated(src))
+    }
+}
+
+/// `data/sessions/<id>/import.json`: an audio/video file imported as a meeting, converted by the transcribe job.
+struct MediaImport: Codable {
+    static let fileName = "import.json"
+    static let clonePrefix = "original"
+    var originalPath: String
+    /// Clone of the original inside the session folder (APFS `clonefile`), removed after conversion.
+    var clonedFile: String?
+
+    static func load(from dir: URL) -> MediaImport? {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return nil }
+        return try? JSONDecoder.sb.decode(MediaImport.self, from: data)
+    }
+
+    func save(to dir: URL) throws {
+        try JSONEncoder.sb.encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
     }
 }

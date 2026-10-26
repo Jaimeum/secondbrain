@@ -3,7 +3,8 @@ import Foundation
 import PDFKit
 
 /// Creates raw markdown files for documents, web pages and notes (CONTRACT §4 step 6, §6).
-@MainActor
+/// `importFile`/`writeNote` are nonisolated (callable from a background task); HTML parsing hops to the
+/// main thread because NSAttributedString's HTML importer requires it.
 enum Importer {
     struct Imported {
         var sourceId: String
@@ -13,6 +14,8 @@ enum Importer {
 
     private static let plainText: Set<String> = ["md", "markdown", "txt", "text", "csv", "json", "yaml", "yml"]
     private static let richText: Set<String> = ["rtf", "rtfd", "doc", "docx", "odt", "html", "htm", "webarchive"]
+    /// Formats whose NSAttributedString importer uses WebKit and must run on the main thread.
+    static let mainThreadText: Set<String> = ["html", "htm", "webarchive"]
 
     static func importFile(_ file: URL, into dir: URL, project: String?, sourceURL: URL? = nil,
                            kind: SourceKind = .document, title: String? = nil) throws -> Imported {
@@ -39,6 +42,8 @@ enum Importer {
             original = copy.lastPathComponent
             if ext == "pdf" {
                 body = pdfText(file) ?? ""
+            } else if mainThreadText.contains(ext) {
+                body = onMain { (try? NSAttributedString(url: file, options: [:], documentAttributes: nil).string) ?? "" }
             } else if richText.contains(ext) {
                 body = (try? NSAttributedString(url: file, options: [:], documentAttributes: nil).string) ?? ""
             } else {
@@ -57,6 +62,7 @@ enum Importer {
         return Imported(sourceId: id, title: title, rawURL: raw)
     }
 
+    @MainActor
     static func importURL(_ url: URL, into dir: URL, project: String?) async throws -> Imported {
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.setValue("Mozilla/5.0 (Macintosh) SecondBrain", forHTTPHeaderField: "User-Agent")
@@ -102,6 +108,12 @@ enum Importer {
 
     // MARK: Helpers
 
+    /// Runs `body` on the main thread (directly when already there).
+    private static func onMain<T>(_ body: @MainActor () -> T) -> T {
+        if Thread.isMainThread { return MainActor.assumeIsolated { body() } }
+        return DispatchQueue.main.sync { MainActor.assumeIsolated { body() } }
+    }
+
     private static func fileBase(title: String) -> String {
         let slug = slugify(title)
         let date = Fmt.local(Date(), "yyyy-MM-dd")
@@ -137,6 +149,7 @@ enum Importer {
         return pages.isEmpty ? nil : pages.joined(separator: "\n\n")
     }
 
+    @MainActor
     static func htmlTitle(_ html: String) -> String? {
         guard let r = html.range(of: #"(?is)<title[^>]*>(.*?)</title>"#, options: .regularExpression) else { return nil }
         let inner = html[r].replacingOccurrences(of: #"(?is)</?title[^>]*>"#, with: "", options: .regularExpression)
@@ -148,6 +161,7 @@ enum Importer {
     }
 
     /// HTML → plain text via NSAttributedString, after dropping scripts, styles and external resources.
+    @MainActor
     static func htmlToText(_ html: String) -> String {
         var cleaned = html
         for pattern in [#"(?is)<script\b.*?</script>"#, #"(?is)<style\b.*?</style>"#, #"(?is)<noscript\b.*?</noscript>"#,

@@ -48,11 +48,16 @@ public final class HistoryStore: @unchecked Sendable {
 
     // MARK: Recording changes
 
+    /// Hashes the vault and clones it into `history/<id>/.staging` so "before" copies of whatever Claude edits can be
+    /// recovered. `FileManager.copyItem` uses `clonefile` on APFS, so the copy is nearly free there. On volumes without
+    /// cloning (HFS+, exFAT, SMB…) every job copies the whole vault once (it is deleted at `commit`); "before" contents
+    /// can't be captured lazily because Claude edits the files in place. Logged once per store.
     public func begin(title: String, kind: JobKind, sourceId: String?, projectSlug: String?) throws -> HistorySnapshot {
         let id = SessionManifest.newId()
         let staging = historyDir.appendingPathComponent(id).appendingPathComponent(".staging")
         let fm = FileManager.default
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
+        warnIfNoCloning()
         let hashes = try scan()
         for path in hashes.keys {
             let dest = staging.appendingPathComponent(path)
@@ -155,7 +160,44 @@ public final class HistoryStore: @unchecked Sendable {
         }
     }
 
+    // MARK: Pruning
+
+    /// Entries kept no matter their age.
+    public static let keepRecentCount = 300
+    /// Entries younger than this are kept no matter how many there are.
+    public static let keepDays = 60
+
+    /// Deletes old entries (their `before/`/`after/` copies included): keeps the newest `keepRecentCount`
+    /// and everything from the last `keepDays` days, whichever is more. In-flight changes (`.staging`/pending)
+    /// and folders without a readable entry are never touched. Returns how many entries were removed.
+    @discardableResult
+    public func prune(now: Date = Date()) -> Int {
+        let fm = FileManager.default
+        let cutoff = now.addingTimeInterval(-Double(Self.keepDays) * 86_400)
+        let all = entries()   // newest first
+        guard all.count > Self.keepRecentCount else { return 0 }
+        var removed = 0
+        for entry in all.dropFirst(Self.keepRecentCount) where entry.createdAt < cutoff {
+            let dir = historyDir.appendingPathComponent(entry.id)
+            guard !fm.fileExists(atPath: dir.appendingPathComponent(".staging").path),
+                  !fm.fileExists(atPath: dir.appendingPathComponent("pending.json").path) else { continue }
+            do {
+                try fm.removeItem(at: dir)
+                removed += 1
+            } catch {
+                Log.error("could not prune history \(entry.id): \(error)")
+            }
+        }
+        if removed > 0 { Log.info("pruned \(removed) old history entries") }
+        return removed
+    }
+
     // MARK: Reading
+
+    /// `entries()` on a background task (it reads every entry.json).
+    public func entriesAsync() async -> [HistoryEntry] {
+        await Task.detached(priority: .userInitiated) { self.entries() }.value
+    }
 
     public func entries() -> [HistoryEntry] {
         let fm = FileManager.default
@@ -239,6 +281,24 @@ public final class HistoryStore: @unchecked Sendable {
     }
 
     // MARK: Internals
+
+    private var cloneChecked = false
+
+    private func warnIfNoCloning() {
+        lock.lock()
+        let first = !cloneChecked
+        cloneChecked = true
+        lock.unlock()
+        guard first else { return }
+        let keys: Set<URLResourceKey> = [.volumeSupportsFileCloningKey]
+        let vaultClones = (try? vaultRoot.resourceValues(forKeys: keys))?.volumeSupportsFileCloning ?? false
+        let historyClones = (try? historyDir.resourceValues(forKeys: keys))?.volumeSupportsFileCloning ?? false
+        let sameVolume = (try? vaultRoot.resourceValues(forKeys: [.volumeIdentifierKey]))?.volumeIdentifier as? NSObject
+            == (try? historyDir.resourceValues(forKeys: [.volumeIdentifierKey]))?.volumeIdentifier as? NSObject
+        if !(vaultClones && historyClones && sameVolume) {
+            Log.info("history snapshots are full copies (vault and data are not on the same APFS volume)")
+        }
+    }
 
     private func save(_ entry: HistoryEntry) throws {
         let dir = historyDir.appendingPathComponent(entry.id)

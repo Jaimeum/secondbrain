@@ -601,3 +601,89 @@ Versión en `VERSION` (raíz), inicial `0.1.0`.
 - [R] `VaultStore.resolveWikilinks(_:from:)` (aditivo): resuelve muchos targets con un solo recorrido; WikiWebView resuelve
   links/backlinks fuera del hilo principal. Elegir como vault una carpeta con contenido que no es un vault (p. ej. Documentos)
   usa la subcarpeta `SecondBrain/`. Importar una carpeta se rechaza; `.txt/.csv` no UTF-8 caen a Windows-1252.
+- [P-core] APIs nuevas de BrainCore (aditivas; firmas existentes intactas) para la UI:
+  · `BrainEngine.importFileAsync(_ url: URL, projectSlug: String?) async throws` — igual que `importFile` pero la extracción
+    de PDF/DOCX/texto corre fuera del hilo principal (HTML/webarchive sí necesitan main: se hace solo). Úsala en drag & drop.
+    `importFile` (sync) sigue existiendo. Ambas: audio/video (m4a, mp3, wav, aiff, aac, flac, caf, mp4, mov, m4v… o cualquier
+    archivo con pista de audio) → fuente **meeting** (no documento): sesión `data/sessions/<id>/` con `import.json` (ruta del
+    original + clon APFS si se pudo); la conversión a WAV 16 kHz mono (§3, solo pista system, `micCaptured=false`) ocurre al
+    inicio del job transcribe (fuera del main). El archivo del usuario nunca se borra. `AudioPrep.isMedia(_ url:) -> Bool`
+    (público, nonisolated) dice si un archivo se tratará como reunión.
+  · `VaultStore.pagesAsync(projectSlug:) async -> [WikiPage]`, `backlinksAsync(to:) async -> [WikiPage]`,
+    `resolveWikilinksAsync(_:from:) async -> [String: String]`, `ProjectManager.listAsync() async -> [Project]`,
+    `HistoryStore.entriesAsync() async -> [HistoryEntry]` — corren en un Task.detached. VaultStore/ProjectManager/HistoryStore
+    no son @MainActor: las versiones sync también se pueden llamar desde cualquier hilo.
+  · `BrainEngine.reload(config:) async` — cambia vault/data en caliente: deja de tomar jobs, espera el job en curso, suelta el
+    lock de la cola, re-crea `paths/vault/projects/history/claude` (ahora `public private(set) var`, lectura igual que antes),
+    guarda la config y arranca de nuevo (si el motor estaba arrancado). La app puede usarla en vez de "Reiniciar ahora".
+  · Un solo procesador de cola entre procesos: `flock` sobre `data/queue.lock`. El motor lo toma mientras su bucle tiene trabajo
+    (incluye esperas de backoff) y lo suelta al quedar ocioso. `BrainEngine.queueBusyElsewhere: Bool` (observable) = otro
+    proceso (`sb run` o la app) está procesando; el motor reintenta solo cada ~3 s. `BrainEngine.refreshFromDisk()` recarga
+    fuentes/jobs del disco (el motor ya lo hace solo al tomar el lock y cuando cambian `data/sources|jobs`).
+    `runUntilIdle(waitForLock: Bool) async -> Bool` (false = otro proceso tiene la cola); `runUntilIdle()` = espera el lock.
+- [claude] `ClaudeRunner` confina lecturas al vault: ya NO pasa `--allowedTools` (antes `Read,Glob,Grep` sin scope = Claude podía
+  leer cualquier archivo del Mac, p. ej. `~/.ssh`, y copiarlo al wiki vía prompt injection). Claude Code permite Read/Glob/Grep
+  dentro del cwd (el vault) sin pre-aprobación y `acceptEdits` solo auto-acepta escrituras ahí; todo lo de fuera necesitaría un
+  prompt, que en `-p` se deniega (aparece como tool_result de error + `permission_denials`). Además `--setting-sources project`
+  (ignora `~/.claude/settings*.json` del usuario, cuyas allow rules/`additionalDirectories` lo ampliarían; el CLAUDE.md del vault
+  sí se sigue cargando — `--setting-sources ""` y `--restricted` NO lo cargan, por eso no se usan) y `--settings` con deny de
+  respaldo para `~/.ssh|.aws|.gnupg|.config|.claude|Library/Keychains`. Args en `ClaudeRunner.arguments(mode:model:)`.
+  Verificado con `claude -p --model haiku` 2.1.310 en vault con espacios ("Second Brain"), readOnly y edit: Read/Grep/Glob de
+  fuera → denegados, marcador ausente en salida y vault; Write fuera y a `.claude/settings.json` → denegados; Read/Edit/Write
+  dentro → OK. Nota: los deny `Read(...)` sí aplican a Glob, pero Grep sobre un directorio padre NO se bloquea (filtra) — por eso
+  la defensa es "nada pre-aprobado", no listas de deny. Si algún prompt necesitara leer fuera del vault, ya no podrá.
+- [claude] `ClaudeRunner.environment()`: un `CLAUDE_CODE_OAUTH_TOKEN` ya presente en el entorno gana sobre el del Keychain (antes
+  el Keychain lo pisaba). `extraPathDirs`/`HOME` usan `ClaudeRunner.homeDirectory` (= `$HOME` si está, si no la home de la
+  cuenta), así `install()` (que corre el instalador con ese entorno → `$HOME/.local/bin`) y `locate()` coinciden con un HOME
+  aislado. `ClaudeSetup.extractToken` ahora quita también OSC terminados en `ESC\`, `ESC(B` y escapes de 2 bytes, recorta
+  espacios finales por línea (antes un relleno al final de la fila cortaba el token) y re-une saltos que parten el propio
+  prefijo `sk-ant-oat`. Las regex usaban `\u{1B}` (no es sintaxis ICU) → ahora `\x{1B}`.
+- [ui] Cambiar el vault (Ajustes u onboarding al volver al paso "Dónde guardar") o el modelo de Whisper con el motor
+  arrancado usa `BrainEngine.reload(config:transcriber:)` en caliente (banner "Terminando la tarea actual…" mientras espera
+  el job en curso); al terminar, `AppState.vaultGeneration` se incrementa y la ventana principal se reconstruye (wiki,
+  fuentes, actividad, chat del vault nuevo). Solo un cambio de `dataPath` sigue pidiendo "Reiniciar ahora" (el Recorder
+  graba en `data/sessions` durante toda la vida de la app). `relaunch()` espera a que el proceso actual termine antes de
+  abrir el nuevo (nunca dos motores a la vez).
+- [ui] Idioma de menús: `AppleLanguages = [config.uiLanguage]` se fija en `SecondBrainApp.init` y al cambiar idioma; los
+  menús de AppKit solo cambian al reiniciar (aviso + botón en Ajustes y en la bienvenida). Requiere `CFBundleLocalizations`
+  es/en en Info.plist (ya está en build-app.sh); en el binario suelto de `swift build` los menús quedan en inglés.
+- [ui] Onboarding: el paso actual (y si ya se pidió Grabación de pantalla) se guarda en UserDefaults con clave
+  `onboarding.step|<ruta de config.json>` (así un `SB_CONFIG` aislado no reanuda otro setup); se borra al terminar.
+- [ui] Imports desde la UI usan `importFileAsync` (spinner "Importando…"); audio/video entran como reunión vía core.
+- [Fresh] Descarga de modelos desde cero (verificada con `sb models prepare` y `dataPath` vacío): tiny ≈ 87 MB/39 s;
+  large-v3 = 2.9 GB en disco, ~133 s en total (descarga + compilación ANE) con buena conexión; segunda vez ~0.7–2 s.
+  SpeakerKit (11 MB) baja a `DataPaths.models`, nunca a `~/Documents/huggingface`. Bug corregido: una descarga
+  interrumpida dejaba `.mlmodelc` sin `weights/weight.bin`; la validación offline del Hub solo revisa los archivos
+  presentes, así que se daba por completa y **Core ML tumbaba el proceso (EXC_BAD_ACCESS) en cada arranque**. Ahora un
+  modelo solo cuenta como descargado tras un snapshot online completo, marcado en `data/models/.complete/<id>`
+  (`whisperkit-openai_whisper-<modelo>`, `speakerkit-pyannote`) y con los `.mlmodelc` íntegros; si no, se re-descarga
+  (reanuda los `.incomplete`, salta lo ya bajado). Instalaciones previas sin marcador: se re-verifican online una vez
+  (~6 s, sin re-descargar); sin red se usan si los `.mlmodelc` están íntegros. Errores de red →
+  `TranscriptionError.modelUnavailable` (mensaje humano). El progreso arranca con "Cargando modelos…" y omite las
+  etapas de descarga si ya están.
+- [Fresh] `scripts/release.sh [versión]` (por defecto la de `VERSION`): exige árbol git limpio (solo VERSION/.gitignore
+  puede cambiar; hacer commit antes), verifica que vault/data/build/dist/.build* estén ignorados y no versionados y
+  que no haya archivos >50 MB; push por https con `gh` como credential helper solo para ese comando; el tag se mueve
+  a HEAD si ya existía en otro commit. `build-app.sh --release` rechaza `--debug`/`SB_SKIP_BUILD`, falla con mensaje
+  claro si la compilación o el dmg fallan, y monta el dmg (`-nobrowse`) para comprobar app firmada + alias a /Applications.
+- [P-core] Detalles de implementación (BrainCore/sb):
+  · BrainCore ahora también usa AVFoundation/UniformTypeIdentifiers (Apple). `AudioPrep` (antes en `sb/`) vive en BrainCore y es
+    público: `convertToChunks` (AVAssetReader + AVAssetReaderAudioMixOutput → 16 kHz mono Int16, en streaming, mezcla todas las
+    pistas de audio; respaldo AVAudioFile), `loadMono16k`, `writeChunks`, `writeWAV`, `isMedia`. `sb simulate` lo usa.
+  · Import de audio/video: título = nombre sin extensión; `startedAt` = fecha de creación del archivo (o ahora); `createdAt` de la
+    fuente = ahora (aparece arriba en la lista). La sesión se crea con `endedAt = startedAt` y `tracks = [:]` (así
+    `Recorder.recoverInterruptedSessions` la ignora); al convertir se ponen `tracks["system"]`, `endedAt` y `durationSeconds`, y se
+    borra el clon. Un archivo sin audio/ilegible → fuente `failed` con mensaje humano (sin reintentos). El original del usuario
+    no se toca nunca; si no se pudo clonar (otro volumen) y el usuario lo borra antes del job → "No encontré el archivo original".
+  · Cola entre procesos: las reparaciones de arranque (jobs `running`→`queued`, fuentes a medias) solo las hace quien tiene el lock;
+    si al arrancar lo tenía otro, se hacen al tomarlo. `assign`/`delete`/`undo` dan `EngineError.busy` también si OTRO proceso
+    está corriendo un job que les afecta (se lee `data/jobs`). `sb run [--wait]`; sin `--wait` imprime "Otra instancia (la app)
+    está procesando la cola." (o "(otro `sb`)") y sale con 0; lo encolado lo procesa la otra instancia. `sb import` usa
+    `importFileAsync`. Opciones ocultas de prueba: `sb run --serve N [--reload-config b.json]` (se comporta como la app N s).
+  · Historial: `HistoryStore.prune()` (constantes `keepRecentCount = 300`, `keepDays = 60`: se conserva lo que cumpla cualquiera
+    de las dos; nunca toca entradas en curso) se llama al arrancar y tras cada commit, en segundo plano; borra la carpeta entera
+    (before/after/summary). Una fuente cuyo `historyId` fue podado simplemente ya no puede deshacerse (`HistoryError.notFound`).
+    Limitación documentada: el snapshot de `begin` clona el vault con `copyItem` (clonefile en APFS ≈ gratis); si vault y data no
+    están en el mismo volumen APFS es una copia completa por job (se registra una vez en el log). No se puede copiar "before"
+    perezosamente porque Claude edita en sitio.
+  · `Log.flush()` (público) y flush automático `atexit` (antes `sb` perdía las últimas líneas del log).

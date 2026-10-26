@@ -190,12 +190,21 @@ public enum Log {
     private static let queue = DispatchQueue(label: "app.secondbrain.log")
     nonisolated(unsafe) private static var fileURL: URL?
 
+    nonisolated(unsafe) private static var flushAtExit = false
+
     public static func configure(logsDir: URL) {
         queue.sync {
             try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
             fileURL = logsDir.appendingPathComponent("secondbrain.log")
+            if !flushAtExit {
+                flushAtExit = true
+                atexit { Log.flush() }   // short-lived `sb` commands exit before queued lines are written
+            }
         }
     }
+
+    /// Waits until every queued line is written.
+    public static func flush() { queue.sync {} }
 
     public static func info(_ message: String) { write("INFO", message) }
     public static func error(_ message: String) { write("ERROR", message) }

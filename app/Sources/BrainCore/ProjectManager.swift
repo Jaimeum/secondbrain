@@ -26,6 +26,11 @@ public final class ProjectManager: @unchecked Sendable {
         return slugs.compactMap { get($0) }.sorted { ($0.createdAt, $0.slug) < ($1.createdAt, $1.slug) }
     }
 
+    /// `list()` on a background task.
+    public func listAsync() async -> [Project] {
+        await Task.detached(priority: .userInitiated) { self.list() }.value
+    }
+
     public func get(_ slug: String) -> Project? {
         let url = projectsDir.appendingPathComponent(slug).appendingPathComponent("project.json")
         guard let data = try? Data(contentsOf: url) else { return nil }

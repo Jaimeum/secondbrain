@@ -8,6 +8,7 @@ struct ActivityView: View {
     var onOpenPage: (String) -> Void
 
     @ViewState private var entries: [HistoryEntry] = []
+    @ViewState private var summaries: [String: String] = [:]
     @ViewState private var diffTarget: DiffTarget?
     @ViewState private var pendingUndo: HistoryEntry?
     @ViewState private var conflict: (entry: HistoryEntry, paths: [String])?
@@ -21,7 +22,7 @@ struct ActivityView: View {
                 List {
                     ForEach(entries) { entry in
                         HistoryRow(entry: entry,
-                                   summary: state.engine.history.summary(entryId: entry.id),
+                                   summary: summaries[entry.id],
                                    onDiff: { diffTarget = DiffTarget(entry: entry, path: $0) },
                                    onOpen: onOpenPage,
                                    onUndo: { pendingUndo = entry })
@@ -30,7 +31,7 @@ struct ActivityView: View {
                 .listStyle(.inset)
             }
         }
-        .task(id: state.historyRevision) { reload() }
+        .task(id: state.historyRevision) { await reload() }
         .sheet(item: $diffTarget) { target in
             DiffSheet(target: target)
         }
@@ -58,11 +59,22 @@ struct ActivityView: View {
         }
     }
 
-    private func reload() {
+    /// Reads every history entry and its summary from disk: off the main thread.
+    private func reload() async {
         guard state.engineStarted else { return }
-        entries = state.engine.history.entries()
-            .filter { projectSlug == nil || $0.projectSlug == projectSlug }
-            .sorted { $0.createdAt > $1.createdAt }
+        let history = state.engine.history
+        let slug = projectSlug
+        let (loaded, texts) = await Task.detached { () -> ([HistoryEntry], [String: String]) in
+            let list = history.entries()
+                .filter { slug == nil || $0.projectSlug == slug }
+                .sorted { $0.createdAt > $1.createdAt }
+            var texts: [String: String] = [:]
+            for entry in list { texts[entry.id] = history.summary(entryId: entry.id) }
+            return (list, texts)
+        }.value
+        guard !Task.isCancelled, history === state.engine.history else { return }
+        entries = loaded
+        summaries = texts
     }
 
     private func undo(_ entry: HistoryEntry, force: Bool) {
@@ -74,7 +86,7 @@ struct ActivityView: View {
         } catch {
             self.error = (error as? EngineError)?.errorDescription ?? L("activity.undoFailed")
         }
-        reload()
+        Task { await reload() }
     }
 }
 
@@ -247,7 +259,7 @@ struct DiffSheet: View {
             }
         }
         .frame(minWidth: 900, idealWidth: 1100, minHeight: 560, idealHeight: 720)
-        .task { load() }
+        .task { await load() }
     }
 
     private var gap: some View {
@@ -255,10 +267,17 @@ struct DiffSheet: View {
             .background(Color.primary.opacity(0.03))
     }
 
-    private func load() {
-        let (before, after) = state.engine.history.diff(entryId: target.entry.id, path: target.path)
-        lines = LineDiff.lines(before: before ?? "", after: after ?? "")
-        rows = LineDiff.collapsed(LineDiff.rows(lines))
+    /// Reading both versions and diffing a long page can take a while: off the main thread.
+    private func load() async {
+        let history = state.engine.history
+        let entryId = target.entry.id, path = target.path
+        let (allLines, allRows) = await Task.detached { () -> ([LineDiff.Line], [LineDiff.Row?]) in
+            let (before, after) = history.diff(entryId: entryId, path: path)
+            let lines = LineDiff.lines(before: before ?? "", after: after ?? "")
+            return (lines, LineDiff.collapsed(LineDiff.rows(lines)))
+        }.value
+        lines = allLines
+        rows = allRows
     }
 }
 

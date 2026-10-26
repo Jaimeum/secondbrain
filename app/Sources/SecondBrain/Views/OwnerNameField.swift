@@ -6,7 +6,9 @@ struct OwnerNameField: View {
     @Environment(AppState.self) private var state
     var showsHint = true
     @ViewState private var name = ""
-    @ViewState private var loaded = false
+    @ViewState private var loadedName: String?
+    /// The vault the name was read from: after a vault switch, an edit still goes back to where it came from.
+    @ViewState private var vault: VaultStore?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -16,16 +18,25 @@ struct OwnerNameField: View {
                 Text(L("owner.hint")).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .onAppear {
-            guard !loaded else { return }
-            name = state.engine.vault.ownerName() ?? ""
-            loaded = true
-        }
+        .onAppear(perform: load)
+        .onChange(of: state.engineStarted) { load() }
         .onDisappear(perform: save)
     }
 
+    private func load() {
+        guard vault == nil, state.engineStarted else { return }
+        let current = state.engine.vault
+        vault = current
+        let stored = current.ownerName() ?? ""
+        name = stored
+        loadedName = stored
+    }
+
     private func save() {
-        guard loaded, state.engineStarted else { return }
-        try? state.engine.vault.setOwnerName(name)
+        guard let vault, name != loadedName else { return }
+        do {
+            try vault.setOwnerName(name)
+            loadedName = name
+        } catch {}
     }
 }

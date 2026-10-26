@@ -5,12 +5,35 @@ import SwiftUI
 
 enum OnboardingStep: Int, CaseIterable {
     case welcome, vault, permissions, claude, models, project, done
+
+    /// The step survives a relaunch (macOS often needs one after granting Screen Recording), keyed by the
+    /// config file so an isolated `SB_CONFIG` doesn't resume someone else's setup.
+    private static var key: String { "onboarding.step|" + AppConfig.configURL.path }
+
+    static var saved: OnboardingStep {
+        OnboardingStep(rawValue: UserDefaults.standard.integer(forKey: key)) ?? .welcome
+    }
+
+    func save() { UserDefaults.standard.set(rawValue, forKey: Self.key) }
+
+    static func clearSaved() {
+        UserDefaults.standard.removeObject(forKey: key)
+        UserDefaults.standard.removeObject(forKey: askedScreenKey)
+    }
+
+    /// Whether the Screen Recording prompt was already shown (before a relaunch, too).
+    private static var askedScreenKey: String { "onboarding.askedScreen|" + AppConfig.configURL.path }
+    static var askedScreen: Bool {
+        get { UserDefaults.standard.bool(forKey: askedScreenKey) }
+        set { UserDefaults.standard.set(newValue, forKey: askedScreenKey) }
+    }
 }
 
 struct OnboardingView: View {
     @Environment(AppState.self) private var state
-    @ViewState private var step: OnboardingStep = .welcome
-    @ViewState private var consent = false
+    @ViewState private var step: OnboardingStep = .saved
+    // Resuming past the welcome step means consent was already given before the relaunch.
+    @ViewState private var consent = OnboardingStep.saved != .welcome
     @ViewState private var form = ProjectForm()
     @ViewState private var projectError: String?
     @ViewState private var createdProject: Project?
@@ -34,6 +57,11 @@ struct OnboardingView: View {
         }
         .background(.background)
         .animation(.easeInOut(duration: 0.25), value: step)
+        .onAppear {
+            // Resumed after a relaunch on a step that needs the engine (projects, owner name).
+            if step.rawValue >= OnboardingStep.project.rawValue { state.startEngine() }
+        }
+        .onChange(of: step) { step.save() }
     }
 
     @ViewBuilder private var content: some View {
@@ -59,6 +87,7 @@ struct OnboardingView: View {
             if step != .welcome && step != .done {
                 Button(L("common.back")) { go(-1) }
                     .controlSize(.large)
+                    .disabled(state.isSwitchingVault)
             }
             Spacer()
             ProgressDots(count: OnboardingStep.allCases.count, current: step.rawValue)
@@ -70,7 +99,7 @@ struct OnboardingView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
-                .disabled(step == .welcome && !consent || step == .project && !form.isValid)
+                .disabled(step == .welcome && !consent || step == .project && !form.isValid || state.isSwitchingVault)
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 18)
@@ -98,6 +127,7 @@ struct OnboardingView: View {
                 projectError = L("newProject.error")
             }
         case .done:
+            OnboardingStep.clearSaved()
             state.completeOnboarding()
             if let createdProject {
                 state.selection = .project(createdProject.slug)
@@ -166,6 +196,7 @@ private struct WelcomeStep: View {
                 Spacer()
             }
             LanguageSwitch()
+            if state.menuLanguageNeedsRestart { MenuLanguageNotice() }
 
             VStack(alignment: .leading, spacing: 14) {
                 Feature(symbol: "waveform", text: L("onb.welcome.feature1"))
@@ -236,9 +267,11 @@ private struct VaultStep: View {
                 Spacer()
                 Button(L("onb.vault.change")) { VaultPicker.choose(state: state) }
                     .controlSize(.large)
+                    .disabled(state.isSwitchingVault)
             }
             .padding(16)
             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+            if state.isSwitchingVault { VaultSwitchingNotice() }
             Text(L("onb.vault.hint")).font(.callout).foregroundStyle(.secondary)
         }
     }
@@ -269,7 +302,7 @@ enum VaultPicker {
 
 private struct PermissionsStep: View {
     @ViewState private var permissions = RecorderPermissions(screenAudio: false, microphone: false)
-    @ViewState private var askedScreen = false
+    @ViewState private var askedScreen = OnboardingStep.askedScreen
     @ViewState private var askedMic = false
 
     var body: some View {
@@ -279,6 +312,7 @@ private struct PermissionsStep: View {
                            granted: permissions.screenAudio, asked: askedScreen,
                            request: {
                                askedScreen = true
+                               OnboardingStep.askedScreen = true
                                Task { _ = await Recorder.requestScreenCapture(); await refresh() }
                            },
                            openSettings: { Recorder.openPrivacySettings(.screenRecording) })
@@ -290,13 +324,18 @@ private struct PermissionsStep: View {
                            },
                            openSettings: { Recorder.openPrivacySettings(.microphone) })
             if askedScreen && !permissions.screenAudio {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "info.circle").foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L("onb.perm.restartHint")).font(.callout).foregroundStyle(.secondary)
-                        Button(L("restart.now")) { AppState.shared.relaunch() }.buttonStyle(.link)
-                    }
+                // macOS usually applies Screen Recording only to a fresh process. The step is saved, so the
+                // relaunched app comes back right here.
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "arrow.clockwise.circle.fill").font(.title2).foregroundStyle(Color.accentColor)
+                    Text(L("onb.perm.restartHint")).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button(L("onb.perm.reopen")) { AppState.shared.relaunch() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                 }
+                .padding(14)
+                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
             }
         }
         .task {

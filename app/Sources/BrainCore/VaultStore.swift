@@ -164,6 +164,20 @@ public final class VaultStore: @unchecked Sendable {
         return result.sorted { $0.title.lowercased() < $1.title.lowercased() }
     }
 
+    // MARK: Background variants (vault-wide scans; call these from the UI)
+
+    public func pagesAsync(projectSlug: String?) async -> [WikiPage] {
+        await Task.detached(priority: .userInitiated) { self.pages(projectSlug: projectSlug) }.value
+    }
+
+    public func backlinksAsync(to relPath: String) async -> [WikiPage] {
+        await Task.detached(priority: .userInitiated) { self.backlinks(to: relPath) }.value
+    }
+
+    public func resolveWikilinksAsync(_ targets: [String], from relPath: String) async -> [String: String] {
+        await Task.detached(priority: .userInitiated) { self.resolveWikilinks(targets, from: relPath) }.value
+    }
+
     static func projectSlug(of relPath: String) -> String? {
         let parts = relPath.split(separator: "/")
         return parts.count > 2 && parts[0] == "projects" ? String(parts[1]) : nil

@@ -56,7 +56,20 @@ enum DebugSnapshots {
             }
             shots.append(("settings-accounts", CGSize(width: 560, height: 900), AnyView(SettingsView())))
             shots.append(("orghelp", CGSize(width: 620, height: 520), AnyView(OrgAccessHelpSheet(provider: .microsoft))))
-            for (name, size, view) in shots {
+            // MARK: v0.3 graph — focused graph + web views need a run loop and WKWebView.takeSnapshot.
+            if let topic = await state.engine.graph(projectSlug: nil).nodes.filter({ $0.kind == .topic }).max(by: { $0.links < $1.links }) {
+                shots.append(("graph-focus", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: topic.id, onOpen: { _ in }))))
+                if let slug = topic.projectSlug {   // the wiki page header with "Ver en el grafo"
+                    shots.append(("graph-wiki", CGSize(width: 1000, height: 400),
+                                  AnyView(WikiBrowser(scope: .project(slug), selection: .constant(topic.id)))))
+                }
+            }
+            let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
+            for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
+                if name.hasPrefix("graph") {
+                    await GraphSnapshot.render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
+                    continue
+                }
                 await render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
             }
             exit(0)

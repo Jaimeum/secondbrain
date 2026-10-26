@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="graph.css">
+<script src="d3.v7.min.js"></script>
+<script src="graph.js"></script>
+</head>
+<body>
+<div id="stage"><canvas id="canvas"></canvas></div>
+
+<div id="topbar">
+  <div id="chips" role="toolbar"></div>
+  <div id="tools">
+    <button id="showAll" class="pill" hidden></button>
+    <button id="searchBtn" class="icon" aria-label=""></button>
+    <button id="fitBtn" class="icon" aria-label=""></button>
+  </div>
+</div>
+
+<div id="searchBox" hidden>
+  <span class="glyph" id="searchGlyph"></span>
+  <input id="searchInput" type="search" autocomplete="off" spellcheck="false">
+  <span id="searchCount"></span>
+</div>
+
+<div id="hint" hidden><span id="hintText"></span><button id="hintClose" aria-label="">×</button></div>
+
+<aside id="peek" hidden>
+  <button id="peekClose" class="close" aria-label="">×</button>
+  <div class="kind"><span class="badge" id="peekBadge"></span><span id="peekKind"></span></div>
+  <h2 id="peekTitle"></h2>
+  <div class="meta" id="peekMeta"></div>
+  <button id="peekOpen" class="primary"></button>
+  <div id="peekNeighboursTitle" class="section"></div>
+  <ul id="peekNeighbours"></ul>
+</aside>
+
+<div id="tooltip" hidden></div>
+
+<footer id="timebar">
+  <button id="playBtn" class="play" aria-label=""></button>
+  <div id="strip">
+    <div id="track"></div>
+    <div id="fill"></div>
+    <div id="dots"></div>
+    <div id="thumb"><span id="thumbLabel"></span></div>
+    <span id="todayLabel"></span>
+  </div>
+</footer>
+</body>
+</html>

@@ -105,6 +105,15 @@ struct WikiBrowser: View {
                     }
                     .buttonStyle(.borderless)
                 }
+                if Self.isInGraph(selection) {
+                    Button {
+                        showInGraph(selection)
+                    } label: {
+                        Label(L("graph.seeInGraph"), systemImage: "point.3.connected.trianglepath.dotted")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(L("graph.seeInGraph"))
+                }
                 Button {
                     export = ExportRequest(target: .page(path: selection, title: currentTitle))
                 } label: {
@@ -121,6 +130,20 @@ struct WikiBrowser: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+
+    /// "Ver en el grafo": the Grafo tab of the page's project (people and global pages: "Todo el cerebro"), centered on it.
+    private func showInGraph(_ path: String) {
+        state.pendingGraphFocus = path
+        let parts = path.split(separator: "/")
+        state.selection = parts.count > 2 && parts[0] == "projects" ? .project(String(parts[1])) : .brain
+    }
+
+    /// Logs and lint reports are not in the graph (CONTRACT §12.2); a project's index stands for the project.
+    static func isInGraph(_ path: String) -> Bool {
+        let name = (path as NSString).lastPathComponent
+        return path.hasSuffix(".md") && !path.contains("/raw/") && !path.hasPrefix("_inbox/")
+            && name != "log.md" && name != "health.md" && !path.hasSuffix("people/README.md")
     }
 
     private var currentTitle: String {

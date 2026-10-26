@@ -29,7 +29,7 @@
 
 /* Tabs */
 "tab.wiki" = "Wiki";
-"tab.sources" = "Meetings & sources";
+"tab.sources" = "Sources";
 "tab.ask" = "Ask";
 "tab.activity" = "Activity";
 
@@ -629,6 +629,38 @@
 "graph.search" = "Search the graph";
 "graph.links" = "%ld links";
 "graph.play" = "Watch it grow";
+"graph.open" = "Open page";
+"graph.openOverview" = "Open overview";
+"graph.today" = "Today";
+"graph.hint" = "Click a node to explore · ▶ to watch it grow";
+"graph.close" = "Close";
+"graph.connected" = "Connected to";
+"graph.matches" = "%ld matches";
+"graph.noMatches" = "No matches";
+"graph.kind.project" = "Project";
+"graph.kind.meeting" = "Meeting";
+"graph.kind.email" = "Email";
+"graph.kind.document" = "Document";
+"graph.kind.note" = "Note";
+"graph.kind.url" = "Web page";
+"graph.kind.person" = "Person";
+"graph.kind.topic" = "Topic";
+"graph.kind.decision" = "Decision";
+"graph.kind.question" = "Question";
+"graph.kind.task" = "Task";
+"graph.kind.page" = "Page";
+"graph.kinds.project" = "Projects";
+"graph.kinds.meeting" = "Meetings";
+"graph.kinds.email" = "Emails";
+"graph.kinds.document" = "Documents";
+"graph.kinds.note" = "Notes";
+"graph.kinds.url" = "Web pages";
+"graph.kinds.person" = "People";
+"graph.kinds.topic" = "Topics";
+"graph.kinds.decision" = "Decisions";
+"graph.kinds.question" = "Questions";
+"graph.kinds.task" = "Tasks";
+"graph.kinds.page" = "Pages";
 
 /* v0.3 — Accounts */
 "accounts.section" = "Accounts";

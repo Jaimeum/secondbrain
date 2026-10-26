@@ -12,7 +12,8 @@ struct SB: AsyncParsableCommand {
         subcommands: [Init.self, ProjectCmd.self, Projects.self, Owner.self, Simulate.self, Run.self, Status.self, Import.self,
                       Note.self, Assign.self, Retry.self, Delete.self, Ask.self, Lint.self, History.self, Diff.self,
                       Undo.self, Models.self, EmailCmd.self, TasksCmd.self, TaskCmd.self, TemplatesCmd.self, TemplateCmd.self,
-                      Reformat.self, TimelineCmd.self, SetDate.self, Export.self, SelfTest.self]
+                      Reformat.self, TimelineCmd.self, SetDate.self, Export.self, SelfTest.self,
+                      DemoVaultCmd.self, GraphCmd.self]  // MARK: v0.3 graph
     )
 }
 

@@ -178,21 +178,11 @@ private struct MailListPane: View {
             case .reconnect(let provider):
                 Label(L("mail.reconnect.title", provider.displayName), systemImage: "person.crop.circle.badge.exclamationmark")
                     .fixedSize(horizontal: false, vertical: true)
-                if connector.connecting == provider {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text(L("accounts.waiting", provider.displayName)).font(.callout).foregroundStyle(.secondary)
-                        Button(L("common.cancel")) { connector.cancel() }
-                    }
-                } else {
-                    Button(L("mail.reconnect")) { connector.connect(provider, state: state) }
-                        .buttonStyle(.borderedProminent)
-                }
+                Button(L("mail.reconnect")) { connector.start(provider, state: state) }
+                    .buttonStyle(.borderedProminent)
+                    .sheet(item: Bindable(connector).flow) { _ in TrustSheet(connector: connector, context: .mail) }
                 if let error = connector.error {
                     Text(error).font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                    if connector.helpProvider != nil {
-                        Button(L("accounts.howToEnable")) { help = OrgHelpRequest(provider: provider) }.buttonStyle(.link)
-                    }
                 }
             case .organization(let provider):
                 Label(L("accounts.consentRequired"), systemImage: "building.2")

@@ -28,6 +28,12 @@ struct SettingsView: View {
                     Text("English").tag("en")
                 }
                 if state.menuLanguageNeedsRestart { MenuLanguageNotice() }
+                Picker(L("theme.title"), selection: binding(\.appearance)) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.symbol).labelStyle(.titleAndIcon).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
                 if state.engineStarted {
                     OwnerNameField().id(state.vaultGeneration)
                     OwnerEmailsField().id(state.vaultGeneration)
@@ -35,6 +41,8 @@ struct SettingsView: View {
                 Toggle(L("settings.captureMic"), isOn: binding(\.captureMic))
                 Toggle(L("settings.hotkey"), isOn: binding(\.hotkeyEnabled))
             }
+
+            AccountsSection()
 
             Section(L("settings.storage")) {
                 LabeledContent(L("settings.vault")) {

@@ -2,16 +2,29 @@ import BrainCore
 import SwiftUI
 
 enum ProjectTab: Hashable {
-    case wiki, sources, tasks, timeline, ask, activity
+    case wiki, graph, sources, tasks, timeline, ask, activity
 
     var title: String {
         switch self {
         case .wiki: L("tab.wiki")
+        case .graph: L("tab.graph")
         case .sources: L("tab.sources")
         case .tasks: L("tab.tasks")
         case .timeline: L("tab.timeline")
         case .ask: L("tab.ask")
         case .activity: L("tab.activity")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .wiki: "book"
+        case .graph: "point.3.connected.trianglepath.dotted"
+        case .sources: "tray.full"
+        case .tasks: "checklist"
+        case .timeline: "calendar.day.timeline.left"
+        case .ask: "bubble.left.and.text.bubble.right"
+        case .activity: "clock.arrow.circlepath"
         }
     }
 }
@@ -22,12 +35,13 @@ struct ProjectView: View {
 
     @ViewState private var tab: ProjectTab = .wiki
     @ViewState private var wikiPage: String?
+    @ViewState private var graphFocus: String?
     @ViewState private var chat = ChatModel()
     @ViewState private var error: String?
 
     var body: some View {
         content
-            .tabBar(TabPicker(tabs: [.wiki, .sources, .tasks, .timeline, .ask, .activity], selection: $tab))
+            .tabBar(TabPicker(tabs: [.wiki, .graph, .sources, .tasks, .timeline, .ask, .activity], selection: $tab))
             .navigationTitle("\(project.emoji) \(project.name)")
             .navigationSubtitle(project.description)
             .toolbar {
@@ -35,6 +49,8 @@ struct ProjectView: View {
             }
             .onAppear(perform: consumePendingPage)
             .onChange(of: state.pendingPage) { consumePendingPage() }
+            .onAppear(perform: consumePendingGraphFocus)
+            .onChange(of: state.pendingGraphFocus) { consumePendingGraphFocus() }
             .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button(L("common.ok")) { error = nil }
             } message: {
@@ -85,10 +101,20 @@ struct ProjectView: View {
         openPage(page)
     }
 
+    /// "Ver en el grafo" from a page of this project: open the Grafo tab centered on it.
+    private func consumePendingGraphFocus() {
+        guard let page = state.pendingGraphFocus, page.hasPrefix("projects/\(project.slug)/") else { return }
+        state.pendingGraphFocus = nil
+        graphFocus = page
+        tab = .graph
+    }
+
     @ViewBuilder private var content: some View {
         switch tab {
         case .wiki:
             WikiBrowser(scope: .project(project.slug), selection: $wikiPage)
+        case .graph:
+            GraphView(scope: .project(project.slug), focus: graphFocus, onOpen: openPage)
         case .sources:
             SourcesView(projectSlug: project.slug, onOpen: openPage)
         case .tasks:
@@ -113,12 +139,14 @@ struct BrainView: View {
     @Environment(AppState.self) private var state
     @ViewState private var tab: ProjectTab = .wiki
     @ViewState private var wikiPage: String?
+    @ViewState private var graphFocus: String?
     @ViewState private var chat = ChatModel()
 
     var body: some View {
         Group {
             switch tab {
             case .wiki: WikiBrowser(scope: .global, selection: $wikiPage)
+            case .graph: GraphView(scope: .global, focus: graphFocus, onOpen: openAnywhere)
             case .ask: ChatView(model: chat, projectSlug: nil, onOpenPage: openPage)
             case .activity: ActivityView(projectSlug: nil, onOpenPage: openPage)
             case .timeline:
@@ -133,14 +161,35 @@ struct BrainView: View {
             case .sources, .tasks: EmptyView()
             }
         }
-        .tabBar(TabPicker(tabs: [.wiki, .timeline, .ask, .activity], selection: $tab))
+        .tabBar(TabPicker(tabs: [.wiki, .graph, .timeline, .ask, .activity], selection: $tab))
         .navigationTitle(L("sidebar.brain"))
         .navigationSubtitle(L("brain.subtitle"))
+        .onAppear(perform: consumePendingGraphFocus)
+        .onChange(of: state.pendingGraphFocus) { consumePendingGraphFocus() }
     }
 
     private func openPage(_ path: String) {
         wikiPage = path
         tab = .wiki
+    }
+
+    /// A page of a project opens inside that project; global pages and people open here.
+    private func openAnywhere(_ path: String) {
+        let parts = path.split(separator: "/")
+        if parts.count > 2, parts[0] == "projects" {
+            state.pendingPage = path
+            state.selection = .project(String(parts[1]))
+        } else {
+            openPage(path)
+        }
+    }
+
+    /// "Ver en el grafo" from a global or people page.
+    private func consumePendingGraphFocus() {
+        guard let page = state.pendingGraphFocus, !page.hasPrefix("projects/") else { return }
+        state.pendingGraphFocus = nil
+        graphFocus = page
+        tab = .graph
     }
 }
 

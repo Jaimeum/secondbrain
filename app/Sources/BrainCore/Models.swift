@@ -17,6 +17,13 @@ public struct AppConfig: Codable, Equatable, Sendable {
     public var gitEnabled: Bool
     public var hotkeyEnabled: Bool
     public var onboardingComplete: Bool
+    // v0.3 (CONTRACT §12): optional-with-default; decoded with decodeIfPresent so older config.json files keep loading.
+    /// "system" (default) | "light" | "dark".
+    public var appearance: String = "system"
+    /// The user's own OAuth app registration (Ajustes → Cuentas → Avanzado); empty = use env/`OAuthDefaults`.
+    public var oauth: OAuthAppRegistration = .empty
+    /// Last project chosen in Correo's "Agregar al cerebro".
+    public var lastMailProjectSlug: String? = nil
 
     public static let `default` = AppConfig(
         vaultPath: "~/Documents/SecondBrain",
@@ -31,6 +38,46 @@ public struct AppConfig: Codable, Equatable, Sendable {
         hotkeyEnabled: true,
         onboardingComplete: false
     )
+
+    private enum CodingKeys: String, CodingKey {
+        case vaultPath, dataPath, whisperModel, claudePath, ingestModel, queryModel, uiLanguage, captureMic, gitEnabled,
+             hotkeyEnabled, onboardingComplete, appearance, oauth, lastMailProjectSlug
+    }
+
+    public init(vaultPath: String, dataPath: String, whisperModel: String, claudePath: String?, ingestModel: String,
+                queryModel: String, uiLanguage: String, captureMic: Bool, gitEnabled: Bool, hotkeyEnabled: Bool,
+                onboardingComplete: Bool, appearance: String = "system", oauth: OAuthAppRegistration = .empty,
+                lastMailProjectSlug: String? = nil) {
+        self.vaultPath = vaultPath; self.dataPath = dataPath; self.whisperModel = whisperModel; self.claudePath = claudePath
+        self.ingestModel = ingestModel; self.queryModel = queryModel; self.uiLanguage = uiLanguage; self.captureMic = captureMic
+        self.gitEnabled = gitEnabled; self.hotkeyEnabled = hotkeyEnabled; self.onboardingComplete = onboardingComplete
+        self.appearance = appearance; self.oauth = oauth; self.lastMailProjectSlug = lastMailProjectSlug
+    }
+
+    /// v0.1 fields are required; everything added later falls back to its default when missing, so an older
+    /// config.json never resets the user's settings (`load()` returns `.default` when decoding fails).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        vaultPath = try c.decode(String.self, forKey: .vaultPath)
+        dataPath = try c.decode(String.self, forKey: .dataPath)
+        whisperModel = try c.decode(String.self, forKey: .whisperModel)
+        claudePath = try c.decodeIfPresent(String.self, forKey: .claudePath)
+        ingestModel = try c.decode(String.self, forKey: .ingestModel)
+        queryModel = try c.decode(String.self, forKey: .queryModel)
+        uiLanguage = try c.decode(String.self, forKey: .uiLanguage)
+        captureMic = try c.decode(Bool.self, forKey: .captureMic)
+        gitEnabled = try c.decode(Bool.self, forKey: .gitEnabled)
+        hotkeyEnabled = try c.decode(Bool.self, forKey: .hotkeyEnabled)
+        onboardingComplete = try c.decode(Bool.self, forKey: .onboardingComplete)
+        // Later fields: a missing or malformed value never makes the whole config fall back to defaults.
+        if let mode = try? c.decodeIfPresent(String.self, forKey: .appearance), ["system", "light", "dark"].contains(mode) {
+            appearance = mode
+        } else {
+            appearance = "system"
+        }
+        oauth = (try? c.decodeIfPresent(OAuthAppRegistration.self, forKey: .oauth)) ?? .empty
+        lastMailProjectSlug = try? c.decodeIfPresent(String.self, forKey: .lastMailProjectSlug)
+    }
 
     public static var configURL: URL {
         if let override = ProcessInfo.processInfo.environment["SB_CONFIG"], !override.isEmpty {
@@ -65,6 +112,10 @@ public struct DataPaths: Sendable {
     public var history: URL { root.appendingPathComponent("history") }
     public var models: URL { root.appendingPathComponent("models") }
     public var logs: URL { root.appendingPathComponent("logs") }
+    /// v0.3: connected accounts (tokens live in the Keychain, not here).
+    public var accounts: URL { root.appendingPathComponent("accounts.json") }
+    /// v0.3: calendar event / series → project links (`MeetingLinks`).
+    public var meetings: URL { root.appendingPathComponent("meetings.json") }
 
     public func ensureExist() throws {
         for dir in [sessions, sources, jobs, history, models, logs] {
@@ -85,12 +136,17 @@ public struct SessionManifest: Codable, Equatable, Sendable {
     public var chunkSeconds: Int
     public var tracks: [String: [String]]
     public var micCaptured: Bool
+    // v0.3 (§12.5): the calendar event this recording belongs to, and its attendees' names.
+    public var calendarEventId: String?
+    public var attendees: [String]?
 
     public init(id: String, title: String?, projectSlug: String?, startedAt: Date, endedAt: Date? = nil,
-                sampleRate: Int = 16000, chunkSeconds: Int = 300, tracks: [String: [String]] = [:], micCaptured: Bool) {
+                sampleRate: Int = 16000, chunkSeconds: Int = 300, tracks: [String: [String]] = [:], micCaptured: Bool,
+                calendarEventId: String? = nil, attendees: [String]? = nil) {
         self.id = id; self.title = title; self.projectSlug = projectSlug; self.startedAt = startedAt
         self.endedAt = endedAt; self.sampleRate = sampleRate; self.chunkSeconds = chunkSeconds
         self.tracks = tracks; self.micCaptured = micCaptured
+        self.calendarEventId = calendarEventId; self.attendees = attendees
     }
 
     /// `yyyyMMdd-HHmmss-xxxx`
@@ -139,6 +195,9 @@ public struct SourceRecord: Codable, Identifiable, Equatable, Sendable {
     public var eventDate: Date?
     public var templateId: String?
     public var threadKey: String?
+    // v0.3 (§12.3/§12.5): "<provider>:<messageId>" for mail added from a connected account; linked calendar event.
+    public var externalId: String?
+    public var calendarEventId: String?
 
     /// The date the timeline uses: when it happened, falling back to when it was added.
     public var timelineDate: Date { eventDate ?? createdAt }

@@ -29,6 +29,15 @@ struct SecondBrainApp: App {
                     .keyboardShortcut("v", modifiers: [.command, .shift])
                     .disabled(!state.config.onboardingComplete || !state.engineStarted)
             }
+            CommandGroup(after: .toolbar) {
+                Picker(L("theme.title"), selection: Binding(get: { state.config.appearance },
+                                                            set: { mode in state.update { $0.appearance = mode } })) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.symbol).tag(mode.rawValue)
+                    }
+                }
+                Divider()
+            }
         }
 
         MenuBarExtra {
@@ -53,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Snapshot mode (development) must not take focus or show windows on the user's screen.
         let snapshot = MainActor.assumeIsolated { DebugSnapshots.directory != nil }
         NSApp.setActivationPolicy(snapshot ? .prohibited : .regular)
+        // Before any window shows, so a forced light/dark theme never flashes the system one.
+        MainActor.assumeIsolated { AppState.applyAppearance(AppState.shared.config.appearance) }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

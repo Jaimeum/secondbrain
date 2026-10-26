@@ -58,6 +58,8 @@ private final class ConfigBox: @unchecked Sendable {
     public private(set) var projects: ProjectManager
     public private(set) var history: HistoryStore
     public private(set) var claude: ClaudeRunner
+    /// v0.3: connected Microsoft 365 / Google accounts (CONTRACT §12.3).
+    public let accounts: AccountStore
     public private(set) var sources: [SourceRecord] = []
     public private(set) var jobs: [Job] = []
     public private(set) var isProcessing = false
@@ -111,6 +113,7 @@ private final class ConfigBox: @unchecked Sendable {
         self.sourceStore = SourceStore(dir: paths.sources)
         self.queue = JobQueue(dir: paths.jobs)
         self.queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
+        self.accounts = AccountStore(fileURL: paths.accounts)
         Log.configure(logsDir: paths.logs)
     }
 
@@ -182,6 +185,7 @@ private final class ConfigBox: @unchecked Sendable {
         sourceStore = SourceStore(dir: paths.sources)
         queue = JobQueue(dir: paths.jobs)
         queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
+        accounts.reload(fileURL: paths.accounts)
         Log.configure(logsDir: paths.logs)
         writeGeneration += 1
         sources = []

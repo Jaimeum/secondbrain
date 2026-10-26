@@ -606,3 +606,89 @@
 "migration.dismiss" = "Got it";
 "migration.explain" = "Nothing you had was deleted or changed. If you had edited the brain's rules, I kept your version and left the new one beside it for you to review whenever you like.";
 "email.several" = "I found %ld emails from one conversation. They'll all be saved to the same thread, in the order they were sent. The newest one is shown below.";
+
+/* v0.3 — Navigation */
+"sidebar.mail" = "Mail";
+"sidebar.meetings" = "Meetings";
+"tab.graph" = "Graph";
+
+/* v0.3 — Theme */
+"theme.title" = "Appearance";
+"theme.system" = "System";
+"theme.light" = "Light";
+"theme.dark" = "Dark";
+
+/* v0.3 — Graph */
+"graph.title" = "Graph";
+"graph.count" = "%ld pages, %ld connections";
+"graph.empty.title" = "Your brain is still empty";
+"graph.empty.message" = "This is where you'll see how everything I learn connects. Record a meeting or add something to start.";
+"graph.seeInGraph" = "See in graph";
+"graph.showAll" = "Show all";
+"graph.fit" = "Fit";
+"graph.search" = "Search the graph";
+"graph.links" = "%ld links";
+"graph.play" = "Watch it grow";
+
+/* v0.3 — Accounts */
+"accounts.section" = "Accounts";
+"accounts.none" = "Connect your mail and calendar so you don't have to copy and paste.";
+"accounts.footer" = "Read-only: SecondBrain never sends, deletes or changes anything.";
+"accounts.connectMicrosoft" = "Connect Microsoft 365";
+"accounts.connectGoogle" = "Connect Google";
+"accounts.disconnect" = "Disconnect";
+"accounts.waiting" = "Waiting for you to sign in to %@ in your browser…";
+"accounts.howToEnable" = "How do I enable it?";
+"accounts.notConfigured" = "This connection isn't set up yet. Here's how, in a minute.";
+"accounts.consentRequired" = "Your organization needs to approve SecondBrain.";
+"accounts.advanced" = "Advanced";
+"accounts.msClientId" = "Microsoft application ID";
+"accounts.googleClientId" = "Google client ID";
+"accounts.googleClientSecret" = "Google client secret";
+"accounts.connected" = "Connected: %@";
+
+/* v0.3 — Organization help */
+"orghelp.title" = "How do I enable it?";
+"orghelp.subtitle" = "With a work account, your admin sometimes has to approve SecondBrain once. Here's what to send them.";
+"orghelp.forYou" = "For you";
+"orghelp.forAdmin" = "For your admin";
+"orghelp.technical" = "I'm technical: use my own app registration";
+"orghelp.copy" = "Copy message";
+"orghelp.copied" = "Copied";
+
+/* v0.3 — Mail */
+"mail.title" = "Mail";
+"mail.subtitle" = "Inbox, last 30 days";
+"mail.empty.title" = "Bring in your mail";
+"mail.empty.message" = "Connect your account and pick which emails I should learn from. Nothing is saved until you say so.";
+"mail.pasteInstead" = "or paste an email";
+"mail.pickMessage" = "Pick an email to read it.";
+"mail.addToBrain" = "Add to brain";
+"mail.addThread" = "Add whole thread";
+"mail.inBrain" = "✓ in your brain";
+"mail.loadMore" = "Load more";
+"mail.search" = "Search mail";
+
+/* v0.3 — Meetings */
+"meetings.title" = "Meetings";
+"meetings.subtitle" = "Your agenda, ready to record";
+"meetings.empty.title" = "Bring in your calendar";
+"meetings.empty.message" = "Connect your account and your meetings show up here: join, record and prepare in one click.";
+"meetings.nothing.title" = "Nothing on the agenda";
+"meetings.nothing.message" = "Your meetings will show up here.";
+"meetings.today" = "Today";
+"meetings.week" = "This week";
+"meetings.upcoming" = "Upcoming";
+"meetings.inProgress" = "In progress";
+"meetings.recorded" = "Recorded ✓";
+"meetings.record" = "Record";
+"meetings.recordThis" = "Record this meeting";
+"meetings.join" = "Join";
+"meetings.prepare" = "Prepare me";
+"meetings.viewSummary" = "View summary";
+
+/* v0.3 — Prepare */
+"prep.title" = "Get ready for “%@”";
+"prep.loading" = "Going over what I know about this meeting and who's coming…";
+"prep.save" = "Save to wiki";
+"prep.copy" = "Copy";

@@ -606,3 +606,89 @@
 "migration.dismiss" = "Entendido";
 "migration.explain" = "No se borró ni cambió nada de lo que ya tenías. Si habías editado las reglas del cerebro, conservé tu versión y dejé la nueva a un lado para que la revises cuando quieras.";
 "email.several" = "Encontré %ld correos de una misma conversación. Se guardarán todos en el mismo hilo, en el orden en que se enviaron. Abajo ves el más reciente.";
+
+/* v0.3 — Navegación */
+"sidebar.mail" = "Correo";
+"sidebar.meetings" = "Reuniones";
+"tab.graph" = "Grafo";
+
+/* v0.3 — Tema */
+"theme.title" = "Apariencia";
+"theme.system" = "Sistema";
+"theme.light" = "Claro";
+"theme.dark" = "Oscuro";
+
+/* v0.3 — Grafo */
+"graph.title" = "Grafo";
+"graph.count" = "%ld páginas, %ld conexiones";
+"graph.empty.title" = "Tu cerebro aún está vacío";
+"graph.empty.message" = "Aquí verás cómo se conecta todo lo que aprendo. Graba una reunión o agrega algo para empezar.";
+"graph.seeInGraph" = "Ver en el grafo";
+"graph.showAll" = "Ver todo";
+"graph.fit" = "Ajustar";
+"graph.search" = "Buscar en el grafo";
+"graph.links" = "%ld enlaces";
+"graph.play" = "Ver cómo creció";
+
+/* v0.3 — Cuentas */
+"accounts.section" = "Cuentas";
+"accounts.none" = "Conecta tu correo y calendario para no tener que copiar y pegar.";
+"accounts.footer" = "Solo lectura: SecondBrain nunca envía, borra ni cambia nada.";
+"accounts.connectMicrosoft" = "Conectar Microsoft 365";
+"accounts.connectGoogle" = "Conectar Google";
+"accounts.disconnect" = "Desconectar";
+"accounts.waiting" = "Esperando a que inicies sesión en %@ en el navegador…";
+"accounts.howToEnable" = "¿Cómo lo habilito?";
+"accounts.notConfigured" = "Falta configurar esta conexión. Te explicamos cómo en un minuto.";
+"accounts.consentRequired" = "Tu organización tiene que aprobar SecondBrain.";
+"accounts.advanced" = "Avanzado";
+"accounts.msClientId" = "ID de aplicación de Microsoft";
+"accounts.googleClientId" = "ID de cliente de Google";
+"accounts.googleClientSecret" = "Secreto de cliente de Google";
+"accounts.connected" = "Conectado: %@";
+
+/* v0.3 — Ayuda para organizaciones */
+"orghelp.title" = "¿Cómo lo habilito?";
+"orghelp.subtitle" = "Si tu correo es del trabajo, a veces el administrador tiene que aprobar SecondBrain una sola vez. Aquí tienes qué enviarle.";
+"orghelp.forYou" = "Para ti";
+"orghelp.forAdmin" = "Para tu administrador";
+"orghelp.technical" = "Soy técnico: usar mi propio registro";
+"orghelp.copy" = "Copiar mensaje";
+"orghelp.copied" = "Copiado";
+
+/* v0.3 — Correo */
+"mail.title" = "Correo";
+"mail.subtitle" = "Recibidos, últimos 30 días";
+"mail.empty.title" = "Trae tu correo";
+"mail.empty.message" = "Conecta tu cuenta y elige qué correos quieres que aprenda. Nada se guarda hasta que tú lo pidas.";
+"mail.pasteInstead" = "o pega un correo";
+"mail.pickMessage" = "Elige un correo para leerlo.";
+"mail.addToBrain" = "Agregar al cerebro";
+"mail.addThread" = "Agregar todo el hilo";
+"mail.inBrain" = "✓ en el cerebro";
+"mail.loadMore" = "Cargar más";
+"mail.search" = "Buscar correos";
+
+/* v0.3 — Reuniones */
+"meetings.title" = "Reuniones";
+"meetings.subtitle" = "Tu agenda, lista para grabar";
+"meetings.empty.title" = "Trae tu calendario";
+"meetings.empty.message" = "Conecta tu cuenta y verás tus reuniones aquí: entra, graba y prepárate con un clic.";
+"meetings.nothing.title" = "Nada en la agenda";
+"meetings.nothing.message" = "Cuando tengas reuniones aparecerán aquí.";
+"meetings.today" = "Hoy";
+"meetings.week" = "Esta semana";
+"meetings.upcoming" = "Próximas";
+"meetings.inProgress" = "En curso";
+"meetings.recorded" = "Grabada ✓";
+"meetings.record" = "Grabar";
+"meetings.recordThis" = "Grabar esta reunión";
+"meetings.join" = "Unirme";
+"meetings.prepare" = "Prepararme";
+"meetings.viewSummary" = "Ver resumen";
+
+/* v0.3 — Prepararme */
+"prep.title" = "Prepárate para «%@»";
+"prep.loading" = "Repasando lo que sé de esta reunión y de quienes van…";
+"prep.save" = "Guardar en el wiki";
+"prep.copy" = "Copiar";

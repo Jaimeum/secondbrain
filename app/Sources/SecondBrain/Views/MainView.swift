@@ -46,6 +46,10 @@ struct MainView: View {
             }
         case .inbox:
             InboxView()
+        case .mail:
+            MailView()
+        case .meetings:
+            MeetingsView()
         case .people:
             PeopleView()
         case .myTasks:

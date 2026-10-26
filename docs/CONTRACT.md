@@ -1207,3 +1207,50 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
   de organización) y "Reuniones"; `release.sh` notas incluyen las novedades.
 - `DebugSnapshots` añade capturas: `graph`, `mail`, `meetings`, `prep`, `settings-accounts`,
   `orghelp` (con `SB_DEMO_ACCOUNTS=1`).
+
+### 12.7 Refinamientos adoptados tras la revisión de UX (vinculantes; prevalecen sobre 12.2–12.5)
+- **Reuniones**: una sola acción primaria por evento que cambia con el tiempo: "Prepararme" (antes) →
+  "Grabar" rojo pulsante (desde start−2 min hasta end+5 min) → "Aprendiendo…" → "Ver resumen ✓".
+  Tarjeta héroe "Ahora / Siguiente" arriba de Hoy con cuenta regresiva. Al llegar end+5 min grabando:
+  banner "¿Sigues en la reunión? · Detener". **Sin notificaciones** (`MeetingReminders` se elimina).
+  En el pie del sidebar y en el menú de barra: banner "Kickoff · empezó hace 3 min — Grabar" cuando
+  hay una reunión en curso (y "Siguiente: X · 15:30" si falta < 60 min). Grabar desde ahí ya trae
+  título, proyecto y asistentes. La pestaña del proyecto "Reuniones y fuentes" pasa a llamarse
+  **"Fuentes"** (`tab.sources`) para no chocar con el ítem **Reuniones** del sidebar.
+- **Calendario sin OAuth**: `LocalCalendarProvider` (EventKit, `NSCalendarsFullAccessUsageDescription`)
+  siempre disponible: botón "Usar el calendario de la Mac" en el estado vacío de Reuniones (permiso del
+  sistema, un clic). Las cuentas Microsoft/Google se suman si existen. Eventos dedupe por (título, start).
+- **Proyecto por reunión**: chip pregunta "¿Es de 🚀 Acme? ✓ ✗" (heurística: correos de asistentes ∈
+  páginas de personas del proyecto, o palabras del título = nombre del proyecto); ✓ recuerda para la
+  serie (`MeetingLinks`); ✗ abre selector. Sin proyecto se graba igual (va a Inbox).
+- **Prepararme**: primero tarjetas locales instantáneas sin Claude: por asistente (iniciales, "última vez:
+  <reunión> hace n días", sus pendientes abiertos) + mis pendientes del proyecto + última decisión.
+  Debajo, botón "Preparar con Claude" que transmite secciones fijas: **Quiénes**, **Pendientes abiertos**,
+  **Para preguntar** (3) + agenda; el resultado queda visible mientras se graba. Chat libre plegado
+  "Pregúntame algo más…". Acciones: Copiar, Guardar en el wiki (reutiliza save-answer).
+- **Confianza antes del navegador**: hoja de 3 líneas con icono (👁 Solo leo tu correo y calendario ·
+  💻 Todo se queda en esta Mac · 🔌 Desconecta cuando quieras) + "Continuar en el navegador".
+- **Bloqueo por organización** = bifurcación, no error: "Tu organización tiene que aprobar SecondBrain"
+  + botones **Pedírselo a TI** (abre `mailto:` con asunto y cuerpo prellenados, client id y enlace de
+  consentimiento), **¿Cómo lo habilito?** (OrgAccessHelpSheet con (A)/(B) visibles y (C) plegado; el
+  texto está en docs/org-access-help.md y debe ir a Localizable.strings), **Mientras tanto: pega un correo**.
+  Sin client id configurado: los botones Conectar siguen visibles; al pulsar se muestra la misma hoja
+  con el mensaje "SecondBrain aún no está registrada en Microsoft/Google. Quien administre la app pone
+  los IDs en Ajustes → Cuentas → Avanzado" (y el calendario de la Mac como alternativa).
+- **Correo**: un solo botón inteligente que nombra el destino: "Agregar a 🚀 Kickoff ▾" (menú:
+  cambiar proyecto · solo este mensaje). Si el hilo tiene >1 mensaje agrega la conversación completa
+  ("Agregar conversación (4)"). Línea pequeña: "Solo lectura · nunca envío ni borro nada". Tras guardar:
+  toast "Aprendiendo del correo… · Deshacer" (6 s; deshacer = `engine.delete(sourceId)` de las fuentes
+  recién creadas si aún no terminó la ingesta, si terminó `undo(historyId)`). Chip "✓ en el cerebro"
+  con menú "Ver en el proyecto · Quitar". Filtro "Conocidos / Todos" (remitente ∈ people/*.md) solo
+  si es barato; **sin** selección múltiple y **sin** selector de formato.
+- **Grafo**: un clic = enfocar (vecindario a 2 saltos, resto atenuado) + tarjeta lateral (título, tipo,
+  fecha, enlaces, botón "Abrir página"); clic en el fondo = ver todo. Sin doble clic. Primera apertura:
+  replay automático de ~4 s en orden de fecha y ajuste a pantalla; una línea de pista desechable
+  "Clic en un nodo para explorar · ▶ para ver cómo creció" (UserDefaults). En "Todo el cerebro": halos
+  suaves por proyecto con etiqueta "emoji nombre" en el centroide, sin leyenda; dentro de un proyecto:
+  chips por tipo con los mismos iconos que el resto de la app. Slider de tiempo = tira con puntos por
+  reunión y "Hoy" a la derecha. Etiquetas: solo hover, centros de cúmulo y grado alto. Ajuste automático.
+  Búsqueda con ⌘F (campo simple). Se mantiene la pestaña **Grafo** y "Ver en el grafo" en el wiki.
+- **Tema**: queda como lo implementó el skeleton (Ajustes + menú Ver). Verificar contraste del grafo en
+  claro y oscuro y que las WebViews cambian al instante.

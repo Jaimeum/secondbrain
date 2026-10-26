@@ -43,6 +43,19 @@ enum DebugSnapshots {
             }
             shots.append(("note", CGSize(width: 560, height: 520), AnyView(NoteSheet(projectSlug: slug))))
             shots.append(("menubar", CGSize(width: 310, height: 420), AnyView(MenuBarView())))
+            // v0.3 (CONTRACT §12.6); run with SB_DEMO_ACCOUNTS=1 for mail/meetings with data.
+            shots.append(("graph", CGSize(width: 1000, height: 680),
+                          AnyView(GraphView(scope: project.map { .project($0.slug) } ?? .global, focus: nil, onOpen: { _ in }))))
+            shots.append(("graph-all", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: nil, onOpen: { _ in }))))
+            shots.append(("mail", CGSize(width: 1000, height: 640), AnyView(MailView())))
+            shots.append(("meetings", CGSize(width: 1000, height: 640), AnyView(MeetingsView())))
+            if let account = state.engine.accounts.accounts.first,
+               let event = try? await state.engine.accounts.provider(for: account)
+                   .events(from: Date().addingTimeInterval(-3600), to: Date().addingTimeInterval(7 * 86_400)).first {
+                shots.append(("prep", CGSize(width: 760, height: 640), AnyView(MeetingPrepView(event: event))))
+            }
+            shots.append(("settings-accounts", CGSize(width: 560, height: 900), AnyView(SettingsView())))
+            shots.append(("orghelp", CGSize(width: 620, height: 520), AnyView(OrgAccessHelpSheet(provider: .microsoft))))
             for (name, size, view) in shots {
                 await render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
             }

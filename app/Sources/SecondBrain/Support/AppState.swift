@@ -7,6 +7,8 @@ import Transcription
 enum SidebarItem: Hashable {
     case project(String)
     case inbox
+    case mail
+    case meetings
     case people
     case brain
     case myTasks
@@ -85,6 +87,10 @@ final class AppState {
     private var dismissedMigrationNotice = UserDefaults.standard.string(forKey: "migration.dismissed")
     /// A page to open when the selected project appears (from "Mis pendientes" or the global timeline).
     var pendingPage: String?
+    /// v0.3: a page to focus in the Grafo tab ("Ver en el grafo" from a wiki page header).
+    var pendingGraphFocus: String?
+    /// v0.3: bumped when connected accounts change (connect / disconnect), so Correo and Reuniones reload.
+    var accountsRevision = 0
     @ObservationIgnored private var overdueReload: Task<Void, Never>?
 
     @ObservationIgnored private var modelTask: Task<Void, Never>?
@@ -109,6 +115,7 @@ final class AppState {
     // MARK: Lifecycle
 
     func launch() {
+        Self.applyAppearance(config.appearance)
         Notifier.requestAuthorization()
         applyHotKey()
         if config.onboardingComplete {
@@ -159,6 +166,37 @@ final class AppState {
         NSApp.terminate(nil)
     }
 
+    // MARK: Connected accounts (CONTRACT §12.3)
+
+    /// Opens the browser to sign in and adds the account. Throws `AccountError` (`.notConfigured`, `.cancelled`,
+    /// `.consentRequired` → show `OrgAccessHelpSheet`). Cancel by cancelling the calling task.
+    @discardableResult
+    func connectAccount(_ provider: AccountProvider) async throws -> ConnectedAccount {
+        let registration = OAuthAppRegistration.effective(config: config)
+        let account = try await engine.accounts.connect(provider, registration: registration) { url in
+            DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+        }
+        accountsRevision += 1
+        return account
+    }
+
+    func disconnectAccount(_ id: String) throws {
+        try engine.accounts.disconnect(id)
+        accountsRevision += 1
+    }
+
+    // MARK: Appearance (CONTRACT §12.1)
+
+    /// "system" follows macOS; "light" / "dark" force it for every window, sheet and web view, without a restart.
+    static func applyAppearance(_ mode: String) {
+        let appearance: NSAppearance? = switch mode {
+        case "light": NSAppearance(named: .aqua)
+        case "dark": NSAppearance(named: .darkAqua)
+        default: nil
+        }
+        NSApplication.shared.appearance = appearance
+    }
+
     // MARK: Menu language
 
     /// The language AppKit/SwiftUI menus (Edit, View, Window…) were built with at launch.
@@ -189,6 +227,7 @@ final class AppState {
             Self.applyMenuLanguage(next.uiLanguage)
         }
         if next.hotkeyEnabled != old.hotkeyEnabled { applyHotKey() }
+        if next.appearance != old.appearance { Self.applyAppearance(next.appearance) }
 
         let modelChanged = next.whisperModel != old.whisperModel
         if !engineStarted {

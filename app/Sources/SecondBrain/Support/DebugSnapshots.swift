@@ -59,6 +59,11 @@ enum DebugSnapshots {
             for (name, size, view) in shots {
                 await render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
             }
+            // MARK: v0.3 mail — after the smart button: ✓ chips + "Aprendiendo del correo… · Deshacer" (writes to the vault).
+            if let mail = await MailModel.snapshotAfterAdd(state: state) {
+                await render(MailView(model: mail).environment(state), size: CGSize(width: 1000, height: 640),
+                             to: dir.appendingPathComponent("mail-added.png"))
+            }
             exit(0)
         }
     }

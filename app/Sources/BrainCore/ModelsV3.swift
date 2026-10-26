@@ -42,14 +42,21 @@ public struct KnowledgeGraph: Codable, Sendable {
 
 public enum AccountProvider: String, Codable, CaseIterable, Sendable {
     case microsoft, google
+    /// The Mac's own Calendar (EventKit): calendar only, no mail, no OAuth. Account id is always "local:calendar".
+    case local
 
-    /// Human product name ("Microsoft 365", "Google").
+    /// Human product name ("Microsoft 365", "Google", "Calendario de la Mac").
     public var displayName: String {
         switch self {
         case .microsoft: "Microsoft 365"
         case .google: "Google"
+        case .local: "Mac Calendar"
         }
     }
+
+    /// Mail is only available on OAuth providers; `.local` only has a calendar.
+    public var hasMail: Bool { self != .local }
+    public var needsOAuth: Bool { self != .local }
 
     /// Read-only scopes requested at sign-in (§12.3).
     public var scopes: [String] {
@@ -58,6 +65,7 @@ public enum AccountProvider: String, Codable, CaseIterable, Sendable {
         case .google: ["openid", "email", "profile",
                        "https://www.googleapis.com/auth/gmail.readonly",
                        "https://www.googleapis.com/auth/calendar.readonly"]
+        case .local: []
         }
     }
 }
@@ -106,6 +114,7 @@ public struct OAuthAppRegistration: Codable, Equatable, Sendable {
         switch provider {
         case .microsoft: microsoftClientId.nonEmpty
         case .google: googleClientId.nonEmpty
+        case .local: nil
         }
     }
 
@@ -114,6 +123,7 @@ public struct OAuthAppRegistration: Codable, Equatable, Sendable {
         switch provider {
         case .microsoft: microsoftClientId.nonEmpty != nil
         case .google: googleClientId.nonEmpty != nil && googleClientSecret.nonEmpty != nil
+        case .local: true
         }
     }
 

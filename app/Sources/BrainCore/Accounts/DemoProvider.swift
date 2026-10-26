@@ -26,6 +26,8 @@ public final class DemoProvider: MailCalendarProvider {
         case .google:
             ConnectedAccount(provider: .google, email: "demo@gmail.com", displayName: "Ana García",
                              connectedAt: Date().addingTimeInterval(-86_400), scopes: provider.scopes)
+        case .local:
+            ConnectedAccount(provider: .local, email: "calendar", displayName: nil, connectedAt: Date(), scopes: [])
         }
     }
 
@@ -78,6 +80,7 @@ private struct DemoData {
         switch account.provider {
         case .microsoft: buildMicrosoft(account: account, lang: lang, now: now)
         case .google: buildGoogle(account: account, lang: lang, now: now)
+        case .local: buildGoogle(account: account, lang: lang, now: now)
         }
     }
 

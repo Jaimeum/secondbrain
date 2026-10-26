@@ -25,6 +25,7 @@ struct SelfTest: AsyncParsableCommand {
         t.group("tasks-parse") { testTaskParsing(t) }
         t.group("integration-fixes") { testIntegrationFixes(t) }
         await t.groupAsync("v03-models") { await testV3Models(t, root: root.appendingPathComponent("v03")) }
+        await t.groupAsync("v03-meetings") { await testMeetings(t, root: root.appendingPathComponent("meetings")) }
         await t.groupAsync("engine") { await testEngine(t, root: root.appendingPathComponent("engine")) }
         if let v01 {
             await t.groupAsync("migration") { await testMigration(t, source: URL(fileURLWithPath: v01), root: root.appendingPathComponent("v01")) }

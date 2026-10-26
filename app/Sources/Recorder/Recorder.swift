@@ -45,7 +45,9 @@ public enum RecorderWarning: Equatable, Sendable {
         self.sessionsDir = sessionsDir
     }
 
-    public func start(title: String?, projectSlug: String?, captureMic: Bool) async throws -> SessionManifest {
+    /// v0.3 (§12.5): `calendarEventId` / `attendees` (display names) tie the recording to its calendar event.
+    public func start(title: String?, projectSlug: String?, captureMic: Bool,
+                      calendarEventId: String? = nil, attendees: [String]? = nil) async throws -> SessionManifest {
         switch state {
         case .idle, .failed: break
         default: throw RecorderError.alreadyRecording
@@ -54,7 +56,8 @@ public enum RecorderWarning: Equatable, Sendable {
         warning = nil
         do {
             try FileManager.default.createDirectory(at: sessionsDir, withIntermediateDirectories: true)
-            let session = try RecordingSession(sessionsDir: sessionsDir, title: title, projectSlug: projectSlug, captureMic: captureMic)
+            let session = try RecordingSession(sessionsDir: sessionsDir, title: title, projectSlug: projectSlug, captureMic: captureMic,
+                                               calendarEventId: calendarEventId, attendees: attendees)
             session.onManifestChange = { [weak self] manifest in
                 Task { @MainActor in
                     guard let self, self.current?.id == manifest.id else { return }

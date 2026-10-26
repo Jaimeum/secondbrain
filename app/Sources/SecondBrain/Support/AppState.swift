@@ -136,6 +136,7 @@ final class AppState {
         reloadProjectsNow()
         reloadTemplates()
         refreshTasks()
+        MeetingsModel.shared.start(state: self)   // MARK: v0.3 meetings — agenda for Reuniones and the banners
         for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
             engine.recordingFinished(manifest)
         }
@@ -474,7 +475,8 @@ final class AppState {
         Task { isRecording ? await stopRecording() : await startRecording() }
     }
 
-    func startRecording() async {
+    // MARK: v0.3 meetings — optional calendar event + attendees (see AppState+Meetings.swift)
+    func startRecording(calendarEventId: String? = nil, attendees: [String]? = nil) async {
         guard engineStarted else {
             recordingError = L("record.finishSetupFirst")
             return
@@ -482,7 +484,8 @@ final class AppState {
         recordingError = nil
         do {
             let manifest = try await recorder.start(title: recordingTitleOrNil, projectSlug: recordingProjectSlug,
-                                                    captureMic: config.captureMic)
+                                                    captureMic: config.captureMic,
+                                                    calendarEventId: calendarEventId, attendees: attendees)
             engine.recordingStarted(manifest)
             currentRecordingId = manifest.id
             if let template = recordingTemplateId { engine.setTemplate(sourceId: manifest.id, templateId: template) }

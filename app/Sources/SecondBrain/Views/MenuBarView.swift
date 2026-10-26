@@ -19,6 +19,7 @@ struct MenuBarView: View {
             }
 
             if state.config.onboardingComplete {
+                MeetingBanner(inMenuBar: true)   // MARK: v0.3 meetings
                 RecordButton()
 
                 if state.isRecording {

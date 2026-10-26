@@ -49,6 +49,7 @@ enum DebugSnapshots {
             shots.append(("graph-all", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: nil, onOpen: { _ in }))))
             shots.append(("mail", CGSize(width: 1000, height: 640), AnyView(MailView())))
             shots.append(("meetings", CGSize(width: 1000, height: 640), AnyView(MeetingsView())))
+            shots.append(("meetings-week", CGSize(width: 1000, height: 640), AnyView(MeetingsView(initialSegment: .week))))   // MARK: v0.3 meetings
             if let account = state.engine.accounts.accounts.first,
                let event = try? await state.engine.accounts.provider(for: account)
                    .events(from: Date().addingTimeInterval(-3600), to: Date().addingTimeInterval(7 * 86_400)).first {

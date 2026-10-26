@@ -241,7 +241,7 @@ struct SourceRow: View {
                 .help(source.kind.label)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(source.title).font(.body.weight(.medium)).lineLimit(2)
+                Text(source.title + (source.calendarEventId != nil ? " 📅" : "")).font(.body.weight(.medium)).lineLimit(2)   // v0.3: from a calendar event
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
                 if source.addedLater {
                     Label(L("sources.addedLater"), systemImage: "clock.arrow.circlepath")

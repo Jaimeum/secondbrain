@@ -1,0 +1,8 @@
+.DS_Store
+/vault/
+/data/
+app/.build/
+app/.swiftpm/
+build/
+dist/
+*.xcodeproj

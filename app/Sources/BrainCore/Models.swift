@@ -1,0 +1,288 @@
+import Foundation
+
+// Shared types from docs/CONTRACT.md. Public signatures here are the contract between modules:
+// owners may add members but must not change or remove existing ones.
+
+// MARK: - Config
+
+public struct AppConfig: Codable, Equatable, Sendable {
+    public var vaultPath: String
+    public var dataPath: String
+    public var whisperModel: String
+    public var claudePath: String?
+    public var ingestModel: String
+    public var queryModel: String
+    public var uiLanguage: String
+    public var captureMic: Bool
+    public var gitEnabled: Bool
+    public var hotkeyEnabled: Bool
+    public var onboardingComplete: Bool
+
+    public static let `default` = AppConfig(
+        vaultPath: "~/Documents/SecondBrain",
+        dataPath: "~/Library/Application Support/SecondBrain/data",
+        whisperModel: "large-v3",
+        claudePath: nil,
+        ingestModel: "sonnet",
+        queryModel: "opus",
+        uiLanguage: "es",
+        captureMic: true,
+        gitEnabled: false,
+        hotkeyEnabled: true,
+        onboardingComplete: false
+    )
+
+    public static var configURL: URL {
+        if let override = ProcessInfo.processInfo.environment["SB_CONFIG"], !override.isEmpty {
+            return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SecondBrain/config.json")
+    }
+
+    public static func load() -> AppConfig {
+        guard let data = try? Data(contentsOf: configURL),
+              let config = try? JSONDecoder.sb.decode(AppConfig.self, from: data) else { return .default }
+        return config
+    }
+
+    public func save() throws {
+        let url = Self.configURL
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder.sb.encode(self).write(to: url, options: .atomic)
+    }
+
+    public var vaultURL: URL { URL(fileURLWithPath: (vaultPath as NSString).expandingTildeInPath) }
+    public var dataURL: URL { URL(fileURLWithPath: (dataPath as NSString).expandingTildeInPath) }
+}
+
+public struct DataPaths: Sendable {
+    public let root: URL
+    public init(root: URL) { self.root = root }
+    public var sessions: URL { root.appendingPathComponent("sessions") }
+    public var sources: URL { root.appendingPathComponent("sources") }
+    public var jobs: URL { root.appendingPathComponent("jobs") }
+    public var history: URL { root.appendingPathComponent("history") }
+    public var models: URL { root.appendingPathComponent("models") }
+    public var logs: URL { root.appendingPathComponent("logs") }
+
+    public func ensureExist() throws {
+        for dir in [sessions, sources, jobs, history, models, logs] {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+}
+
+// MARK: - Recording
+
+public struct SessionManifest: Codable, Equatable, Sendable {
+    public var id: String
+    public var title: String?
+    public var projectSlug: String?
+    public var startedAt: Date
+    public var endedAt: Date?
+    public var sampleRate: Int
+    public var chunkSeconds: Int
+    public var tracks: [String: [String]]
+    public var micCaptured: Bool
+
+    public init(id: String, title: String?, projectSlug: String?, startedAt: Date, endedAt: Date? = nil,
+                sampleRate: Int = 16000, chunkSeconds: Int = 300, tracks: [String: [String]] = [:], micCaptured: Bool) {
+        self.id = id; self.title = title; self.projectSlug = projectSlug; self.startedAt = startedAt
+        self.endedAt = endedAt; self.sampleRate = sampleRate; self.chunkSeconds = chunkSeconds
+        self.tracks = tracks; self.micCaptured = micCaptured
+    }
+
+    /// `yyyyMMdd-HHmmss-xxxx`
+    public static func newId(at date: Date = Date()) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd-HHmmss"
+        return f.string(from: date) + "-" + String(format: "%04x", UInt16.random(in: 0...UInt16.max))
+    }
+
+    public static func load(from dir: URL) throws -> SessionManifest {
+        let data = try Data(contentsOf: dir.appendingPathComponent("session.json"))
+        return try JSONDecoder.sb.decode(SessionManifest.self, from: data)
+    }
+
+    public func save(to dir: URL) throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try JSONEncoder.sb.encode(self).write(to: dir.appendingPathComponent("session.json"), options: .atomic)
+    }
+}
+
+// MARK: - Sources, jobs, history
+
+public enum SourceKind: String, Codable, Sendable { case meeting, document, note, url }
+
+public enum SourceStatus: String, Codable, Sendable {
+    case recording, queued, transcribing, needsProject, ingesting, done, failed
+}
+
+public struct SourceRecord: Codable, Identifiable, Equatable, Sendable {
+    public var id: String
+    public var kind: SourceKind
+    public var title: String
+    public var projectSlug: String?
+    public var status: SourceStatus
+    public var rawPath: String?
+    public var historyId: String?
+    public var suggestedProject: String?
+    public var suggestionReason: String?
+    public var error: String?
+    public var progress: Double?
+    public var createdAt: Date
+    public var updatedAt: Date
+    public var durationSeconds: Double?
+
+    public init(id: String, kind: SourceKind, title: String, projectSlug: String?, status: SourceStatus,
+                rawPath: String? = nil, createdAt: Date = Date()) {
+        self.id = id; self.kind = kind; self.title = title; self.projectSlug = projectSlug; self.status = status
+        self.rawPath = rawPath; self.createdAt = createdAt; self.updatedAt = createdAt
+    }
+}
+
+public enum JobKind: String, Codable, Sendable { case transcribe, ingest, classify, lint, saveAnswer }
+public enum JobStatus: String, Codable, Sendable { case queued, running, done, failed, cancelled }
+
+public struct Job: Codable, Identifiable, Equatable, Sendable {
+    public var id: String
+    public var kind: JobKind
+    public var status: JobStatus
+    public var sourceId: String?
+    public var projectSlug: String?
+    public var payload: [String: String]
+    public var attempts: Int
+    public var notBefore: Date?
+    public var error: String?
+    public var message: String?
+    public var progress: Double?
+    public var historyId: String?
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(kind: JobKind, sourceId: String? = nil, projectSlug: String? = nil, payload: [String: String] = [:]) {
+        let now = Date()
+        self.id = UUID().uuidString.lowercased(); self.kind = kind; self.status = .queued
+        self.sourceId = sourceId; self.projectSlug = projectSlug; self.payload = payload
+        self.attempts = 0; self.createdAt = now; self.updatedAt = now
+    }
+}
+
+public enum ChangeType: String, Codable, Sendable { case added, modified, deleted }
+
+public struct FileChange: Codable, Equatable, Sendable {
+    public var path: String
+    public var change: ChangeType
+    public init(path: String, change: ChangeType) { self.path = path; self.change = change }
+}
+
+public struct HistoryEntry: Codable, Identifiable, Equatable, Sendable {
+    public var id: String
+    public var title: String
+    public var kind: JobKind
+    public var sourceId: String?
+    public var projectSlug: String?
+    public var changes: [FileChange]
+    public var createdAt: Date
+    public var undone: Bool
+}
+
+// MARK: - Transcription interface
+
+public struct TranscriptSegment: Codable, Equatable, Sendable {
+    public var start: Double
+    public var end: Double
+    public var speaker: String   // "me" | "S1", "S2", ... | "S?"
+    public var track: String     // "mic" | "system"
+    public var text: String
+    public init(start: Double, end: Double, speaker: String, track: String, text: String) {
+        self.start = start; self.end = end; self.speaker = speaker; self.track = track; self.text = text
+    }
+}
+
+public struct Transcript: Codable, Equatable, Sendable {
+    public var language: String?
+    public var durationSeconds: Double
+    public var segments: [TranscriptSegment]
+    public init(language: String?, durationSeconds: Double, segments: [TranscriptSegment]) {
+        self.language = language; self.durationSeconds = durationSeconds; self.segments = segments
+    }
+}
+
+public struct ModelPrepProgress: Sendable {
+    public var fraction: Double
+    public var message: String
+    public init(fraction: Double, message: String) { self.fraction = fraction; self.message = message }
+}
+
+public protocol Transcribing: AnyObject, Sendable {
+    func prepare(progress: @escaping @Sendable (ModelPrepProgress) -> Void) async throws
+    var isReady: Bool { get }
+    func transcribe(sessionDir: URL, manifest: SessionManifest,
+                    progress: @escaping @Sendable (Double, String) -> Void) async throws -> Transcript
+}
+
+// MARK: - Claude
+
+public enum ClaudeEvent: Sendable, Equatable {
+    case text(String)
+    case tool(name: String, detail: String)
+    case done(result: String, isError: Bool)
+}
+
+public enum ClaudeMode: Sendable { case readOnly, edit }
+
+public enum ClaudeError: Error {
+    case notInstalled, notAuthenticated
+    case rateLimited(resetAt: Date?)
+    case failed(String)
+}
+
+// MARK: - Vault
+
+public struct Project: Codable, Identifiable, Hashable, Sendable {
+    public var slug: String
+    public var name: String
+    public var description: String
+    public var emoji: String
+    public var createdAt: Date
+    public var id: String { slug }
+    public init(slug: String, name: String, description: String, emoji: String, createdAt: Date = Date()) {
+        self.slug = slug; self.name = name; self.description = description; self.emoji = emoji; self.createdAt = createdAt
+    }
+}
+
+public struct WikiPage: Identifiable, Hashable, Sendable {
+    public var path: String
+    public var title: String
+    public var id: String { path }
+    public init(path: String, title: String) { self.path = path; self.title = title }
+}
+
+public enum EngineEvent: Sendable {
+    case sourceUpdated(SourceRecord)
+    case jobFailed(Job)
+    case rateLimited(until: Date)
+    case historyAdded(HistoryEntry)
+}
+
+// MARK: - Coding
+
+public extension JSONEncoder {
+    static var sb: JSONEncoder {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return e
+    }
+}
+
+public extension JSONDecoder {
+    static var sb: JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }
+}

@@ -115,6 +115,8 @@ private final class ConfigBox: @unchecked Sendable {
         self.queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
         self.accounts = AccountStore(fileURL: paths.accounts)
         Log.configure(logsDir: paths.logs)
+        // MARK: v0.3 accounts — a connected address joins the owner's emails
+        accounts.onConnected = { [weak self] in self?.rememberOwnerEmail(of: $0) }
     }
 
     // MARK: Lifecycle

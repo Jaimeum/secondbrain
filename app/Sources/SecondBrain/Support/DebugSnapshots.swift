@@ -56,6 +56,13 @@ enum DebugSnapshots {
             }
             shots.append(("settings-accounts", CGSize(width: 560, height: 900), AnyView(SettingsView())))
             shots.append(("orghelp", CGSize(width: 620, height: 520), AnyView(OrgAccessHelpSheet(provider: .microsoft))))
+            // MARK: v0.3 accounts — the connect sheet's trust step and the organization-block fork
+            shots.append(("trust", CGSize(width: 460, height: 470),
+                          AnyView(TrustSheet(connector: AccountConnector(preview: ConnectFlow(provider: .microsoft, phase: .trust))))))
+            shots.append(("blocked", CGSize(width: 460, height: 520), AnyView(AccountBlockedView(
+                provider: .microsoft, reason: .consent, context: .meetings, onUseMacCalendar: {}, onClose: {}))))
+            shots.append(("connect-empty", CGSize(width: 760, height: 460), AnyView(ConnectAccountsEmptyState(
+                symbol: "calendar", title: L("meetings.empty.title"), message: L("meetings.empty.message")))))
             for (name, size, view) in shots {
                 await render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
             }

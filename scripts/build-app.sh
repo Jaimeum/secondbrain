@@ -125,6 +125,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<string>SecondBrain usa el micrófono para grabar tu voz en las reuniones. Todo se procesa en tu Mac. / SecondBrain uses the microphone to record your voice in meetings. Everything is processed on your Mac.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>SecondBrain graba el audio de tu computadora (la llamada o reunión) para transcribirlo en tu Mac. / SecondBrain records your computer's audio (the call or meeting) to transcribe it on your Mac.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>SecondBrain lee tu calendario para mostrarte tus reuniones y grabarlas con su título y asistentes. Solo lectura; todo se queda en tu Mac. / SecondBrain reads your calendar to show your meetings and record them with their title and attendees. Read-only; everything stays on your Mac.</string>
 </dict>
 </plist>
 EOF

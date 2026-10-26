@@ -114,7 +114,7 @@ public struct SessionManifest: Codable, Equatable, Sendable {
 
 // MARK: - Sources, jobs, history
 
-public enum SourceKind: String, Codable, Sendable { case meeting, document, note, url }
+public enum SourceKind: String, Codable, Sendable { case meeting, document, note, url, email }
 
 public enum SourceStatus: String, Codable, Sendable {
     case recording, queued, transcribing, needsProject, ingesting, done, failed
@@ -135,6 +135,13 @@ public struct SourceRecord: Codable, Identifiable, Equatable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
     public var durationSeconds: Double?
+    // v0.2 (CONTRACT §11): when it happened vs. createdAt = when it was added.
+    public var eventDate: Date?
+    public var templateId: String?
+    public var threadKey: String?
+
+    /// The date the timeline uses: when it happened, falling back to when it was added.
+    public var timelineDate: Date { eventDate ?? createdAt }
 
     public init(id: String, kind: SourceKind, title: String, projectSlug: String?, status: SourceStatus,
                 rawPath: String? = nil, createdAt: Date = Date()) {
@@ -143,7 +150,7 @@ public struct SourceRecord: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
-public enum JobKind: String, Codable, Sendable { case transcribe, ingest, classify, lint, saveAnswer }
+public enum JobKind: String, Codable, Sendable { case transcribe, ingest, classify, lint, saveAnswer, reformat, makeTemplate, manualEdit }
 public enum JobStatus: String, Codable, Sendable { case queued, running, done, failed, cancelled }
 
 public struct Job: Codable, Identifiable, Equatable, Sendable {
@@ -248,6 +255,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var description: String
     public var emoji: String
     public var createdAt: Date
+    public var defaultTemplate: String?   // v0.2: template id for meetings/emails of this project
     public var id: String { slug }
     public init(slug: String, name: String, description: String, emoji: String, createdAt: Date = Date()) {
         self.slug = slug; self.name = name; self.description = description; self.emoji = emoji; self.createdAt = createdAt

@@ -420,6 +420,134 @@ Info.plist, icono simple generado (iconutil, opcional), copia bundles de recurso
 `release.sh <version>` (gh repo create si no existe, push, gh release create con zip+dmg).
 Versión en `VERSION` (raíz), inicial `0.1.0`.
 
+## 11. v0.2 — Pendientes, acuerdos, formatos, exportar, correos y fechas
+
+Tipos compartidos nuevos: `app/Sources/BrainCore/ModelsV2.swift` (+ campos añadidos en Models.swift:
+`SourceKind.email`; `SourceRecord.eventDate/templateId/threadKey/timelineDate`; `JobKind.reformat/
+makeTemplate/manualEdit`; `Project.defaultTemplate`). API pública v0.2: `BrainCore/_V2Skeleton.swift`
+(firmas vinculantes; el dueño las mueve a archivos reales y borra el skeleton).
+
+### 11.1 Fechas y línea de tiempo (requisito explícito del usuario)
+Toda fuente tiene DOS fechas distintas, nunca se confunden:
+- **Cuándo pasó** (`eventDate` en SourceRecord; `date:` en el frontmatter del raw, ISO 8601 CON zona
+  horaria, ej `2026-10-26T15:30:00-06:00`): reunión grabada = `startedAt`; audio importado = fecha de
+  creación de la grabación (metadata AVAsset `creationDate` > fecha de creación del archivo > ahora,
+  y la UI permite corregirla al importar); correo = header Date/Fecha/Enviado; nota/documento = la que
+  el usuario indique (por defecto: ahora para notas, fecha del archivo para documentos) — Claude puede
+  añadir `document_date:` si el contenido declara otra fecha.
+- **Cuándo se agregó** (`createdAt` en SourceRecord; `added:` en el frontmatter del raw, ISO con zona).
+Reglas:
+- Fechas relativas ("el viernes", "next week", "mañana") se resuelven contra la fecha del EVENTO de la
+  fuente, nunca contra hoy ni contra la fecha de ingesta.
+- Orden cronológico = fecha del evento. Una fuente vieja ingerida tarde NO pisa hechos más nuevos:
+  el estado actual lo define el evento más reciente; si la fuente tardía aporta algo, se integra en su
+  lugar cronológico (Historia, timeline) y si contradice un hecho posterior se marca como histórico,
+  no como cambio.
+- Cada proyecto mantiene `wiki/timeline.md` (type: timeline): entradas por fecha de evento
+  (`- 2026-10-26 15:30 · 🎙️ [[2026-10-26-1530-kickoff|Kickoff]] — 1 línea`), con hitos, decisiones,
+  reuniones, correos, fechas límite relevantes; fecha sin hora cuando no se conoce la hora.
+- Los logs (`log.md`) siguen siendo por fecha de ingesta (es la bitácora de lo que hizo Claude) e
+  incluyen la fecha del evento si difiere (`## [2026-11-02] ingest | Kickoff (reunión del 2026-10-26)`).
+- Mostrar en la UI siempre en zona local, con "hace 2 días" cuando ayude, y ambas fechas en el
+  detalle de una fuente ("Reunión: 26 oct 2026, 15:30 · Agregada: 2 nov 2026").
+- `setEventDate(sourceId:date:)` corrige la fecha: actualiza `date:` del raw (excepción documentada a
+  la inmutabilidad, como assign) y re-encola ingest si ya se había aprendido (re-ingest in place).
+- `timeline(projectSlug:)` (nil = todos) combina: fuentes (por eventDate), decisiones (fecha de la
+  decisión), hitos/fechas de `wiki/timeline.md`, tareas con fecha límite. Ordenado ascendente.
+- Migración: fuentes v0.1 sin eventDate → derivarlo del `date:` del raw o del startedAt de la sesión.
+
+### 11.2 Pendientes y acuerdos (míos / de ellos)
+- `wiki/tasks.md` sigue siendo la única lista viva (formato existente). "Mío" = el dueño de la tarea es
+  el dueño del vault (grupo "Yo"/"Me" + link a su página de persona con `owner: true`; el nombre está
+  en `people/README.md`).
+- La página de cada reunión (y de cada hilo de correo) tiene la sección `## Acuerdos` con
+  `### Mis compromisos`, `### Compromisos de los demás` (cada uno con quién y para cuándo),
+  `### Acordado entre todos` (acuerdos mutuos/decisiones conjuntas) — viñetas simples con cita.
+- `tasks(projectSlug:)` parsea `tasks.md` (nil = todos los proyectos) → `[TaskItem]`;
+  `tasks(forSourceId:)` = las que citan esa fuente. `setTask(_:done:)` edita la línea (`[ ]`↔`[x]`,
+  añade/quita `✅ YYYY-MM-DD`), registrado en HistoryStore como `.manualEdit` (deshacible), rechazado
+  con error "busy" si hay un job de Claude editando ese proyecto; si la línea cambió (Claude la
+  reescribió) se busca por id/texto normalizado y si no se encuentra → error claro.
+- UI: pestaña **Pendientes** por proyecto (Mis pendientes / De los demás / Sin dueño / Hechas; vencidas
+  en rojo; filtro por reunión) y vista global **Mis pendientes** en el sidebar (todas las de todos los
+  proyectos agrupadas: Vencidas, Hoy, Esta semana, Más adelante, Sin fecha). Desde cada reunión:
+  "Pendientes de esta reunión" + exportar como checklist.
+
+### 11.3 Formatos personalizados ("plantillas")
+- Archivos en `vault/templates/<id>.md` con frontmatter `type: template`, `name`, `description`,
+  `scope: meeting|email|any`, `builtin: true|false`, y cuerpo = estructura markdown (encabezados) con
+  instrucciones en comentarios `<!-- … -->`. Presets incluidos (builtin): `estandar` (el formato
+  actual de §8.1 + Acuerdos), `ejecutivo` (1 página: contexto, 3-5 puntos, acuerdos, próximos pasos),
+  `detallado` (por tema, con citas extensas), `solo-acuerdos` (acuerdos + pendientes + fechas),
+  `cliente-ventas` (necesidades, objeciones, presupuesto, siguientes pasos), `uno-a-uno` (1:1),
+  `standup` (ayer/hoy/bloqueos por persona), `entrevista` (preguntas/respuestas, evaluación),
+  `correo-hilo` (scope email: resumen del hilo, cronología, acuerdos, pendientes, preguntas abiertas).
+  Editar un builtin crea una copia del usuario (`<id>-mio`); los builtin se pueden actualizar en
+  migraciones, los del usuario nunca se tocan.
+- Selección: `source.templateId` (elegido al grabar/importar/pegar) > `project.defaultTemplate` >
+  `estandar` (o `correo-hilo` para correos). El cuerpo de la página de la reunión sigue la plantilla;
+  SIEMPRE se mantienen: frontmatter obligatorio, `speakers:`, `## Acuerdos` (si la plantilla no lo
+  tiene, se añade), citas y `## Fuente`. El resto del wiki (tasks, decisiones, personas, timeline) se
+  actualiza igual sin importar la plantilla.
+- `ingest` recibe `$ARGUMENTS` = `<ruta raw> | template=templates/<id>.md` (si no hay template, el
+  default). `reformat(sourceId:templateId:)` → job `.reformat` → comando `reformat.md`: reescribe SOLO
+  la página de esa fuente con otra plantilla (no toca el resto del wiki), history-tracked.
+  `makeTemplate(fromDescription:name:)` → job `.makeTemplate` → comando `make-template.md`: Claude
+  escribe `templates/<slug>.md` desde una descripción en lenguaje natural.
+
+### 11.4 Exportar
+- Formatos: Markdown, Texto (.txt), Word (.docx), PDF, HTML, RTF — todos nativos (sin dependencias de
+  runtime): markdown → HTML (swift-markdown de Apple, `apple/swift-markdown`, permitido como dependencia
+  de BrainCore SOLO para el Exporter) → `NSAttributedString` → `.officeOpenXML` (docx), `.rtf`, PDF vía
+  `NSPrintOperation.pdfOperation` sobre un NSTextView paginado (A4/Carta según locale, márgenes 2 cm),
+  HTML con CSS legible embebido. Wikilinks → texto (`[[x|Label]]` → Label) salvo `keepWikilinks` en md.
+  Frontmatter removido salvo `keepFrontmatter`. Callouts `> [!conflict]` → cita con etiqueta. Checkboxes
+  → ☐/☑ en txt/docx/pdf. Debe abrirse bien en Word/Pages/Google Docs (verificar con `textutil`).
+- `exportDocument(sourceId:options:)` arma UN documento: título + fechas (cuándo pasó / cuándo se
+  agregó) + resumen (página wiki, plantilla aplicada) + Acuerdos/Pendientes (míos / de los demás) +
+  transcripción opcional (con/sin timestamps; "Hablante 1" → nombre si `speakers:` lo mapea) o los
+  correos del hilo. `exportDocument(pagePath:)` para cualquier página. `exportTasks` = checklist.
+- UI: botón "Exportar…" en reunión/fuente/hilo/página/pendientes → hoja con formato, opciones y
+  NSSavePanel; "Copiar" (texto enriquecido + plano). CLI: `sb export <sourceId|pagePath> --format docx
+  --out <file> [--transcript] [--no-timestamps]`.
+
+### 11.5 Correos (pegar)
+- "Agregar correo": textarea para pegar (uno o varios mensajes). `parseEmail` (local, determinista):
+  headers en es/en de Gmail, Outlook, Apple Mail y reenvíos (`From/De`, `To/Para`, `Cc`, `Date/Fecha/
+  Enviado/Sent`, `Subject/Asunto`; formato Gmail "Nombre <email>" + fecha "lun, 26 oct 2026, 10:15" +
+  "para mí/to me"), separa `body` (nuevo) de `quotedHistory` ("On … wrote:", "El … escribió:",
+  "-----Original Message-----", "De: … Enviado:", líneas `>`). Fechas con zona; sin zona → local.
+  `isFromOwner` por `VaultStore.ownerEmails()` (línea `- **Correo:**` en `people/README.md`, varios
+  separados por coma; la UI tiene campo "Tus correos" en Ajustes/onboarding). La UI muestra una vista
+  previa editable (asunto, de, para, fecha) antes de guardar.
+- Hilos: `matchThreads` puntúa hilos existentes (todos los proyectos + inbox): asunto normalizado igual
+  (quitando Re/RE/Fwd/FW/RV/Rv/Fw/AW/WG/TR/[tags]) → fuerte; participantes compartidos + asunto similar
+  → medio; el `quotedHistory` contiene el cuerpo de un correo ya guardado → fuerte. La UI: "Parece parte
+  del hilo «X» (3 correos, último 24 oct) — Agregar al hilo / Nuevo hilo / Elegir otro". En la vista de
+  un hilo: "Agregar el siguiente correo" (threadKey fijo). Duplicado exacto (mismo from+date+cuerpo) →
+  aviso, no se agrega dos veces.
+- Almacenamiento (inmutable): `projects/<p>/raw/emails/<thread-key>/<YYYY-MM-DD-HHmm>-<from-slug>.md`
+  (frontmatter `type: email`, `source_id`, `thread`, `subject`, `from`, `to`, `cc`, `date` (enviado),
+  `added`, `project`; cuerpo = body; luego `## Historial citado` con quotedHistory) y
+  `<thread-key>/_thread.json` (metadata de la app: subject, participants, messages[{file, date, from}]
+  — Claude no lo edita). Sin proyecto → `_inbox/emails/<thread-key>/` + classify; asignar mueve el hilo
+  completo. Si el hilo ya está en un proyecto, el correo nuevo va ahí automáticamente.
+- Wiki: `wiki/emails/<thread-key>.md` (type: email-thread), plantilla `correo-hilo` o la elegida: en breve,
+  estado actual del hilo, cronología (fecha enviada · de → para · lo nuevo de ese correo, con cita),
+  `## Acuerdos` (míos / de los demás / entre todos), pendientes, preguntas abiertas, participantes. Cada
+  correo nuevo actualiza el hilo de forma incremental (solo lo nuevo; ignora el historial citado ya
+  conocido) y el resto del wiki (tasks, decisiones, personas, timeline) como cualquier fuente. En la UI
+  todo lo que viene de un correo se ve con ✉️ (fuentes, timeline, citas en Preguntar).
+
+### 11.6 Migración de vaults v0.1
+`VaultStore.installTemplateIfNeeded()` pasa a ser `migrateIfNeeded()` (mantener el nombre viejo como
+alias): archivo `vault/.secondbrain/template-version` (ej `2`). Al subir de versión: copiar archivos
+nuevos que falten (templates/, comandos nuevos, `wiki/timeline.md` y `wiki/emails/` en cada proyecto);
+SOBREESCRIBIR `.claude/commands/*` (son de la app); `CLAUDE.md` global: si su hash coincide con el
+de una versión publicada (guardar hashes conocidos) → reemplazar; si el usuario lo editó → escribir
+`CLAUDE.v2.md` junto a él y emitir un aviso (EngineEvent nuevo o log + campo `migrationNotice`).
+Nunca tocar páginas del wiki existentes salvo crear las nuevas que falten.
+
 ## Decisiones durante el build
 (cada agente añade aquí, con su letra, cualquier decisión que afecte a otros)
 - [Lead] Spike verificado (CLT, sin Xcode): WhisperKit `large-v3` + SpeakerKit transcriben y diarizan un

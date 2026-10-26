@@ -75,6 +75,7 @@ extension SourceKind {
         case .document: "doc.text"
         case .note: "note.text"
         case .url: "link"
+        case .email: "envelope"
         }
     }
 
@@ -84,6 +85,7 @@ extension SourceKind {
         case .document: L("kind.document")
         case .note: L("kind.note")
         case .url: L("kind.url")
+        case .email: L("kind.email")
         }
     }
 }

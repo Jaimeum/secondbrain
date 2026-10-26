@@ -152,6 +152,9 @@ private struct HistoryRow: View {
         case .saveAnswer: "bookmark"
         case .classify: "tray"
         case .transcribe: "waveform"
+        case .reformat: "doc.richtext"
+        case .makeTemplate: "rectangle.and.pencil.and.ellipsis"
+        case .manualEdit: "checkmark.circle"
         }
     }
 }

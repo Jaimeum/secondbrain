@@ -354,3 +354,4 @@
 "sources.addFilesHelp" = "Documents (PDF, Word, text) or audio and video recordings. Recordings are transcribed automatically.";
 "sources.panelMessage" = "Choose documents or audio/video recordings. Recordings are transcribed automatically.";
 "vault.switching" = "Finishing the current task… then I’ll open the new brain folder.";
+"kind.email" = "Email";

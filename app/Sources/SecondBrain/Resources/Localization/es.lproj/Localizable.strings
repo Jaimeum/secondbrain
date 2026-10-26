@@ -354,3 +354,4 @@
 "sources.addFilesHelp" = "Documentos (PDF, Word, texto) o grabaciones de audio y video. Las grabaciones se transcriben automáticamente.";
 "sources.panelMessage" = "Elige documentos o grabaciones de audio/video. Las grabaciones se transcriben automáticamente.";
 "vault.switching" = "Terminando la tarea actual… luego abro la nueva carpeta del cerebro.";
+"kind.email" = "Correo";

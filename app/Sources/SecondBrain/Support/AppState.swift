@@ -388,6 +388,7 @@ final class AppState {
             case .classify: return QueueStatus(text: L("queue.classifying", title), progress: nil)
             case .lint: return QueueStatus(text: L("queue.linting"), progress: nil)
             case .saveAnswer: return QueueStatus(text: L("queue.savingAnswer"), progress: nil)
+            case .reformat, .makeTemplate, .manualEdit: return QueueStatus(text: job.message ?? "", progress: nil)  // TODO v0.2 strings
             }
         }
         let queued = jobs.filter { $0.status == .queued }

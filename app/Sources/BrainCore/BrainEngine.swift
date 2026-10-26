@@ -582,6 +582,7 @@ private final class ConfigBox: @unchecked Sendable {
             case .classify: try await runClassify(job)
             case .lint: try await runLint(job)
             case .saveAnswer: try await runSaveAnswer(job)
+            case .reformat, .makeTemplate, .manualEdit: fatalError("TODO v0.2")
             }
             return .success
         } catch let error as ClaudeError {
@@ -923,6 +924,7 @@ private final class ConfigBox: @unchecked Sendable {
         case .meeting: sub = "meetings"
         case .note: sub = "notes"
         case .document, .url: sub = "docs"
+        case .email: sub = "emails"
         }
         if let projectSlug { return vault.root.appendingPathComponent("projects/\(projectSlug)/raw/\(sub)") }
         return vault.root.appendingPathComponent("_inbox/\(sub)")
@@ -963,6 +965,7 @@ private final class ConfigBox: @unchecked Sendable {
         case .classify: return lang.t("Buscando a qué proyecto pertenece…", "Figuring out which project it belongs to…")
         case .lint: return lang.t("Revisando tu cerebro…", "Checking your brain…")
         case .saveAnswer: return lang.t("Guardando la respuesta en el wiki…", "Saving the answer to the wiki…")
+        case .reformat, .makeTemplate, .manualEdit: return ""   // TODO v0.2
         }
     }
 

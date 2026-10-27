@@ -12,6 +12,10 @@ struct SidebarView: View {
         List(selection: selection) {
             Section {
                 item(L("home.title"), symbol: "house").tag(SidebarItem.home)
+                    // Re-clicking the selected row doesn't go through the selection binding: pop Inicio to its root.
+                    .simultaneousGesture(TapGesture().onEnded {
+                        if state.selection?.normalized == .home { state.homePopToken += 1 }
+                    })
                 item(L("sidebar.meetings"), symbol: "calendar").tag(SidebarItem.meetings)
                 item(L("sidebar.mail"), symbol: "envelope").tag(SidebarItem.mail)
                 item(L("tasks.title"), symbol: "checklist")

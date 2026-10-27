@@ -78,6 +78,8 @@ no lo que se mueve, se arrastra o depende de AppKit. Revisar a mano con la app c
 
 ## 4. Diferido de v0.5
 
+- Oferta de regla en Correo: el dominio sigue en negritas y queda un comentario viejo sobre el contraste de `text2` (`RuleOfferBar.swift`).
+
 - Búsqueda de texto completo en ⌘K (hoy: títulos, nombres y metadatos).
 - Animación D "conexión encontrada" (`docs/brand/05_motion/`).
 - Exportes Rive / Lottie de las animaciones de marca.

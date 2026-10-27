@@ -87,6 +87,7 @@ mantiene un wiki por proyecto con todo lo que se habló. El audio nunca sale de 
 único que se envía es el texto que Claude lee con tu propia cuenta.
 
 ### Novedades
+- **Arreglado: conectar tu cuenta de Claude** fallaba con "no se pudo conectar" cuando la app capturaba el token a medias; ahora espera a que esté completo, y si el token guardado no sirve pero tu `claude` ya tiene sesión, usa esa sesión.
 - **Conectar Microsoft 365 y GitHub ya funciona desde la app:** SecondBrain quedó registrada en Microsoft (correo y calendario de Outlook, solo lectura) y en GitHub (conexión con código de dispositivo, sin pegar tokens).
 - Incluye todo lo de 0.5.0: nueva identidad **secondbrain**, navegación simplificada (Inicio · Reuniones · Correo · Pendientes · Personas), **⌘K** para buscar o preguntar y pantallas que caben en cualquier tamaño de ventana.
 
@@ -113,6 +114,7 @@ Records your meetings (computer audio + your mic), transcribes them **on your Ma
 per-project wiki of everything discussed. Audio never leaves your computer.
 
 ### What's new
+- **Fixed: connecting your Claude account** failed with "couldn't connect" when the app captured the token half-printed; it now waits for the full token, and if the stored token is rejected but your `claude` is already signed in, it uses that session.
 - **Connect Microsoft 365 and GitHub from the app:** SecondBrain is now registered with Microsoft (Outlook mail and calendar, read-only) and GitHub (device-code sign-in, no token pasting).
 - Includes everything from 0.5.0: the new **secondbrain** identity, simpler navigation (Home · Meetings · Mail · Tasks · People), **⌘K** to search or ask, and screens that fit any window size.
 

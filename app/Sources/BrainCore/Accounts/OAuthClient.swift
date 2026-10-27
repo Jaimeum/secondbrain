@@ -50,9 +50,11 @@ public struct OAuthEndpoint: Sendable, Equatable {
                       extraParameters: [("response_mode", "query"), ("prompt", "select_account")])
     }
 
-    public static func google(clientId: String, clientSecret: String?) -> OAuthEndpoint {
-        OAuthEndpoint(provider: .google, authorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
-                      tokenURL: "https://oauth2.googleapis.com/token", clientId: clientId, clientSecret: clientSecret,
+    public static func google(clientId: String, clientSecret: String?, authURI: String? = nil, tokenURI: String? = nil) -> OAuthEndpoint {
+        // Google's downloaded client file carries its own auth_uri/token_uri; use them when present (https only).
+        func https(_ s: String?) -> String? { guard let s, s.hasPrefix("https://") else { return nil }; return s }
+        return OAuthEndpoint(provider: .google, authorizeURL: https(authURI) ?? "https://accounts.google.com/o/oauth2/v2/auth",
+                      tokenURL: https(tokenURI) ?? "https://oauth2.googleapis.com/token", clientId: clientId, clientSecret: clientSecret,
                       scopes: AccountProvider.google.scopes,
                       extraParameters: [("access_type", "offline"), ("prompt", "consent"), ("include_granted_scopes", "true")])
     }
@@ -64,7 +66,8 @@ public struct OAuthEndpoint: Sendable, Equatable {
         }
         switch provider {
         case .microsoft: return .microsoft(clientId: id)
-        case .google: return .google(clientId: id, clientSecret: registration.googleClientSecret.nonEmpty)
+        case .google: return .google(clientId: id, clientSecret: registration.googleClientSecret.nonEmpty,
+                                     authURI: registration.googleAuthURI, tokenURI: registration.googleTokenURI)
         case .local: throw AccountError.notConfigured(provider)
         }
     }

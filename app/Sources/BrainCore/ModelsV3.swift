@@ -104,8 +104,14 @@ public struct OAuthAppRegistration: Codable, Equatable, Sendable {
     public var microsoftClientId: String?   // tenant "common"
     public var googleClientId: String?
     public var googleClientSecret: String?  // Google requires it for desktop apps; not a real secret
-    public init(microsoftClientId: String? = nil, googleClientId: String? = nil, googleClientSecret: String? = nil) {
+    // Straight from Google's downloaded client_secret_….json (optional; the app has defaults for all of them).
+    public var googleProjectId: String?
+    public var googleAuthURI: String?       // "auth_uri"
+    public var googleTokenURI: String?      // "token_uri"
+    public init(microsoftClientId: String? = nil, googleClientId: String? = nil, googleClientSecret: String? = nil,
+                googleProjectId: String? = nil, googleAuthURI: String? = nil, googleTokenURI: String? = nil) {
         self.microsoftClientId = microsoftClientId; self.googleClientId = googleClientId; self.googleClientSecret = googleClientSecret
+        self.googleProjectId = googleProjectId; self.googleAuthURI = googleAuthURI; self.googleTokenURI = googleTokenURI
     }
 
     public static let empty = OAuthAppRegistration()
@@ -137,7 +143,10 @@ public struct OAuthAppRegistration: Codable, Equatable, Sendable {
             googleClientId: environment["SB_GOOGLE_CLIENT_ID"].nonEmpty ?? config.oauth.googleClientId.nonEmpty
                 ?? OAuthDefaults.googleClientId.nonEmptyString,
             googleClientSecret: environment["SB_GOOGLE_CLIENT_SECRET"].nonEmpty ?? config.oauth.googleClientSecret.nonEmpty
-                ?? OAuthDefaults.googleClientSecret.nonEmptyString
+                ?? OAuthDefaults.googleClientSecret.nonEmptyString,
+            googleProjectId: config.oauth.googleProjectId.nonEmpty ?? OAuthDefaults.bundled.googleProjectId.nonEmpty,
+            googleAuthURI: config.oauth.googleAuthURI.nonEmpty ?? OAuthDefaults.bundled.googleAuthURI.nonEmpty,
+            googleTokenURI: config.oauth.googleTokenURI.nonEmpty ?? OAuthDefaults.bundled.googleTokenURI.nonEmpty
         )
     }
 }
@@ -160,7 +169,7 @@ public enum OAuthDefaults {
         return Bundle.main.resourceURL?.appendingPathComponent("oauth-defaults.json")
     }
 
-    private static let bundled: OAuthAppRegistration = {
+    public static let bundled: OAuthAppRegistration = {
         guard let url = fileURL, let data = try? Data(contentsOf: url),
               let reg = try? JSONDecoder().decode(OAuthAppRegistration.self, from: data) else { return .empty }
         return reg

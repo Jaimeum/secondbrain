@@ -115,8 +115,9 @@ g = os.path.join(src, "google-client.json")
 if os.path.isfile(g):
     d = json.load(open(g))
     d = d.get("installed") or d.get("web") or d
-    if d.get("client_id"): out["googleClientId"] = d["client_id"]
-    if d.get("client_secret"): out["googleClientSecret"] = d["client_secret"]
+    for src_key, dst_key in (("client_id", "googleClientId"), ("client_secret", "googleClientSecret"),
+                             ("project_id", "googleProjectId"), ("auth_uri", "googleAuthURI"), ("token_uri", "googleTokenURI")):
+        if d.get(src_key): out[dst_key] = d[src_key]
 m = os.path.join(src, "microsoft-client-id.txt")
 if os.path.isfile(m):
     v = open(m).read().strip()

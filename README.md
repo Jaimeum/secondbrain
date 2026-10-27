@@ -78,6 +78,10 @@ En **Ajustes → Cuentas** (o desde las secciones *Correo* y *Reuniones*) pulsa 
   - *Microsoft:* Entra → *Registros de aplicaciones → Nuevo registro* → cuentas en cualquier directorio y personales → plataforma *Aplicaciones móviles y de escritorio* con URI `http://localhost` → *Autenticación → Permitir flujos de cliente público: Sí* → *Permisos de API*: `User.Read`, `Mail.Read`, `Calendars.Read`, `offline_access` → copia el *Id. de aplicación (cliente)*.
   - *Google:* Google Cloud → *Pantalla de consentimiento OAuth* (interna si es Workspace; externa + usuarios de prueba si no) con los permisos de Gmail y Calendar de solo lectura → *Credenciales → Crear ID de cliente OAuth → Aplicación de escritorio* → copia el ID y el secreto de cliente.
 
+## Reglas: cada correo y reunión a su proyecto
+
+Si todo te llega a una sola cuenta, las **Reglas** (Ajustes → Reglas, o el botón *Reglas…* en Correo y Reuniones) deciden a qué proyecto va cada cosa: "lo que venga de @acme.com va a 🚀 Acme", "si el asunto dice Nubia va a 🤝 Alianza", "las reuniones que organiza ana@acme.com…". Gana la primera que coincide; lo que no coincide con ninguna cae en *Sin asignar* (o en el proyecto por defecto que elijas) y lo asignas a mano. Cada vez que asignas algo a mano, SecondBrain te propone la regla con un clic ("¿Todo lo de @acme.com a 🚀 Acme de ahora en adelante? · Sí, siempre"). Una regla puede además **agregar automáticamente** los correos nuevos que coincidan, revisando tu correo cada 15 minutos.
+
 ## Apariencia
 
 **Ajustes → General → Apariencia**: *Sistema*, *Claro* u *Oscuro* (también en el menú *Ver → Apariencia*). Cambia al instante.

@@ -1257,3 +1257,26 @@
 "onb.change" = "Change…";
 "readonly.promise" = "I only read. I never send, delete or change anything.";
 "brand.name" = "secondbrain";
+/* v0.5 — project */
+"project.addHelp" = "Record, paste an email, write a note, add files or a link";
+"project.historyHelp" = "What I changed in this project, and how to undo it";
+"project.reposTitle" = "Repositories";
+"project.reposSync" = "Refresh";
+"project.reposEvery" = "Refreshes %@";
+"project.reposManual" = "Only refreshes by hand";
+"content.fromCalendar" = "From your calendar";
+"content.notePlaceholder" = "Write here…";
+"content.linkTitle" = "Paste a link";
+"content.linkHint" = "I'll read the page and add it to the project.";
+"content.listEmpty" = "Nothing here yet. Record, paste an email or drop a file here.";
+"content.showLess" = "Show less";
+"content.learningHint" = "I'm learning from this. You'll see it here as soon as I'm done.";
+"content.recordingHint" = "Recording. I'll learn from this meeting when it ends.";
+"timeline.today" = "Today";
+"timeline.todayHelp" = "Jump to today";
+"timeline.allKinds" = "Everything";
+"timeline.filterHelp" = "Show only some kinds";
+"activity.undoShort" = "Undo";
+"chat.step.thinking" = "Connecting ideas…";
+"chat.send" = "Ask (⌘↩)";
+"timeline.someKinds" = "%ld kinds";

@@ -243,5 +243,21 @@
 			<string>%d meetings</string>
 		</dict>
 	</dict>
+	<key>timeline.someKinds</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld kind</string>
+			<key>other</key>
+			<string>%ld kinds</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

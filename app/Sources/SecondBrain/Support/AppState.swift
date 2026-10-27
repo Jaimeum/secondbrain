@@ -94,6 +94,13 @@ final class AppState {
     var pendingPage: String?
     /// v0.3: a page to focus in the Grafo tab ("Ver en el grafo" from a wiki page header).
     var pendingGraphFocus: String?
+    // MARK: v0.5 navigation (CONTRACT §15.2)
+    /// Set by Inicio or the search palette; MeetingsView selects this event and clears it.
+    var pendingEventId: String?
+    /// Set by Inicio or the search palette; ProjectView switches to this tab and clears it.
+    var pendingProjectTab: ProjectTab?
+    /// Question typed in the search palette, sent by ChatView when it appears.
+    var pendingQuestion: String?
     /// v0.3: bumped when connected accounts change (connect / disconnect), so Correo and Reuniones reload.
     var accountsRevision = 0
     @ObservationIgnored private var overdueReload: Task<Void, Never>?

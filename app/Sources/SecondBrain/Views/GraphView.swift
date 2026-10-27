@@ -29,7 +29,7 @@ struct GraphView: View {
                             .accessibilityHidden(true)
                     }
             } else if loaded == nil {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 EmptyStateView(symbol: "point.3.connected.trianglepath.dotted", title: L("graph.empty.title"),
                                message: L("graph.empty.message"), actionTitle: L("record.start")) {
@@ -38,6 +38,8 @@ struct GraphView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Brand.color.surface)
         .task(id: TaskKey(revision: state.vaultRevision, scope: scopeKey)) {
             let graph = await state.engine.graph(projectSlug: projectSlug)
             let data = await Task.detached(priority: .userInitiated) { GraphPayloadData(graph) }.value

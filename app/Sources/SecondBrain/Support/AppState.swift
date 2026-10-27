@@ -4,15 +4,50 @@ import Observation
 import Recorder
 import Transcription
 
+/// Sidebar destinations (CONTRACT §15.2): Inicio · Reuniones · Correo · Pendientes · Personas · Proyectos.
 enum SidebarItem: Hashable {
-    case project(String)
-    case inbox
-    case mail
+    case home
     case meetings
+    case mail
+    case tasks
     case people
+    case project(String)
+    // Deprecated aliases, kept one release (MainView maps them): `.brain` → Inicio, `.inbox` → Sin asignar,
+    // `.myTasks` → Pendientes, `.templates` → Ajustes › Formatos (then Inicio).
     case brain
+    case inbox
     case myTasks
     case templates
+
+    /// The item the sidebar shows as selected (aliases resolved); nil for `.templates`, which opens Ajustes instead.
+    var normalized: SidebarItem? {
+        switch self {
+        case .brain: .home
+        case .myTasks: .tasks
+        case .templates: nil
+        default: self
+        }
+    }
+}
+
+/// Screens pushed inside Inicio's NavigationStack (CONTRACT §15.2).
+enum HomeRoute: Hashable {
+    /// A global page (index.md, log.md…) shown in place.
+    case page(String)
+    /// "Ver todo por fecha": the timeline of every project.
+    case timeline
+    /// "Explorar cómo se conecta todo": the global graph.
+    case graph
+    /// "Por ordenar › Ver todo": Sin asignar.
+    case inbox
+    /// "Preguntar: «…»" from ⌘K for the whole brain (asked in `AppState.homeChat`).
+    case ask(String)
+}
+
+/// "Nueva nota" from ⌘K (MainView presents `NoteSheet`).
+struct NoteRequest: Identifiable, Equatable {
+    let id = UUID()
+    var projectSlug: String?
 }
 
 /// "Agregar correo": which thread (fixed when adding the next email of a thread) and project to start with.
@@ -55,7 +90,7 @@ final class AppState {
     private(set) var rateLimitedUntil: Date?
     var recordingError: String?
     var restartNeeded = false
-    var selection: SidebarItem? = .brain
+    var selection: SidebarItem? = .home
 
     var recordingProjectSlug: String? {
         didSet {
@@ -94,6 +129,23 @@ final class AppState {
     var pendingPage: String?
     /// v0.3: a page to focus in the Grafo tab ("Ver en el grafo" from a wiki page header).
     var pendingGraphFocus: String?
+    // MARK: v0.5 navigation (CONTRACT §15.2)
+    /// Set by Inicio or the search palette; MeetingsView selects this event and clears it.
+    var pendingEventId: String?
+    /// Set by Inicio or the search palette; ProjectView switches to this tab and clears it.
+    var pendingProjectTab: ProjectTab?
+    /// Question typed in the search palette, sent by ChatView when it appears.
+    var pendingQuestion: String?
+    /// A screen to push inside Inicio's NavigationStack; HomeView consumes it and clears it.
+    var homeRoute: HomeRoute?
+    /// The ⌘K palette is on screen.
+    var searchPresented = false
+    /// "Nuevo proyecto" sheet (⌘N, sidebar, ⌘K).
+    var showNewProject = false
+    /// "Nueva nota" from ⌘K.
+    var noteRequest: NoteRequest?
+    /// The whole-brain conversation of Inicio ("Preguntar" from ⌘K without a project).
+    let homeChat = ChatModel()
     /// v0.3: bumped when connected accounts change (connect / disconnect), so Correo and Reuniones reload.
     var accountsRevision = 0
     @ObservationIgnored private var overdueReload: Task<Void, Never>?
@@ -297,7 +349,7 @@ final class AppState {
         reloadProjectsNow()
         reloadTemplates()
         refreshTasks()
-        if case .project(let slug) = selection, project(slug) == nil { selection = .brain }
+        if case .project(let slug) = selection, project(slug) == nil { selection = .home }
         if let slug = recordingProjectSlug, project(slug) == nil { recordingProjectSlug = nil }
         vaultGeneration += 1
         bumpHistory()
@@ -378,6 +430,14 @@ final class AppState {
         reloadProjects()
         vaultRevision += 1
         return project
+    }
+
+    /// "Editar proyecto…": name, emoji, description (the slug never changes).
+    func updateProject(_ project: Project) throws {
+        try engine.projects.update(project)
+        projects = Self.sorted(projects.map { $0.slug == project.slug ? project : $0 })
+        reloadProjects()
+        vaultRevision += 1
     }
 
     func project(_ slug: String?) -> Project? {
@@ -555,7 +615,7 @@ final class AppState {
         if let until = rateLimitedUntil, until > now {
             return QueueStatus(text: L("queue.waitingClaude", Fmt.time(until)), progress: nil, waiting: true)
         }
-        return QueueStatus(text: queued.count == 1 ? L("queue.oneWaiting") : L("queue.manyWaiting", queued.count), progress: nil)
+        return QueueStatus(text: L("queue.processing", queued.count), progress: nil)
     }
 
     // MARK: Engine events

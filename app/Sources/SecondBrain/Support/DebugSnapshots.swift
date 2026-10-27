@@ -38,7 +38,6 @@ enum DebugSnapshots {
             }
             shots.append(("mytasks", CGSize(width: 900, height: 560), AnyView(MyTasksView())))
             shots.append(("timeline-all", CGSize(width: 900, height: 700), AnyView(BrainTimelineView(projectSlug: nil) { _, _ in })))
-            shots.append(("templates", CGSize(width: 1000, height: 640), AnyView(TemplatesView())))
             shots.append(("email", CGSize(width: 820, height: 640),
                           AnyView(AddEmailSheet(request: EmailRequest(threadKey: nil, projectSlug: slug), initialText: email ?? ""))))
             if let source {
@@ -50,7 +49,7 @@ enum DebugSnapshots {
                 shots.append(("thread", CGSize(width: 720, height: 640), AnyView(ThreadSheet(threadKey: thread.key))))
             }
             shots.append(("note", CGSize(width: 560, height: 520), AnyView(NoteSheet(projectSlug: slug))))
-            shots.append(("menubar", CGSize(width: 310, height: 420), AnyView(MenuBarView())))
+            shots.append(("menubar", CGSize(width: 320, height: 440), AnyView(MenuBarView())))
             // v0.3 (CONTRACT §12.6); run with SB_DEMO_ACCOUNTS=1 for mail/meetings with data.
             shots.append(("graph", CGSize(width: 1000, height: 680),
                           AnyView(GraphView(scope: project.map { .project($0.slug) } ?? .global, focus: nil, onOpen: { _ in }))))
@@ -58,12 +57,16 @@ enum DebugSnapshots {
             shots.append(("mail", CGSize(width: 1000, height: 640), AnyView(MailView())))
             shots.append(("meetings", CGSize(width: 1000, height: 640), AnyView(MeetingsView())))
             shots.append(("meetings-week", CGSize(width: 1000, height: 640), AnyView(MeetingsView(initialSegment: .week))))   // MARK: v0.3 meetings
+            shots.append(("meetings-past", CGSize(width: 1000, height: 640), AnyView(MeetingsView(initialSegment: .past))))
             if let account = state.engine.accounts.accounts.first,
                let event = try? await state.engine.accounts.provider(for: account)
                    .events(from: Date().addingTimeInterval(-3600), to: Date().addingTimeInterval(7 * 86_400)).first {
                 shots.append(("prep", CGSize(width: 760, height: 640), AnyView(MeetingPrepView(event: event))))
             }
-            shots.append(("settings-accounts", CGSize(width: 560, height: 900), AnyView(SettingsView())))
+            // MARK: v0.5 shell — Ajustes on each tab (SettingsView reads "settings.selectedTab" when it appears).
+            for tab in ["general", "accounts", "github", "rules", "formats", "advanced"] {
+                shots.append(("settings-\(tab)", CGSize(width: 820, height: 600), AnyView(SettingsTabSnapshot(tab: tab))))
+            }
             shots.append(("orghelp", CGSize(width: 620, height: 520), AnyView(OrgAccessHelpSheet(provider: .microsoft))))
             // MARK: v0.3 accounts — the connect sheet's trust step and the organization-block fork
             shots.append(("trust", CGSize(width: 460, height: 470),
@@ -87,18 +90,29 @@ enum DebugSnapshots {
             shots.append(("add-repo", CGSize(width: 580, height: 580), AnyView(AddRepoSheet(projectSlug: repoSlug))))
             shots.append(("add-repo-branches", CGSize(width: 580, height: 580),
                           AnyView(AddRepoSheet(projectSlug: repoSlug, initialRepo: GitHubDemo.myRepos[2]))))
-            shots.append(("settings-github", CGSize(width: 560, height: 520), AnyView(Form { GitHubSection() }.formStyle(.grouped))))
             shots.append(("github-trust", CGSize(width: 460, height: 470), AnyView(GitHubConnectSheet())))
             shots.append(("github-code", CGSize(width: 460, height: 400), AnyView(GitHubConnectSheet(preview: .code(GitHubDeviceCode(
                 deviceCode: "demo", userCode: "ABCD-1234", verificationURI: URL(string: "https://github.com/login/device")!,
                 expiresAt: Date().addingTimeInterval(900), interval: 5))))))
             shots.append(("github-org", CGSize(width: 560, height: 520), AnyView(GitHubOrgHelpSheet())))
-            // Integration: the main screens with their tab bars (Wiki · Grafo · …) and the sidebar footer banner.
-            shots.append(("sidebar", CGSize(width: 260, height: 720), AnyView(SidebarView(showNewProject: .constant(false)))))
+            // Integration: the project screen with its tab bar (the sidebar lives in window-* now).
             if let project {
                 shots.append(("web-project", CGSize(width: 1100, height: 720), AnyView(ProjectView(project: project))))
             }
-            shots.append(("web-brain", CGSize(width: 1100, height: 720), AnyView(BrainView())))
+            // MARK: v0.5 shell (CONTRACT §15.5): Inicio, ⌘K, the recording control, the project sheet.
+            await SearchIndex.shared.rebuild(state: state)
+            shots.append(("home", CGSize(width: 900, height: 900), AnyView(HomeView())))
+            shots.append(("home-narrow", CGSize(width: 680, height: 900), AnyView(HomeView())))
+            shots.append(("home-empty", CGSize(width: 900, height: 620), AnyView(HomeView(previewEmpty: true))))
+            shots.append(("search", CGSize(width: 760, height: 600), AnyView(SearchPalette(initialQuery: "comi"))))
+            shots.append(("search-empty", CGSize(width: 760, height: 420), AnyView(SearchPalette())))
+            shots.append(("record-control", CGSize(width: 220, height: 130), AnyView(
+                RecordControl(placement: .sidebar).padding(12).frame(maxHeight: .infinity, alignment: .bottom)
+                    .background(Brand.color.bg))))
+            shots.append(("new-project", CGSize(width: 480, height: 470), AnyView(NewProjectSheet())))
+            if let project {
+                shots.append(("edit-project", CGSize(width: 480, height: 470), AnyView(NewProjectSheet(editing: project))))
+            }
             // MARK: v0.3 graph — focused graph + web views need a run loop and WKWebView.takeSnapshot.
             if let topic = await state.engine.graph(projectSlug: nil).nodes.filter({ $0.kind == .topic }).max(by: { $0.links < $1.links }) {
                 shots.append(("graph-focus", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: topic.id, onOpen: { _ in }))))
@@ -213,17 +227,25 @@ enum DebugSnapshots {
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
     }
 
-    /// Every top-level screen inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer).
+    /// Every top-level screen inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer), and
+    /// the project on each tab (`window-project-<tab>-…`, through `pendingProjectTab`). `min` = the minimum window.
     private static func renderWindows(state: AppState, dir: URL) async {
-        var items: [(String, SidebarItem)] = [("brain", .brain), ("mytasks", .myTasks), ("inbox", .inbox), ("mail", .mail),
-                                              ("meetings", .meetings), ("people", .people), ("templates", .templates)]
-        if let project = state.projects.first { items.append(("project", .project(project.slug))) }
+        var items: [(name: String, item: SidebarItem, tab: ProjectTab?)] = [
+            ("home", .home, nil), ("meetings", .meetings, nil), ("mail", .mail, nil), ("tasks", .tasks, nil),
+            ("people", .people, nil),
+        ]
+        if let project = state.projects.first {
+            items.append(("project", .project(project.slug), nil))
+            let tabs: [(String, ProjectTab)] = [("content", .content), ("tasks", .tasks), ("ask", .ask), ("graph", .graph)]
+            for (tabName, tab) in tabs { items.append(("project-\(tabName)", .project(project.slug), tab)) }
+        }
         let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""
-        for (name, item) in items where only.isEmpty || name.hasPrefix(only) {
-            for (sizeName, size) in [("1100", CGSize(width: 1100, height: 720)), ("min", CGSize(width: 860, height: 600))] {
+        for entry in items where only.isEmpty || entry.name.hasPrefix(only) {
+            for (sizeName, size) in [("1100", CGSize(width: 1100, height: 720)), ("min", CGSize(width: 920, height: 620))] {
                 for dark in [false, true] {
-                    state.selection = item
-                    let file = "window-\(name)-\(sizeName)-\(dark ? "dark" : "light").png"
+                    state.selection = entry.item
+                    state.pendingProjectTab = entry.tab
+                    let file = "window-\(entry.name)-\(sizeName)-\(dark ? "dark" : "light").png"
                     await renderWindow(MainView().environment(state), size: size, dark: dark, to: dir.appendingPathComponent(file))
                 }
             }
@@ -241,7 +263,7 @@ enum DebugSnapshots {
         let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        window.backgroundColor = .windowBackgroundColor
+        window.backgroundColor = Brand.nsColor(dark ? 0x202721 : 0xF5F0E8)   // Brand bg
         window.contentView = host
         host.layoutSubtreeIfNeeded()
         try? await Task.sleep(for: .seconds(3))
@@ -254,7 +276,7 @@ enum DebugSnapshots {
 
     private static func render(_ view: some View, size: CGSize, to url: URL) async {
         let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height)
-            .background(Color(nsColor: .windowBackgroundColor)).brandEnvironment())
+            .background(Brand.color.surface).brandEnvironment())
         host.frame = CGRect(origin: .zero, size: size)
         // An offscreen, never-ordered-in window gives the view a real layout/appearance context.
         let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),
@@ -267,5 +289,16 @@ enum DebugSnapshots {
         host.cacheDisplay(in: host.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
         window.contentView = nil
+    }
+}
+
+/// Opens Ajustes on one tab for a snapshot: writes the deep-link key right before SettingsView appears (the shots are
+/// built up front and rendered one by one, so it can't be set when the list is made).
+private struct SettingsTabSnapshot: View {
+    let tab: String
+
+    var body: some View {
+        UserDefaults.standard.set(tab, forKey: SettingsLinkOpener.tabKey)
+        return SettingsView()
     }
 }

@@ -1,23 +1,46 @@
 import BrainCore
 import SwiftUI
 
+/// The main window (CONTRACT §15.2): sidebar (200/220/280) + detail, the banners on top, and the ⌘K palette over it.
 struct MainView: View {
     @Environment(AppState.self) private var state
-    @ViewState private var showNewProject = false
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         @Bindable var state = state
-        NavigationSplitView {
-            SidebarView(showNewProject: $showNewProject)
-                .navigationSplitViewColumnWidth(min: 230, ideal: 260, max: 340)
-        } detail: {
-            detail
+        ZStack {
+            NavigationSplitView {
+                SidebarView(showNewProject: $state.showNewProject)
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
+            } detail: {
+                detail
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    .background(Brand.color.surface)
+            }
+            if state.searchPresented {
+                SearchPalette()
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
         }
-        .sheet(isPresented: $showNewProject) {
+        .animation(Brand.motion.animation(fast: true), value: state.searchPresented)
+        .sheet(isPresented: $state.showNewProject) {
             NewProjectSheet { project in state.selection = .project(project.slug) }
         }
         .sheet(item: $state.emailRequest) { request in
             AddEmailSheet(request: request)
+        }
+        .sheet(item: $state.noteRequest) { request in
+            NoteSheet(projectSlug: request.projectSlug)
+        }
+        .onAppear {
+            SettingsLinkOpener.opener = { openSettings() }
+            normalizeSelection()
+        }
+        .onChange(of: state.selection) { normalizeSelection() }
+        // Keeps ⌘K's index fresh (debounced; the palette also refreshes when it opens).
+        .task(id: "\(state.vaultRevision)-\(state.tasksRevision)-\(state.accountsRevision)-\(state.projects.count)") {
+            SearchIndex.shared.refresh(state: state)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if state.isSwitchingVault {
@@ -41,8 +64,8 @@ struct MainView: View {
                 ProjectView(project: project).id(slug)
             } else {
                 // Deleted on disk or not in this vault: offer a way out instead of a blank page.
-                EmptyStateView(symbol: "folder", title: L("project.missing"), message: "",
-                               actionTitle: L("sidebar.brain")) { state.selection = .brain }
+                EmptyStateView(symbol: "folder", title: L("project.missing"), message: L("project.missing.message"),
+                               actionTitle: L("project.missing.action")) { state.selection = .home }
             }
         case .inbox:
             InboxView()
@@ -52,12 +75,22 @@ struct MainView: View {
             MeetingsView()
         case .people:
             PeopleView()
-        case .myTasks:
+        case .tasks, .myTasks:
             MyTasksView()
-        case .templates:
-            TemplatesView()
-        case .brain, nil:
-            BrainView()
+        case .home, .brain, .templates, nil:
+            HomeView()
+        }
+    }
+
+    /// Deprecated aliases (CONTRACT §15.2): `.brain` → Inicio, `.myTasks` → Pendientes, `.templates` → Ajustes ›
+    /// Formatos and Inicio behind it. `.inbox` stays (Sin asignar, reached from Inicio).
+    private func normalizeSelection() {
+        guard let selection = state.selection else { return }
+        if selection == .templates {
+            state.selection = .home
+            SettingsLink.open(tab: "formats")
+        } else if let normalized = selection.normalized, normalized != selection {
+            state.selection = normalized
         }
     }
 }
@@ -142,6 +175,7 @@ struct MenuLanguageNotice: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Button(L("restart.now")) { state.relaunch() }
+                .buttonStyle(.brandSecondary)
                 .disabled(state.isRecording)
                 .help(state.isRecording ? L("restart.whileRecording") : "")
         }
@@ -163,7 +197,7 @@ struct EmptyStateView: View {
                 BrandMark(size: 40).opacity(0.6)
             } else {
                 Image(systemName: symbol)
-                    .font(.system(size: 36, weight: .regular))
+                    .font(Brand.font(36))
                     .foregroundStyle(Brand.color.text3)
             }
             Text(title)

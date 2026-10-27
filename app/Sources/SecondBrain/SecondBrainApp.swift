@@ -29,7 +29,23 @@ struct SecondBrainApp: App {
         .defaultSize(width: 1100, height: 720)
         .windowToolbarStyle(.unified)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button(L("sidebar.newProject")) { state.showNewProject = true }
+                    .keyboardShortcut("n")
+                    .disabled(!state.config.onboardingComplete || !state.engineStarted)
+            }
+            // MARK: v0.5 navigation (CONTRACT §15.2): ⌘1–5 and ⌘K.
+            CommandMenu(L("menu.go")) {
+                Button(L("home.title")) { go(.home) }.keyboardShortcut("1")
+                Button(L("sidebar.meetings")) { go(.meetings) }.keyboardShortcut("2")
+                Button(L("sidebar.mail")) { go(.mail) }.keyboardShortcut("3")
+                Button(L("tasks.title")) { go(.tasks) }.keyboardShortcut("4")
+                Button(L("sidebar.people")) { go(.people) }.keyboardShortcut("5")
+                Divider()
+                Button(L("menu.search")) { state.searchPresented.toggle() }
+                    .keyboardShortcut("k")
+                    .disabled(!state.config.onboardingComplete)
+            }
             CommandGroup(after: .pasteboard) {
                 Divider()
                 Button(L("email.pasteMenu")) { state.requestEmail() }
@@ -63,6 +79,11 @@ struct SecondBrainApp: App {
                 .id(state.config.uiLanguage)
                 .brandEnvironment()
         }
+    }
+
+    private func go(_ item: SidebarItem) {
+        state.searchPresented = false
+        state.selection = item
     }
 }
 

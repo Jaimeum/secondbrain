@@ -1,55 +1,82 @@
 import BrainCore
 import SwiftUI
 
+/// "Nuevo proyecto" and "Editar proyecto…" (name, emoji, description). The default format is chosen later in the
+/// project's ⋯ menu (Estándar until then).
 struct NewProjectSheet: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
-    var onCreated: (Project) -> Void = { _ in }
+    private let editing: Project?
+    private let onDone: (Project) -> Void
 
-    @ViewState private var form = ProjectForm()
+    @ViewState private var form: ProjectForm
     @ViewState private var error: String?
-    @ViewState private var templateId: String?
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(L("newProject.title")).font(.title2.weight(.semibold))
-            ProjectFormFields(form: $form)
-            VStack(alignment: .leading, spacing: 4) {
-                Picker(L("tpl.projectDefault"), selection: $templateId) {
-                    Text(L("tpl.standard")).tag(String?.none)
-                    Divider()
-                    ForEach(state.templates(for: .meeting).filter { $0.id != TemplateInfo.standardId }) { t in
-                        Text(t.name).tag(Optional(t.id))
-                    }
-                }
-                Text(L("tpl.projectDefaultHint")).font(.caption).foregroundStyle(.secondary)
-            }
-            if let error {
-                Text(error).foregroundStyle(.red).font(.callout)
-            }
-            HStack {
-                Spacer()
-                Button(L("common.cancel")) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button(L("newProject.create")) { create() }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!form.isValid)
-            }
-        }
-        .padding(24)
-        .frame(width: 480)
+    init(onCreated: @escaping (Project) -> Void = { _ in }) {
+        editing = nil
+        onDone = onCreated
+        _form = ViewState(wrappedValue: ProjectForm())
     }
 
-    private func create() {
-        do {
-            var project = try state.createProject(name: form.trimmedName, description: form.description, emoji: form.emoji)
-            if let templateId {
-                try? state.engine.setDefaultTemplate(projectSlug: project.slug, templateId: templateId)
-                project.defaultTemplate = templateId
-                state.reloadProjects()
+    /// Edit mode: saves through `ProjectManager.update` (the slug never changes).
+    init(editing project: Project, onSaved: @escaping (Project) -> Void = { _ in }) {
+        editing = project
+        onDone = onSaved
+        _form = ViewState(wrappedValue: ProjectForm(name: project.name, description: project.description, emoji: project.emoji))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text(editing == nil ? L("newProject.title") : L("newProject.editTitle"))
+                        .font(Brand.title)
+                        .foregroundStyle(Brand.color.text)
+                    ProjectFormFields(form: $form)
+                    if let error {
+                        Label(error, systemImage: "exclamationmark.circle")
+                            .font(Brand.callout)
+                            .foregroundStyle(Brand.color.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(24)
             }
-            onCreated(project)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button(L("common.cancel")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
+                Button(editing == nil ? L("newProject.create") : L("newProject.save")) { save() }
+                    .buttonStyle(.brandPrimary)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!form.isValid)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
+        }
+        .background(Brand.color.surface)
+        .frame(minWidth: 440, idealWidth: 480, minHeight: 360, idealHeight: 470)
+    }
+
+    private func save() {
+        if var project = editing {
+            project.name = form.trimmedName
+            project.description = form.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            project.emoji = form.emoji
+            do {
+                try state.updateProject(project)
+                onDone(project)
+                dismiss()
+            } catch {
+                self.error = L("newProject.saveError")
+            }
+            return
+        }
+        do {
+            let project = try state.createProject(name: form.trimmedName, description: form.description, emoji: form.emoji)
+            onDone(project)
             dismiss()
         } catch {
             self.error = L("newProject.error")
@@ -72,18 +99,21 @@ struct ProjectFormFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(L("newProject.name")).font(.headline)
+                Text(L("newProject.name")).font(Brand.callout).foregroundStyle(Brand.color.text)
                 TextField(L("newProject.namePlaceholder"), text: $form.name)
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.large)
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(L("newProject.emoji")).font(.headline)
+                Text(L("newProject.emoji")).font(Brand.callout).foregroundStyle(Brand.color.text)
                 EmojiPicker(selection: $form.emoji)
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(L("newProject.description")).font(.headline)
-                Text(L("newProject.descriptionHint")).font(.caption).foregroundStyle(.secondary)
+                Text(L("newProject.description")).font(Brand.callout).foregroundStyle(Brand.color.text)
+                Text(L("newProject.descriptionHint"))
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
                 TextField(L("newProject.descriptionPlaceholder"), text: $form.description, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(3...5)
@@ -92,29 +122,32 @@ struct ProjectFormFields: View {
     }
 }
 
+/// Two rows of six (fits a 380 pt sheet). A project's own emoji outside the list shows first.
 struct EmojiPicker: View {
     static let options = ["📁", "🚀", "💼", "🎯", "🧪", "📚", "🏠", "💡", "🎨", "🤝", "🌱", "⭐️"]
     @Binding var selection: String
 
+    private var choices: [String] {
+        Self.options.contains(selection) ? Self.options : [selection] + Self.options
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(Self.options, id: \.self) { emoji in
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 6), count: 6), alignment: .leading, spacing: 6) {
+            ForEach(choices, id: \.self) { emoji in
+                let selected = selection == emoji
+                let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
                 Button {
                     selection = emoji
                 } label: {
                     Text(emoji)
-                        .font(.system(size: 20))
+                        .font(Brand.font(18))
                         .frame(width: 34, height: 34)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(selection == emoji ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.04))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(selection == emoji ? Color.accentColor : .clear, lineWidth: 1.5)
-                        )
+                        .background(shape.fill(selected ? Brand.color.accentSoft : Brand.color.cardAlt))
+                        .overlay(shape.strokeBorder(selected ? Brand.color.accent : .clear, lineWidth: 1.5))
+                        .contentShape(shape)
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
     }

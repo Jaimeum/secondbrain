@@ -1257,3 +1257,21 @@
 "onb.change" = "Cambiar…";
 "readonly.promise" = "Solo leo. Nunca envío, borro ni cambio nada.";
 "brand.name" = "secondbrain";
+
+/* v0.5 — shell */
+"record.control.in" = "en %@";
+"record.control.ago" = "hace %@";
+"record.control.into" = "Se guardará en %@";
+"newProject.editTitle" = "Editar proyecto";
+"newProject.save" = "Guardar";
+"newProject.saveError" = "No pude guardar los cambios del proyecto.";
+"menu.details" = "Detalles";
+"menu.titleLabel" = "Título";
+"menu.go" = "Ir";
+"menu.search" = "Buscar o preguntar…";
+"search.hint.move" = "moverte";
+"search.hint.open" = "abrir";
+"search.hint.ask" = "↩ preguntar";
+"home.dropToUnassigned" = "Suelta aquí para agregarlo a Sin asignar";
+"home.connectAccounts" = "Conectar cuenta…";
+"home.allDay" = "Todo el día";

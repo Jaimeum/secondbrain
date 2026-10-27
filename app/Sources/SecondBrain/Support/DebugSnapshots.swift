@@ -87,6 +87,7 @@ enum DebugSnapshots {
                                   AnyView(WikiBrowser(scope: .project(slug), selection: .constant(topic.id)))))
                 }
             }
+            shots += await RulesSnapshots.shots(state: state)   // MARK: v0.4 rules
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
                 if name.hasPrefix("graph") || name.hasPrefix("web-") {   // views with a WKWebView

@@ -44,7 +44,7 @@ struct MeetingBanner: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: openMeetings)
                 Button {
-                    let slug = model.projectSlug(for: live, state: state)
+                    let slug = model.projectSlugForRecording(live, state: state)   // v0.4: a rule counts a hit
                     Task { await state.startRecording(for: live, projectSlug: slug) }
                 } label: {
                     HStack(spacing: 4) {

@@ -316,14 +316,14 @@ public enum RuleMatcher {
         try mutate { $0.defaultProjectSlug = slug.flatMap { $0.isEmpty ? nil : $0 } }
     }
 
+    /// §14.5: the global "Revisar el correo cada 15 min" switch (Ajustes → Reglas).
+    public func setAutoImportEnabled(_ on: Bool) throws {
+        try mutate { $0.autoImportEnabled = on }
+    }
+
     /// §14.5: where auto-add stopped for an account (nil forgets it).
     public func setMailSyncCursor(_ date: Date?, for accountId: String) throws {
         try mutate { $0.mailSyncCursors[accountId] = date }
-    }
-
-    /// §14.5 global switch ("Revisar el correo cada 15 min").
-    public func setAutoImportEnabled(_ on: Bool) throws {
-        try mutate { $0.autoImportEnabled = on }
     }
 
     /// Enabled rules that add new matching mail by themselves (§14.5).

@@ -76,7 +76,7 @@ struct MeetingPrepView: View {
                 Label(MeetingTimes.when(event), systemImage: "calendar")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                MeetingProjectChip(event: event)
+                MeetingProjectChip(event: event, placement: .prep)
             }
         }
     }

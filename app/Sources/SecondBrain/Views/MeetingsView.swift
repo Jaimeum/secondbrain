@@ -29,6 +29,7 @@ struct MeetingsView: View {
         .navigationTitle(L("meetings.title"))
         .navigationSubtitle(L("meetings.subtitle"))
         .toolbar {
+            ToolbarItem { RulesToolbarButton() }   // MARK: v0.4 rules
             ToolbarItem(placement: .primaryAction) {
                 Button { model.refresh(state: state) } label: {
                     Label(L("meetings.refresh"), systemImage: "arrow.clockwise")
@@ -219,8 +220,9 @@ struct MeetingHeroCard: View {
                         .monospacedDigit()
                 }
                 Spacer()
-                MeetingProjectChip(event: event)
+                MeetingProjectChip(event: event, placement: .hero, showsOffer: false)
             }
+            MeetingRuleOfferLine(event: event, placement: .hero)   // v0.4 rules
             Text(event.title)
                 .font(.title3.weight(.semibold))
                 .lineLimit(2)
@@ -313,7 +315,7 @@ struct MeetingDetail: View {
                         Label(place, systemImage: event.joinURL != nil ? "video" : "mappin.and.ellipse")
                             .foregroundStyle(.secondary)
                     }
-                    MeetingProjectChip(event: event).padding(.top, 2)
+                    MeetingProjectChip(event: event, placement: .detail).padding(.top, 2)
                 }
 
                 HStack(spacing: 10) {

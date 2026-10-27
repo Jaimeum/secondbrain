@@ -45,6 +45,7 @@ struct SettingsView: View {
             }
 
             AccountsSection()
+            RulesSection()   // MARK: v0.4 rules
 
             Section(L("settings.storage")) {
                 LabeledContent(L("settings.vault")) {

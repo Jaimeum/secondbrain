@@ -231,8 +231,22 @@ struct RoutedProjectChip: View {
     let label: String
     let help: String
 
+    /// BrandChip's neutral look (cardAlt capsule, text2 symbol) with the label in `text`: text2 on cardAlt measures
+    /// 3.6:1 at 11 pt, under AA.
     var body: some View {
-        BrandChip(text: L("rules.mail.chip", label), symbol: "arrow.right")
-            .help(help)
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.right")
+                .imageScale(.small)
+                .foregroundStyle(Brand.color.text2)
+            Text(L("rules.mail.chip", label))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(Brand.color.text)
+        }
+        .font(Brand.font(11, .medium))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Brand.color.cardAlt))
+        .help(help)
     }
 }

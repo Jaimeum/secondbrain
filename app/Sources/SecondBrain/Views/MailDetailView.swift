@@ -2,8 +2,9 @@ import BrainCore
 import SwiftUI
 
 /// Right side of Correo: the message (compact headers, the new text, earlier messages folded) and the action bar with
-/// the one smart button "Guardar en 🚀 Proyecto ▾" (CONTRACT §12.7 + §15.2). The toast floats above the action bar;
-/// the rule offer it may earn shows afterwards inside the action bar (never two floating messages).
+/// the one smart button "Guardar en 🚀 Proyecto ▾" (CONTRACT §12.7 + §15.2). The toast sits above the action bar and
+/// takes space (it never covers the message); the rule offer it may earn shows afterwards inside the action bar (never
+/// two floating messages). While the next message loads, the current one stays on screen, dimmed and without actions.
 struct MailDetailView: View {
     @Environment(AppState.self) private var state
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -15,24 +16,31 @@ struct MailDetailView: View {
                 VStack(spacing: 0) {
                     ScrollView {
                         message(detail)
-                            .padding(.horizontal, Brand.spacing.xxl)
+                            .padding(.horizontal, Brand.spacing.content)
                             .padding(.vertical, Brand.spacing.content)
                             .frame(maxWidth: 760, alignment: .leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .overlay(alignment: .bottom) {
+                    .id(detail.message.summary.id)   // a new message starts at its top
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
                         if let toast = model.toast {
                             MailToastView(toast: toast) { model.undo() }
                                 .padding(.horizontal, Brand.spacing.l)
-                                .padding(.bottom, Brand.spacing.m)
+                                .padding(.vertical, Brand.spacing.s)
+                                .frame(maxWidth: .infinity)
                                 .transition(.opacity)
                         }
                     }
                     Rectangle().fill(Brand.color.line).frame(height: 1)
                     actionBar(detail)
+                        .disabled(model.isStale)
                 }
-            } else if model.detailLoading {
+                .opacity(model.isStale ? 0.6 : 1)
+                .animation(Brand.motion.animation(fast: true, reduceMotion: reduceMotion), value: model.isStale)
+            } else if model.detailSlow {
                 BrandLoader(size: 24).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if model.detailLoading {
+                Color.clear   // under 300 ms: no loader flash
             } else if let error = model.detailError {
                 EmptyStateView(symbol: "exclamationmark.triangle", title: L("mail.openFailed"), message: error,
                                actionTitle: L("mail.retry")) { let id = model.selectedId; model.select(nil); model.select(id) }
@@ -90,9 +98,7 @@ struct MailDetailView: View {
                 .layoutPriority(1)
             }
             if detail.thread.count > 1 {
-                Label(L("mail.conversation", detail.thread.count), systemImage: "bubble.left.and.bubble.right")
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
+                ThreadMessages(detail: detail).id(s.id)
             }
             Rectangle().fill(Brand.color.line).frame(height: 1)
             Text(detail.parsed.body.isEmpty ? L("mail.onlyQuoted") : detail.parsed.body)
@@ -102,8 +108,9 @@ struct MailDetailView: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if let quoted = detail.parsed.quotedHistory {
-                QuotedHistory(text: quoted)
+            // With the conversation listed above, the quoted copy of it would be a second way to read the same mail.
+            if detail.thread.count == 1, let quoted = detail.parsed.quotedHistory {
+                QuotedHistory(text: quoted).id(s.id)
             }
         }
     }
@@ -124,14 +131,26 @@ struct MailDetailView: View {
             if model.ruleOffer.current != nil {
                 RuleOfferBar(offer: model.ruleOffer)
             }
-            if pending.isEmpty, let source = model.source(for: detail.message.summary.id) {
+            if let source = model.source(for: detail.message.summary.id) {
+                // The open message is in the brain: say so, whatever is left of its conversation.
                 savedRow(source)
+                if !pending.isEmpty {
+                    Button(L("mail.saveRestOfThread", pending.count)) { model.add(onlyThis: false) }
+                        .buttonStyle(.plain)
+                        .font(Brand.callout)
+                        .foregroundStyle(Brand.color.accent)
+                        .lineLimit(1)
+                        .disabled(model.isSaving)
+                        .help(L("mail.saveRestOfThread.help", destination(detail.existingThreadProject ?? source.projectSlug)))
+                }
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Brand.spacing.m) {
                         smartButton(detail, pending: pending.count)
                         if let why = why(detail, pending: pending) {
                             Text(why).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                        } else if needsProjectHint(detail) {
+                            chooseProjectMenu
                         }
                         Spacer(minLength: 0)
                     }
@@ -140,6 +159,8 @@ struct MailDetailView: View {
                         if let why = why(detail, pending: pending) {
                             Text(why).font(Brand.caption).foregroundStyle(Brand.color.text2)
                                 .lineLimit(2).truncationMode(.middle)
+                        } else if needsProjectHint(detail) {
+                            chooseProjectMenu
                         }
                     }
                 }
@@ -164,34 +185,104 @@ struct MailDetailView: View {
         return destinationWhy
     }
 
-    /// After saving: a visible "✓ Guardado · Ver en el proyecto" button, where it went, and "Quitar" in ⋯.
-    private func savedRow(_ source: SourceRecord) -> some View {
-        let dest = destination(source.projectSlug)
-        let open = Button { model.open(source) } label: {
-            Label(L("mail.saved") + " · " + (source.projectSlug == nil ? L("mail.seeUnassigned") : L("mail.seeInProject")),
-                  systemImage: "checkmark")
+    /// Nothing decides the destination (no rule, default project, thread nor pick): a visible "Elegir proyecto ▾"
+    /// next to "Guardar sin proyecto", so the choice isn't hidden behind the chevron.
+    private func needsProjectHint(_ detail: MailModel.Detail) -> Bool {
+        !detail.projectLocked && model.projectSlug == nil && model.destinationReason == .none && !state.projects.isEmpty
+    }
+
+    /// "Elegir proyecto ▾": the same choices as the chevron.
+    private var chooseProjectMenu: some View {
+        Menu {
+            projectChoices
+        } label: {
+            Text(L("inbox.choose")).font(Brand.callout).foregroundStyle(Brand.color.accent).lineLimit(1)
         }
-        .buttonStyle(.brandSecondary)
-        .help(L("mail.savedIn", dest))
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: Brand.spacing.m) {
-                open
-                if source.projectSlug != nil {
-                    Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                SavedMoreMenu(source: source, model: model)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: Brand.spacing.s) {
-                    open
+        .menuStyle(.borderlessButton)
+        .fixedSize()   // a short, fixed label
+        .help(L("mail.changeProject"))
+    }
+
+    /// After saving: "✓ Guardado · Ver en el proyecto" with where it went and "Quitar" in ⋯. In Sin asignar it can get
+    /// its project right here: Claude's suggestion with "Asignar", or "Elegir proyecto ▾" ("Ver en Sin asignar" is in ⋯).
+    @ViewBuilder private func savedRow(_ source: SourceRecord) -> some View {
+        let dest = destination(source.projectSlug)
+        if source.projectSlug == nil {
+            let suggestion = state.project(source.suggestedProject)
+            let done = Label(L("mail.saved"), systemImage: "checkmark")
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.success)
+                .lineLimit(1)
+                .help(L("mail.savedIn", dest))
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Brand.spacing.m) {
+                    done
+                    assignControls(source, suggestion: suggestion)
                     Spacer(minLength: 0)
                     SavedMoreMenu(source: source, model: model)
                 }
-                if source.projectSlug != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: Brand.spacing.s) {
+                        done
+                        Spacer(minLength: 0)
+                        SavedMoreMenu(source: source, model: model)
+                    }
+                    if let suggestion {
+                        Text(L("inbox.suggestion", "\(suggestion.emoji) \(suggestion.name)"))
+                            .font(Brand.body).foregroundStyle(Brand.color.text).lineLimit(1)
+                    }
+                    assignControls(source, suggestion: suggestion, showsText: false)
+                }
+            }
+        } else {
+            let open = Button { model.open(source) } label: {
+                Label(L("mail.saved") + " · " + L("mail.seeInProject"), systemImage: "checkmark")
+                    .lineLimit(1)
+            }
+            .buttonStyle(.brandSecondary)
+            .help(L("mail.savedIn", dest))
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Brand.spacing.m) {
+                    open
+                    Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                    Spacer(minLength: 0)
+                    SavedMoreMenu(source: source, model: model)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: Brand.spacing.s) {
+                        open
+                        Spacer(minLength: 0)
+                        SavedMoreMenu(source: source, model: model)
+                    }
                     Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
                 }
             }
+        }
+    }
+
+    /// "Parece de 🚀 X · Asignar · Otro…" when Claude has a suggestion, else "Elegir proyecto ▾" (like Sin asignar).
+    @ViewBuilder private func assignControls(_ source: SourceRecord, suggestion: Project?, showsText: Bool = true) -> some View {
+        HStack(spacing: Brand.spacing.s) {
+            if let suggestion {
+                if showsText {
+                    Text(L("inbox.suggestion", "\(suggestion.emoji) \(suggestion.name)"))
+                        .font(Brand.body).foregroundStyle(Brand.color.text).lineLimit(1)
+                }
+                Button(L("inbox.assign")) { model.assign(source, to: suggestion.slug) }
+                    .buttonStyle(.brandPrimary)
+                    .fixedSize()   // a short, fixed label
+            }
+            Menu {
+                ForEach(state.projects) { project in
+                    Button("\(project.emoji) \(project.name)") { model.assign(source, to: project.slug) }
+                }
+            } label: {
+                Text(suggestion == nil ? L("inbox.choose") : L("inbox.other"))
+                    .font(Brand.callout).foregroundStyle(Brand.color.accent).lineLimit(1)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()   // a short, fixed label
+            .disabled(state.projects.isEmpty)
         }
     }
 
@@ -209,7 +300,9 @@ struct MailDetailView: View {
         case (false, nil): title = L("mail.saveNoProject")
         }
         let selectedIn = model.source(for: detail.message.summary.id) != nil
-        let help = (conversation ? L("mail.addConversation.help") : L("mail.addTo.help")) + "\n" + L("readonly.promise")
+        let what = project == nil ? L("mail.saveNoProject.help")
+            : (conversation ? L("mail.addConversation.help") : L("mail.addTo.help"))
+        let help = what + " (⌘↩)\n" + L("readonly.promise")
         return SplitActionButton(title: title, help: help, menuHelp: L("mail.changeProject")) {
             model.add(onlyThis: false)
         } menu: {
@@ -350,6 +443,29 @@ private struct SavedMoreMenu: View {
             Button(L("common.cancel"), role: .cancel) {}
         } message: {
             Text(L("mail.removeConfirm.message"))
+        }
+    }
+}
+
+/// "Hilo · 3 correos ▸": the other messages of the conversation, oldest first, each folded to sender · date · one
+/// line and expandable to its text (the same card as the thread sheet). Collapsed by default.
+private struct ThreadMessages: View {
+    let detail: MailModel.Detail
+    @ViewState private var expanded = false
+
+    var body: some View {
+        let others = detail.thread.filter { $0.summary.id != detail.message.summary.id }
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(others, id: \.summary.id) { message in
+                    MessageCard(content: .init(message), startExpanded: false)
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            Label(L("mail.conversation", detail.thread.count), systemImage: "bubble.left.and.bubble.right")
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.text2)
         }
     }
 }

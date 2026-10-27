@@ -229,33 +229,62 @@ struct ReformatSheet: View {
     }
 }
 
-/// A brand capsule label ("Yo", "Kickoff con Acme"): `cardAlt` background, one line, truncates. `tint` colors the
-/// text and symbol (semantic chips: `Brand.color.warning` for overdue…); nil = neutral `text2`.
+/// A brand capsule label for task rows ("Yo", "Kickoff con Acme", "27 oct · hoy"): one line, truncates, readable at
+/// 11 pt (AA). Same symbol semantics as `BrandChip` (the symbol carries the tone), plus `maxWidth` and strikethrough.
+/// - `neutral`: `text` on sand, symbol `text2`.
+/// - `accent` ("Yo", "Hecho el…"): `accent` text and symbol on `accentSoft`.
+/// - `warning` (due today / overdue): `warning` symbol on `warningSoft`, text in `text` (warning text on its soft
+///   background measures ~3.3:1, below AA at this size).
 struct Chip: View {
+    enum Tone { case neutral, accent, warning }
+
     let text: String
-    var tint: Color? = nil
+    var tone: Tone = .neutral
     var symbol: String? = nil
-    /// Done items: the text struck through (and neutral).
+    /// Done items: the text struck through and quieter (`text2`).
     var strikethrough = false
     /// Caps the chip so a long title truncates instead of widening the row.
     var maxWidth: CGFloat? = nil
 
+    private var textColor: Color {
+        switch tone {
+        case .accent: Brand.color.accent
+        case .neutral, .warning: strikethrough ? Brand.color.text2 : Brand.color.text
+        }
+    }
+
+    private var symbolColor: Color {
+        switch tone {
+        case .neutral: Brand.color.text2
+        case .accent: Brand.color.accent
+        case .warning: Brand.color.warning
+        }
+    }
+
+    private var fill: Color {
+        switch tone {
+        case .neutral: Brand.color.cardAlt
+        case .accent: Brand.color.accentSoft
+        case .warning: Brand.color.warningSoft
+        }
+    }
+
     var body: some View {
         HStack(spacing: 4) {
             if let symbol {
-                Image(systemName: symbol).imageScale(.small)
+                Image(systemName: symbol).imageScale(.small).foregroundStyle(symbolColor)
             }
             Text(text)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .strikethrough(strikethrough, color: Brand.color.text3)
+                .strikethrough(strikethrough, color: Brand.color.text2)
+                .foregroundStyle(textColor)
         }
         .font(Brand.font(11, .medium))
-        .foregroundStyle(tint ?? Brand.color.text2)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .frame(maxWidth: maxWidth, alignment: .leading)
-        .background(Capsule().fill(Brand.color.cardAlt))
+        .background(Capsule().fill(fill))
         .contentShape(Capsule())
     }
 }
@@ -387,22 +416,60 @@ struct SourceLabel: Equatable {
     var resolved = false
 }
 
+/// O(1) lookups of `[[key]]` citations, with the same rule as `AppState.source(forKey:)`: the first record whose raw
+/// file name is the key, else the last message of the email thread with that key.
+struct SourceIndex {
+    private var byKey: [String: SourceRecord] = [:]
+    private var byThread: [String: SourceRecord] = [:]
+
+    init(_ sources: [SourceRecord]) {
+        for source in sources {
+            if let key = source.sourceKey, byKey[key] == nil { byKey[key] = source }
+            if let thread = source.threadKey { byThread[thread] = source }
+        }
+    }
+
+    func source(forKey key: String) -> SourceRecord? { byKey[key] ?? byThread[key] }
+}
+
 /// Resolves citation keys to titles via the engine's records and the vault (`resolveWikilinksAsync` + `title(of:)`),
-/// cached per project + key and dropped when the vault changes.
+/// cached per project + key. When the vault changes the cache goes stale: stale labels keep showing (no flicker)
+/// but no longer claim "not found", and the next `resolve` replaces them.
 @MainActor @Observable
 final class SourceLabels {
     static let shared = SourceLabels()
 
     private var cache: [String: SourceLabel] = [:]
+    /// Labels from before the last vault change, shown until re-resolved.
+    @ObservationIgnored private var stale: [String: SourceLabel] = [:]
     @ObservationIgnored private var revision = -1
     @ObservationIgnored private var inFlight: Set<String> = []
+    @ObservationIgnored private var indexedSources: [SourceRecord] = []
+    @ObservationIgnored private var cachedIndex = SourceIndex([])
 
     private static func cacheKey(_ key: String, _ projectSlug: String) -> String { projectSlug + "|" + key }
 
-    /// Best label right now: cached, else the engine's record, else a date-based fallback ("Reunión · 26 oct").
+    /// The engine's records indexed by citation key, rebuilt only when `engine.sources` changes (an identical array
+    /// compares by storage first, so the check is cheap). Reading it from a body observes `engine.sources`.
+    func index(_ state: AppState) -> SourceIndex {
+        let sources = state.engine.sources
+        if sources != indexedSources {
+            indexedSources = sources
+            cachedIndex = SourceIndex(sources)
+        }
+        return cachedIndex
+    }
+
+    /// Best label right now: cached for this vault revision, else the previous one (never "missing"), else the
+    /// engine's record, else a date-based fallback ("Reunión · 26 oct").
     func label(for key: String, projectSlug: String, state: AppState) -> SourceLabel {
-        if let cached = cache[Self.cacheKey(key, projectSlug)] { return cached }
-        if let source = state.source(forKey: key) {
+        let id = Self.cacheKey(key, projectSlug)
+        if revision == state.vaultRevision, let cached = cache[id] { return cached }
+        if var old = (revision == state.vaultRevision ? nil : cache[id]) ?? stale[id] {
+            old.resolved = false
+            return old
+        }
+        if let source = index(state).source(forKey: key) {
             return SourceLabel(title: source.title, symbol: source.symbol, help: source.datesHelp)
         }
         return Self.fallback(key)
@@ -416,6 +483,7 @@ final class SourceLabels {
     func resolve(_ keys: [String], projectSlug: String, state: AppState) async {
         if revision != state.vaultRevision {
             revision = state.vaultRevision
+            stale.merge(cache) { _, new in new }
             cache = [:]
             inFlight = []
         }
@@ -451,9 +519,10 @@ final class SourceLabels {
             return out
         }.value
         guard generation == revision else { return }   // the vault changed meanwhile: the cache was reset
+        let index = index(state)
         for (slug, keys) in batch {
             for key in keys {
-                let source = state.source(forKey: key)
+                let source = index.source(forKey: key)
                 var label = source.map { SourceLabel(title: $0.title, symbol: $0.symbol, help: $0.datesHelp) } ?? Self.fallback(key)
                 if let hit = found[slug]?[key], hit.count == 2 {
                     let path = hit[0], title = hit[1]
@@ -467,6 +536,7 @@ final class SourceLabels {
                 label.resolved = true
                 let id = Self.cacheKey(key, slug)
                 cache[id] = label
+                stale[id] = nil
                 inFlight.remove(id)
             }
         }

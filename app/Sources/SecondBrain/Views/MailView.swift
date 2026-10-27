@@ -313,6 +313,9 @@ private struct MailRow: View {
     let source: SourceRecord?
     let model: MailModel
 
+    /// On the selected fill (accentSoft) text2 falls under 4.5:1 at 11 pt: the full text color there.
+    private var secondary: Color { isSelected ? Brand.color.text : Brand.color.text2 }
+
     var body: some View {
         HStack(alignment: .top, spacing: Brand.spacing.s) {
             Circle()
@@ -326,10 +329,11 @@ private struct MailRow: View {
                         .font(Brand.font(13, message.isRead ? .medium : .semibold))
                         .foregroundStyle(Brand.color.text)
                         .lineLimit(1)
+                        .help(message.from.email ?? "")
                     Spacer(minLength: 4)
                     Text(Fmt.relative(message.date))
                         .font(Brand.caption)
-                        .foregroundStyle(Brand.color.text2)
+                        .foregroundStyle(secondary)
                         .lineLimit(1)
                         .layoutPriority(1)
                 }
@@ -338,19 +342,20 @@ private struct MailRow: View {
                         .font(Brand.body)
                         .foregroundStyle(Brand.color.text)
                         .lineLimit(1)
+                        .help(message.subject)
                     if message.hasAttachments {
                         Image(systemName: "paperclip")
                             .font(Brand.caption)
-                            .foregroundStyle(Brand.color.text2)
+                            .foregroundStyle(secondary)
                             .help(L("mail.attachments"))
                     }
                 }
                 Text(message.snippet)
                     .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
+                    .foregroundStyle(secondary)
                     .lineLimit(2)
                 if let source {
-                    InBrainChip(source: source, model: model)
+                    SavedChip(destination: state.projectName(source.projectSlug))
                         .padding(.top, 3)
                 } else if let routed = model.routedDestination(for: message) {
                     // MARK: v0.4 routing — where a rule (or the default project) would send it.
@@ -375,37 +380,19 @@ private struct MailRow: View {
     }
 }
 
-/// "En el cerebro" chip with its menu: Ver en el proyecto · Quitar.
-struct InBrainChip: View {
-    let source: SourceRecord
-    let model: MailModel
-    @ViewState private var confirmRemove = false
+/// "✓ Guardado" on a list row: the same word as the reader (§15.2), not interactive (a click selects the row; the
+/// actions live in the reader's action bar and its ⋯). Where it went is in the tooltip.
+struct SavedChip: View {
+    let destination: String
 
     var body: some View {
-        Menu {
-            Button(L("mail.openInProject")) { model.open(source) }
-            Divider()
-            Button(L("mail.remove"), role: .destructive) {
-                if source.status == .done { confirmRemove = true } else { model.remove(source) }
-            }
-        } label: {
-            BrandChip(text: L("mail.inBrain"), symbol: "checkmark", active: true)
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .help(L("mail.inBrain.help"))
-        .confirmationDialog(L("mail.removeConfirm"), isPresented: $confirmRemove) {
-            Button(L("mail.remove"), role: .destructive) { model.remove(source) }
-            Button(L("common.cancel"), role: .cancel) {}
-        } message: {
-            Text(L("mail.removeConfirm.message"))
-        }
+        BrandChip(text: L("mail.saved"), symbol: "checkmark", active: true)
+            .help(L("mail.savedIn", destination))
     }
 }
 
-/// "Aprendiendo del correo… · Deshacer": the one floating message of Correo (§15.2), placed by layout at the bottom
-/// of the reader, above its action bar. Fades in and out.
+/// "Aprendiendo de «…»… · Deshacer": the one transient message of Correo (§15.2), inset at the bottom of the reader
+/// (the message scrolls above it), over its action bar. Fades in and out.
 struct MailToastView: View {
     let toast: MailModel.Toast
     var onUndo: () -> Void
@@ -431,8 +418,10 @@ struct MailToastView: View {
         }
         .padding(.horizontal, Brand.spacing.l)
         .padding(.vertical, 10)
+        // It takes space now (it no longer floats over the message): no overlay shadow. Clipped to its shape: without
+        // it, hairline marks showed just outside the capsule's ends.
         .background(Brand.color.card, in: Capsule())
         .overlay(Capsule().strokeBorder(Brand.color.line, lineWidth: 1))
-        .brandOverlayShadow()
+        .clipShape(Capsule())
     }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import BrainCore
 import SwiftUI
+import UserNotifications
 
 @main
 struct SecondBrainApp: App {
@@ -42,9 +43,11 @@ struct SecondBrainApp: App {
                 Button(L("tasks.title")) { go(.tasks) }.keyboardShortcut("4")
                 Button(L("sidebar.people")) { go(.people) }.keyboardShortcut("5")
                 Divider()
+                // Not over a sheet: the palette would open under it, out of reach.
                 Button(L("menu.search")) { state.searchPresented.toggle() }
                     .keyboardShortcut("k")
-                    .disabled(!state.config.onboardingComplete)
+                    .disabled(!state.config.onboardingComplete || state.showNewProject || state.emailRequest != nil
+                              || state.noteRequest != nil)
             }
             CommandGroup(after: .pasteboard) {
                 Divider()
@@ -83,11 +86,18 @@ struct SecondBrainApp: App {
 
     private func go(_ item: SidebarItem) {
         state.searchPresented = false
+        // ⌘1 on Inicio goes back to its root (from a page, the timeline, the graph, Sin asignar…).
+        if item == .home, state.selection?.normalized == .home { state.homePopToken += 1 }
         state.selection = item
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// UNUserNotificationCenter traps outside a real .app bundle (the bare `swift build` binary), as in Notifier.
+    private var notificationsAvailable: Bool {
+        Bundle.main.bundleIdentifier != nil && Bundle.main.bundleURL.pathExtension == "app"
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Snapshot mode (development) must not take focus or show windows on the user's screen.
         let snapshot = MainActor.assumeIsolated { DebugSnapshots.directory != nil }
@@ -98,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let snapshot = MainActor.assumeIsolated { DebugSnapshots.directory != nil }
+        if !snapshot, notificationsAvailable { UNUserNotificationCenter.current().delegate = self }
         MainActor.assumeIsolated {
             AppState.shared.launch()
             if snapshot {
@@ -128,6 +139,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { true }
+
+    // MARK: Notifications (CONTRACT §15.2: "Por ordenar" and failures select Inicio; "Listo" opens what was learned)
+
+    /// Shown even while SecondBrain is in front (a recording finishing is news wherever you are).
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+
+    /// Notification ids are `AppState.notifyOnce` keys: `inbox-<source>`, `failed-<source>-…`, `done-<source>-…`, `job-…`,
+    /// `rate-…`, `hist-…`.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let id = response.notification.request.identifier
+        Task { @MainActor in
+            Self.route(notificationId: id)
+            completionHandler()
+        }
+    }
+
+    @MainActor private static func route(notificationId id: String) {
+        let state = AppState.shared
+        NSApp.activate(ignoringOtherApps: true)
+        // The main window (WindowGroup "main": SwiftUI names its windows "main-AppWindow-n") to the front.
+        NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true }?.makeKeyAndOrderFront(nil)
+        state.searchPresented = false
+        if id.hasPrefix("done-") {
+            let rest = id.dropFirst("done-".count)
+            if let source = state.engine.sources.first(where: { rest.hasPrefix($0.id + "-") || rest == $0.id }) {
+                state.open(source: source)
+                return
+            }
+        }
+        if id.hasPrefix("inbox-") || id.hasPrefix("failed-") || id.hasPrefix("done-") {
+            state.selection = .home
+        }
+    }
 }
 
 struct RootView: View {

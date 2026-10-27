@@ -15,7 +15,7 @@ struct HomeNowSection: View {
 
     var body: some View {
         let now = model.now
-        let hero = heroEvent(now: now)
+        let hero = Self.heroEvent(now: now)
         let today = model.events(in: .today, now: now)
             .filter { $0.end > now && !$0.matches(hero?.event.id) }
             .prefix(4)
@@ -25,7 +25,12 @@ struct HomeNowSection: View {
                 if state.isRecording {
                     HomeRecordingCard()
                 } else if let hero {
-                    HomeHeroCard(event: hero.event, isNow: hero.isNow)
+                    // The same hero as Reuniones (§15.2): countdown, project chip with its offer, place / Unirme, and
+                    // the meeting's one action.
+                    MeetingHeroCard(event: hero.event, isNow: hero.isNow,
+                                    onSelect: { openInMeetings(hero.event, prepare: false) },
+                                    onPrepare: { openInMeetings(hero.event, prepare: true) },
+                                    onShowPage: { state.open(path: $0) })
                 }
                 if !today.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
@@ -48,11 +53,18 @@ struct HomeNowSection: View {
     }
 
     /// "Ahora" in its record window, else "Siguiente" when it is today or tomorrow.
-    private func heroEvent(now: Date) -> (event: CalendarEvent, isNow: Bool)? {
-        guard let hero = model.hero(now: now) else { return nil }
+    @MainActor static func heroEvent(now: Date) -> (event: CalendarEvent, isNow: Bool)? {
+        guard let hero = MeetingsModel.shared.hero(now: now) else { return nil }
         if hero.isNow { return hero }
         let days = Fmt.daysFromToday(hero.event.start)
         return days <= 1 ? hero : nil
+    }
+
+    /// The event in Reuniones; "Prepararme" lands on its preparation, not on the plain detail.
+    private func openInMeetings(_ event: CalendarEvent, prepare: Bool) {
+        state.pendingEventPrepare = prepare
+        state.pendingEventId = event.id
+        state.selection = .meetings
     }
 
     private var connectLine: some View {
@@ -101,67 +113,6 @@ struct HomeNowSection: View {
             Button(L("home.connectAccounts")) { SettingsLink.open(tab: "accounts") }
                 .buttonStyle(.brandSecondary)
         }
-    }
-}
-
-/// The hero of Inicio: "AHORA" / "SIGUIENTE", title, time and project, and the meeting's single action
-/// (`MeetingActionButton`: Prepararme → Grabar → Detener → Aprendiendo… → Ver resumen).
-struct HomeHeroCard: View {
-    @Environment(AppState.self) private var state
-    let event: CalendarEvent
-    let isNow: Bool
-
-    var body: some View {
-        BrandCard(padding: 16) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 16) {
-                    info
-                    Spacer(minLength: 12)
-                    action
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    info
-                    action
-                }
-            }
-        }
-    }
-
-    private var info: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                if isNow { Circle().fill(Brand.color.record).frame(width: 6, height: 6) }
-                Text(isNow ? L("home.now") : L("home.next"))
-                    .textCase(.uppercase)
-                    .font(Brand.font(11, .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(isNow ? Brand.color.record : Brand.color.text2)
-            }
-            Text(event.title)
-                .font(Brand.section)
-                .foregroundStyle(Brand.color.text)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Text(when)
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                HomeProjectChip(slug: MeetingsModel.shared.resolution(for: event, state: state).projectSlug)
-            }
-        }
-    }
-
-    private var action: some View {
-        MeetingActionButton(event: event, large: true,
-                            onPrepare: { state.pendingEventId = event.id; state.selection = .meetings },
-                            onShowPage: { state.open(path: $0) })
-    }
-
-    private var when: String {
-        let range = Fmt.time(event.start) + " – " + Fmt.time(event.end)
-        return Calendar.current.isDateInToday(event.start) ? range : Fmt.relativeDay(event.start) + " · " + range
     }
 }
 
@@ -236,6 +187,7 @@ struct HomeEventRow: View {
 
     var body: some View {
         Button {
+            state.pendingEventPrepare = false
             state.pendingEventId = event.id
             state.selection = .meetings
         } label: {
@@ -262,51 +214,89 @@ struct HomeEventRow: View {
     }
 }
 
+/// What a Recientes card shows: a source of this Mac (in progress or learned), or a page from a project's timeline.
+struct HomeRecentItem: Identifiable {
+    let id: String
+    let symbol: String
+    let kindLabel: String
+    let title: String
+    let projectSlug: String?
+    let date: Date
+    var source: SourceRecord?
+    var pagePath: String?
+    var sourceId: String? { source?.id }
+
+    init(source: SourceRecord) {
+        id = "source:" + source.id
+        symbol = source.kind.symbol
+        kindLabel = source.kind.label
+        title = source.title
+        projectSlug = source.projectSlug
+        date = source.timelineDate
+        self.source = source
+    }
+
+    @MainActor init(entry: TimelineEntry) {
+        id = "entry:" + entry.id
+        symbol = entry.kind.symbol
+        kindLabel = entry.kind.label
+        title = entry.title
+        projectSlug = entry.projectSlug
+        date = entry.date
+        pagePath = entry.pagePath
+        if let sourceId = entry.sourceId { source = AppState.shared.engine.source(sourceId) }
+    }
+}
+
 /// A Recientes card (mockup page-10): kind, date (or progress), title, project. Fixed height.
 struct HomeRecentCard: View {
     @Environment(AppState.self) private var state
-    let source: SourceRecord
+    let item: HomeRecentItem
 
     static let height: CGFloat = 104
 
     var body: some View {
         Button {
-            state.open(source: source)
+            if let path = item.pagePath {
+                state.open(path: path)
+            } else if let source = item.source {
+                state.open(source: source)
+            }
         } label: {
             BrandCard(padding: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
-                        Image(systemName: source.kind.symbol)
+                        Image(systemName: item.symbol)
                             .foregroundStyle(Brand.color.text2)
-                        Text(source.kind.label)
+                        Text(item.kindLabel)
                             .font(Brand.caption)
                             .foregroundStyle(Brand.color.text2)
                             .lineLimit(1)
                         Spacer(minLength: 6)
-                        if source.status.isInProgress {
+                        if let source = item.source, source.status.isInProgress {
                             StatusPill(status: source.status, progress: source.progress)
                         } else {
-                            Text(Fmt.dayTime(source.timelineDate))
+                            Text(Fmt.dayTime(item.date))
                                 .font(Brand.caption)
-                                .foregroundStyle(Brand.color.text3)
+                                .foregroundStyle(Brand.color.text2)
                                 .lineLimit(1)
                         }
                     }
-                    Text(source.title)
+                    Text(item.title)
                         .font(Brand.callout)
                         .foregroundStyle(Brand.color.text)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
-                    HomeProjectChip(slug: source.projectSlug)
+                    HomeProjectChip(slug: item.projectSlug)
                 }
                 .frame(height: Self.height - 24, alignment: .topLeading)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(source.title)
+        .help(item.title)
     }
 }
 

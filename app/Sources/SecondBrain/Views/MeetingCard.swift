@@ -86,9 +86,10 @@ struct MeetingActionButton: View {
             .buttonStyle(.brandSecondary)
             .help(L("meetings.failedHelp"))
         case .over:
-            Text(L("meetings.over"))
+            // The meeting's state, not decoration: text2 (AA on surface) and a symbol, so it never relies on color.
+            Label(L("meetings.over"), systemImage: "clock")
                 .font(Brand.caption)
-                .foregroundStyle(Brand.color.text3)
+                .foregroundStyle(Brand.color.text2)
                 .lineLimit(1)
         }
     }
@@ -121,7 +122,7 @@ struct RecordPillStyle: ButtonStyle {
     }
 }
 
-/// The white dot inside "Grabar" (same white as the record button label): beats in opacity only (0.35 → 1, 1 s), never in scale or position (§15.1).
+/// The dot inside "Grabar" (`onRecord`, same as the record button label): beats in opacity only (0.35 → 1, 1 s), never in scale or position (§15.1).
 /// Static with Reduce Motion or when `active` is false.
 struct PulsingDot: View {
     var active = true
@@ -132,10 +133,10 @@ struct PulsingDot: View {
             if active && !reduceMotion {
                 TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
                     let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
-                    Circle().fill(Color.white).opacity(0.675 + 0.325 * cos(phase * 2 * .pi))
+                    Circle().fill(Brand.color.onRecord).opacity(0.675 + 0.325 * cos(phase * 2 * .pi))
                 }
             } else {
-                Circle().fill(Color.white)
+                Circle().fill(Brand.color.onRecord)
             }
         }
         .frame(width: 7, height: 7)
@@ -143,18 +144,20 @@ struct PulsingDot: View {
     }
 }
 
-/// Up to 3 initials + "+n". Hover shows the names. `ring` = the background the circles sit on.
+/// Up to 3 initials + "+n". Hover shows the names. `ring` = the opaque background the circles sit on; `ringTint` = a
+/// translucent fill drawn over it (a selected row, the live hero), so the ring matches the container exactly.
 struct AttendeeInitials: View {
     let attendees: [EmailAddress]
     var size: CGFloat = 22
     var maxShown = 3
     var ring: Color = Brand.color.card
+    var ringTint: Color? = nil
 
     var body: some View {
         if !attendees.isEmpty {
             HStack(spacing: -size * 0.18) {
                 ForEach(Array(attendees.prefix(maxShown).enumerated()), id: \.offset) { _, a in
-                    InitialsCircle(address: a, size: size, ring: ring)
+                    InitialsCircle(address: a, size: size, ring: ring, ringTint: ringTint)
                 }
                 if attendees.count > maxShown {
                     Text("+\(attendees.count - maxShown)")
@@ -174,6 +177,8 @@ struct InitialsCircle: View {
     let address: EmailAddress
     var size: CGFloat = 22
     var ring: Color = Brand.color.card
+    /// Translucent container fill over `ring` (see `AttendeeInitials`).
+    var ringTint: Color? = nil
 
     var body: some View {
         Text(Self.initials(address))
@@ -184,6 +189,7 @@ struct InitialsCircle: View {
             .frame(width: size, height: size)
             .background(Self.color(for: address.email ?? address.display), in: Circle())
             .overlay(Circle().strokeBorder(ring, lineWidth: 1.5))
+            .overlay { if let ringTint { Circle().strokeBorder(ringTint, lineWidth: 1.5) } }
     }
 
     static func initials(_ a: EmailAddress) -> String {
@@ -206,7 +212,7 @@ struct InitialsCircle: View {
 struct MeetingProjectChip: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
-    var placement: MeetingChipPlacement = .card
+    var placement: MeetingChipPlacement = .detail
     /// false where the container shows `MeetingRuleOfferLine` itself on its own row.
     var showsOffer = true
 
@@ -415,7 +421,7 @@ struct MeetingCard: View {
                         .foregroundStyle(past ? Brand.color.text2 : Brand.color.text)
                         .lineLimit(2)
                 }
-                meta(live: live)
+                meta(live: live, ringTint: isSelected ? Brand.color.accentSoft : (hovering ? Brand.color.cardAlt.opacity(0.5) : nil))
                 // Only a decided project, read-only (it changes in the detail); why it was decided goes to the tooltip.
                 let resolution = model.resolution(for: event, state: state)
                 if let slug = resolution.recordingProject {
@@ -425,7 +431,6 @@ struct MeetingCard: View {
                 if phase != .upcoming && phase != .over {
                     MeetingActionButton(event: event, showsPrepare: false, onPrepare: onPrepare, onShowPage: onShowPage)
                 }
-                MeetingRuleOfferLine(event: event, placement: .card)   // v0.4 rules
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -448,7 +453,7 @@ struct MeetingCard: View {
     }
 
     /// "En curso" · initials · place, on one line that truncates.
-    @ViewBuilder private func meta(live: Bool) -> some View {
+    @ViewBuilder private func meta(live: Bool, ringTint: Color?) -> some View {
         let others = model.others(in: event)
         let place = MeetingPlace.visible(event)
         let video = event.joinURL.map(JoinLink.isSafe) ?? false
@@ -461,7 +466,7 @@ struct MeetingCard: View {
                         .lineLimit(1)
                         .layoutPriority(1)
                 }
-                AttendeeInitials(attendees: others, size: 20, ring: Brand.color.surface)
+                AttendeeInitials(attendees: others, size: 20, ring: Brand.color.surface, ringTint: ringTint)
                 if let place {
                     Label(place, systemImage: MeetingPlace.symbol(place))
                         .font(Brand.caption)
@@ -479,13 +484,48 @@ struct MeetingCard: View {
     }
 }
 
-/// A recorded meeting in "Anteriores": title, when, project, its state while processing and "Ver resumen".
+/// A meeting in "Anteriores": title, when, project, its state while processing, and the one thing to do with it —
+/// "Ver resumen" once learned, "Reintentar" when it failed, "Elegir proyecto ▾" while it waits for a project.
 struct PastMeetingRow: View {
     @Environment(AppState.self) private var state
-    let source: SourceRecord
+    let item: PastMeetingItem
     var onOpenSummary: () -> Void
 
     @ViewState private var hovering = false
+    @ViewState private var assignError: String?
+
+    private var source: SourceRecord? {
+        if case .source(let s, _) = item { return s }
+        return nil
+    }
+
+    /// Learned: the row opens its summary.
+    private var opens: Bool {
+        switch item {
+        case .source(let s, _): s.status == .done
+        case .page(let e): e.pagePath != nil
+        }
+    }
+
+    /// A timeline line reads "Comité de la alianza — Comité mensual: el piloto…": the name is the title, the rest is
+    /// what happened (one line under it).
+    private var titleParts: (title: String, gist: String?) {
+        switch item {
+        case .source(let s, let title):
+            return (title ?? s.title, nil)
+        case .page(let e):
+            guard let r = e.title.range(of: " — ") else { return (e.title, nil) }
+            let gist = e.title[r.upperBound...].trimmingCharacters(in: .whitespaces)
+            return (String(e.title[..<r.lowerBound]), gist.isEmpty ? nil : gist)
+        }
+    }
+
+    private var projectSlug: String? {
+        switch item {
+        case .source(let s, _): s.projectSlug
+        case .page(let e): e.projectSlug
+        }
+    }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
@@ -496,19 +536,30 @@ struct PastMeetingRow: View {
                 .frame(width: 28, height: 28)
                 .background(Circle().fill(Brand.color.cardAlt))
             VStack(alignment: .leading, spacing: 4) {
-                Text(source.title)
+                let parts = titleParts
+                Text(parts.title)
                     .font(Brand.font(13, .medium))
                     .foregroundStyle(Brand.color.text)
                     .lineLimit(2)
-                Text(when)
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
-                    .lineLimit(1)
+                if let line = [when, parts.gist].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                    Text(line)
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(parts.gist ?? "")
+                }
                 HStack(spacing: 6) {
-                    BrandChip(text: state.projectName(source.projectSlug), symbol: source.projectSlug == nil ? "tray" : nil)
-                    if source.status.isInProgress || source.status == .needsProject {
+                    BrandChip(text: state.projectName(projectSlug), symbol: projectSlug == nil ? "tray" : nil)
+                    if let source, source.status.isInProgress || source.status == .needsProject {
                         StatusPill(status: source.status, progress: source.progress)
                     }
+                }
+                if let assignError {
+                    Text(assignError)
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.danger)
+                        .lineLimit(2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -516,56 +567,129 @@ struct PastMeetingRow: View {
                 .layoutPriority(1)   // a short verb: measured first, the title wraps instead
         }
         .padding(10)
-        .background(shape.fill(hovering ? Brand.color.cardAlt.opacity(0.5) : .clear))
+        .background(shape.fill(hovering && opens ? Brand.color.cardAlt.opacity(0.5) : .clear))
         .contentShape(shape)
-        .onTapGesture { if source.status == .done { onOpenSummary() } }
+        .onTapGesture { if opens { onOpenSummary() } }
         .onHover { hovering = $0 }
         .animation(Brand.motion.fast, value: hovering)
+        .help(help)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(opens ? .isButton : [])
     }
 
-    /// "10:30 · 45 min" (the list groups rows by day).
-    private var when: String {
-        var parts = [Fmt.time(source.timelineDate)]
-        if let seconds = source.durationSeconds, seconds > 0 { parts.append(MeetingTimes.duration(seconds)) }
-        return parts.joined(separator: " · ")
+    /// "10:30 · 45 min" (the list groups rows by day); nil for a date-only timeline line.
+    private var when: String? {
+        switch item {
+        case .source(let s, _):
+            var parts = [Fmt.time(s.timelineDate)]
+            if let seconds = s.durationSeconds, seconds > 0 { parts.append(MeetingTimes.duration(seconds)) }
+            return parts.joined(separator: " · ")
+        case .page(let e):
+            return e.hasTime ? Fmt.time(e.date) : nil
+        }
+    }
+
+    /// Rows that can't open yet say why (still learning, waiting for a project).
+    private var help: String {
+        guard let source else { return opens ? L("meetings.seeSummary") : "" }
+        if source.status.isInProgress { return L("meetings.past.learningHelp") }
+        if source.status == .needsProject { return L("meetings.past.needsProjectHelp") }
+        if source.status == .failed { return source.error ?? L("meetings.failedHelp") }
+        return L("meetings.seeSummary")
     }
 
     @ViewBuilder private var action: some View {
-        switch source.status {
-        case .done:
+        if opens {
             Button(action: onOpenSummary) {
                 Label(L("meetings.seeSummary"), systemImage: "doc.text")
             }
             .buttonStyle(.brandSecondary)
             .help(L("meetings.seeSummary"))
-        case .failed:
+        } else if let source, source.status == .failed {
             Button { state.engine.retry(sourceId: source.id) } label: {
                 Label(L("meetings.retry"), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.brandSecondary)
             .help(source.error ?? L("meetings.failedHelp"))
-        default:
-            EmptyView()
+        } else if let source, source.status == .needsProject {
+            projectMenu(source)
+        }
+    }
+
+    /// "Elegir proyecto ▾" (the suggested project first): resolves the recording right here, as Sin asignar does.
+    private func projectMenu(_ source: SourceRecord) -> some View {
+        let suggested = source.suggestedProject.flatMap { state.project($0) }
+        return Menu {
+            if let suggested {
+                Button("\(suggested.emoji) \(suggested.name)") { assign(source, to: suggested.slug) }
+                Divider()
+            }
+            ForEach(state.projects.filter { $0.slug != suggested?.slug }) { project in
+                Button("\(project.emoji) \(project.name)") { assign(source, to: project.slug) }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(L("meetings.chooseProject")).lineLimit(1)
+                Image(systemName: "chevron.down").imageScale(.small)
+            }
+            .font(Brand.callout)
+            .foregroundStyle(Brand.color.accent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Brand.color.accentSoft))
+            .contentShape(Capsule())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(L("meetings.past.needsProjectHelp"))
+    }
+
+    private func assign(_ source: SourceRecord, to slug: String) {
+        do {
+            try state.engine.assign(sourceId: source.id, to: slug)
+            assignError = nil
+        } catch {
+            assignError = (error as? EngineError)?.errorDescription ?? L("sources.moveFailed")
         }
     }
 }
 
-/// A people (or other non-project) page, read without leaving Reuniones. Sized per §15.3.
+/// A vault page (people page, meeting summary) read without leaving Reuniones. Links stay in the sheet; a project page
+/// offers "Abrir en el proyecto". Sized per §15.3.
 struct VaultPageSheet: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
     let path: String
     @ViewState private var current: String?
 
+    private var shown: String { current ?? path }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Text(state.engine.vault.title(of: current ?? path))
+                Text(state.engine.vault.title(of: shown))
                     .font(Brand.section)
                     .foregroundStyle(Brand.color.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 8)
+                if shown.hasPrefix("projects/") {
+                    let open = Button {
+                        let target = shown
+                        dismiss()
+                        state.openProjectPage(target)
+                    } label: {
+                        Label(L("meetings.openInProject"), systemImage: "arrow.up.forward.square")
+                    }
+                    .buttonStyle(.brandSecondary)
+                    .help(L("meetings.openInProject"))
+                    ViewThatFits(in: .horizontal) {
+                        open.fixedSize()
+                        open.labelStyle(.iconOnly).fixedSize()
+                    }
+                }
                 Button(L("common.close")) { dismiss() }
                     .buttonStyle(.brandSecondary)
                     .keyboardShortcut(.cancelAction)
@@ -573,9 +697,7 @@ struct VaultPageSheet: View {
             .padding(.horizontal, Brand.spacing.l)
             .padding(.vertical, Brand.spacing.m)
             Rectangle().fill(Brand.color.line).frame(height: 1)
-            WikiWebView(vault: state.engine.vault, path: current ?? path) { next in
-                if !state.openProjectPage(next) { current = next } else { dismiss() }
-            }
+            WikiWebView(vault: state.engine.vault, path: shown) { next in current = next }
         }
         .background(Brand.color.surface)
         .frame(minWidth: 560, idealWidth: 680, maxWidth: .infinity, minHeight: 420, idealHeight: 520, maxHeight: .infinity)
@@ -606,4 +728,8 @@ struct LinkedText: View {
         }
         return out
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

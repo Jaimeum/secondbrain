@@ -36,16 +36,17 @@ struct SidebarView: View {
                     Label {
                         Text(L("sidebar.newProject")).lineLimit(1)
                     } icon: {
-                        Image(systemName: "plus")
+                        Image(systemName: "plus").foregroundStyle(Brand.color.text2)
                     }
                     .foregroundStyle(Brand.color.text2)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .listItemTint(Brand.color.text2)
             } header: {
                 Text(L("sidebar.projects"))
                     .font(Brand.font(11, .semibold))
-                    .foregroundStyle(Brand.color.text3)
+                    .foregroundStyle(Brand.color.text2)
             }
         }
         .listStyle(.sidebar)
@@ -63,17 +64,22 @@ struct SidebarView: View {
     }
 
     /// Selection through `SidebarItem.normalized`, so an alias set elsewhere (`.myTasks`, `.brain`) still highlights
-    /// its row.
+    /// its row. Clicking "Inicio" while on Inicio goes back to its root (from a page, the timeline, the graph…).
     private var selection: Binding<SidebarItem?> {
-        Binding(get: { state.selection?.normalized ?? state.selection }, set: { state.selection = $0 })
+        Binding(get: { state.selection?.normalized ?? state.selection }, set: { item in
+            if item == .home, state.selection?.normalized == .home { state.homePopToken += 1 }
+            state.selection = item
+        })
     }
 
+    /// The icon has a fixed tint: the sidebar list's own tint follows vibrancy and goes dark olive on the dark `bg`.
     private func item(_ title: String, symbol: String) -> some View {
         Label {
             Text(title).lineLimit(1)
         } icon: {
-            Image(systemName: symbol)
+            Image(systemName: symbol).foregroundStyle(Brand.color.text2)
         }
+        .listItemTint(Brand.color.text2)
     }
 
     /// Count of my overdue tasks in the warning tone (a plain badge can't be tinted, so it's text).
@@ -96,14 +102,15 @@ private struct SidebarHeader: View {
             Button {
                 state.searchPresented = true
             } label: {
-                // The whole placeholder first; "⌘K" only when it fits beside it (it is also in the tooltip).
+                // The whole placeholder with "⌘K"; then "⌘K" stays and the placeholder truncates; only very narrow
+                // drops the hint (it is also in the tooltip).
                 ViewThatFits(in: .horizontal) {
                     searchLabel(shortcut: true)
-                    searchLabel(shortcut: false)
+                    searchLabel(shortcut: true, truncates: true)
                     searchLabel(shortcut: false, truncates: true)
                 }
                 .font(Brand.body)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 6)
                 .frame(height: 28)
                 .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
@@ -120,17 +127,22 @@ private struct SidebarHeader: View {
     }
 
     private func searchLabel(shortcut: Bool, truncates: Bool = false) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Image(systemName: "magnifyingglass").foregroundStyle(Brand.color.text3)
             Text(L("search.placeholder"))
                 .foregroundStyle(Brand.color.text3)
                 .lineLimit(1)
                 .fixedSize(horizontal: !truncates, vertical: false)
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
             if shortcut {
+                // The same key chip as Inicio's search field.
                 Text(verbatim: "⌘K")
-                    .font(Brand.font(11, .medium))
+                    .font(Brand.font(10, .medium))
                     .foregroundStyle(Brand.color.text3)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .fixedSize()
             }
         }
     }
@@ -166,12 +178,12 @@ private struct ProjectRow: View {
 /// ≤ 96 pt: the recording control and, under it, the queue line.
 private struct SidebarFooter: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             RecordControl(placement: .sidebar)
-            QueueStatusLine()
+            QueueStatusLine(showsProgressBar: false)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Brand.color.bg)
         .overlay(alignment: .top) {

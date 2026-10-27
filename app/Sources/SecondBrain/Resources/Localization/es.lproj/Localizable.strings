@@ -1360,3 +1360,49 @@
 "onb.you.title" = "Tú y tu primer proyecto";
 "onb.models.downloading" = "Descargando el modelo de transcripción… %@";
 "settings.github.orgTokenDetail" = "Crea un token «fine-grained» de solo lectura para esa organización y pégalo en Ajustes → GitHub → Usar un token personal. Si la organización también aprueba tokens, puede que tengas que esperar su visto bueno.";
+
+/* v0.5 — mail fixes */
+"mail.learningSubject" = "Aprendiendo de «%@»…";
+"mail.saveNoProject.help" = "Lo guardo en Sin asignar y aprendo de él. Con la flecha eliges un proyecto.";
+"mail.saveRestOfThread.help" = "Los guardo en %@, junto al resto del hilo.";
+"email.editTo" = "Corregir destinatarios";
+"email.joins" = "Se une a «%@»";
+"email.changeThread" = "Cambiar";
+"email.joinOther" = "Unir a otro";
+
+/* v0.5 — tasks fixes */
+"tasks.doneToast" = "Hecho";
+"tasks.undo" = "Deshacer";
+"export.tasks.due" = "para el %@";
+"export.tasks.done" = "hecho el %@";
+"export.tasks.none" = "_No hay pendientes._";
+
+/* v0.5 — settings fixes */
+"onb.you.message" = "Cómo te llamo y dónde guardo tus primeras reuniones.";
+"onb.finish.open" = "Abrir secondbrain";
+"onb.done.menuAfterMessage" = "Arriba a la derecha de tu pantalla. Haz clic para grabar y elegir el proyecto; mientras grabas aparece un punto rojo. Después de cada reunión transcribo y aprendo solo, y te aviso al terminar.";
+"onb.done.searchTitle" = "Encuentra o pregunta lo que sea";
+"onb.done.searchMessage" = "Presiona ⌘K donde estés: busca una reunión, una nota o una persona, o hazme una pregunta.";
+"settings.whisper.notDownloaded" = "Sin descargar";
+"claude.waitingBrowser" = "Termina el inicio de sesión en tu navegador…";
+"claude.waitingBrowserHint" = "Me conecto solo en cuanto apruebes el acceso.";
+"owner.saveFailed" = "No pude guardar: %@";
+
+/* v0.5 — meetings fixes */
+"meetings.earlierToday" = "Antes, hoy";
+"meetings.openInProject" = "Abrir en el proyecto";
+"meetings.past.learningHelp" = "Aún estoy aprendiendo de esta reunión. El resumen aparece aquí al terminar.";
+"meetings.past.needsProjectHelp" = "Elige su proyecto y aprenderé de ella.";
+
+/* v0.5 — project fixes */
+"timeline.upcoming" = "Próximo";
+"graph.empty.seeContent" = "Ver contenido";
+
+/* v0.5 — shell fixes */
+"record.control.startedAgo" = "empezó hace %@";
+"record.control.startsIn" = "empieza en %@";
+"record.openPermissions" = "Abrir Ajustes del Sistema";
+"search.globalPage" = "Todo el cerebro";
+"search.hint.askShort" = "preguntar";
+"search.hint.askProject" = "preguntar a %@";
+"home.lastQuestion" = "Tu última pregunta: «%@»";

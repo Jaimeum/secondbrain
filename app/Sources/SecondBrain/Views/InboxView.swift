@@ -1,3 +1,4 @@
+import AppKit
 import BrainCore
 import SwiftUI
 
@@ -45,7 +46,8 @@ struct InboxView: View {
                     VStack(alignment: .leading, spacing: Brand.spacing.xxl) {
                         if !toSort.isEmpty {
                             VStack(alignment: .leading, spacing: Brand.spacing.m) {
-                                BrandSectionHeader(title: L("inbox.needsProject"), count: toSort.count)
+                                // Same words as Inicio's "Por ordenar · Ver todo →" that leads here.
+                                BrandSectionHeader(title: L("home.toSort"), count: toSort.count)
                                 ForEach(toSort) { source in
                                     InboxRow(source: source, onError: { error = $0 }, onAssigned: offerRule)
                                 }
@@ -139,6 +141,7 @@ struct InboxRow: View {
     @ViewState private var showNewProject = false
     @ViewState private var confirmDelete = false
     @ViewState private var showThread = false
+    @ViewState private var preview: PagePreviewItem?
 
     var body: some View {
         Group {
@@ -149,11 +152,23 @@ struct InboxRow: View {
             }
         }
         .contextMenu {
+            // Check what it is before choosing a project: the email thread, a transcript/note, or the file itself.
             if source.kind == .email, source.threadKey != nil {
                 Button(L("sources.openEmail")) { showThread = true }
+            } else if let raw = source.rawPath {
+                if raw.lowercased().hasSuffix(".md") {
+                    Button(source.kind == .meeting ? L("sources.openTranscript") : L("sources.openOriginal")) {
+                        preview = PagePreviewItem(path: raw)
+                    }
+                }
+                Button(L("wiki.showInFinder")) {
+                    NSWorkspace.shared.activateFileViewerSelecting([state.engine.vault.url(for: raw)])
+                }
             }
+            Divider()
             Button(L("sources.delete"), role: .destructive) { confirmDelete = true }
         }
+        .sheet(item: $preview) { PagePreviewSheet(path: $0.path) }
         .sheet(isPresented: $showNewProject) {
             NewProjectSheet { project in assign(project.slug) }
         }
@@ -235,17 +250,19 @@ struct InboxRow: View {
                 }
             }
         } else {
+            // The menu comes first so it never moves when "Pensando…" ends; its label is the instruction.
             TimelineView(.periodic(from: .now, by: 15)) { context in
                 HStack(spacing: Brand.spacing.m) {
+                    projectMenu(L("inbox.choose"))
                     if isThinking(at: context.date) {
                         BrandLoader(size: 14, text: L("inbox.thinkingShort"))
-                    } else {
-                        Text(source.suggestionReason == nil ? L("inbox.pick") : L("inbox.noSuggestion"))
-                            .font(Brand.body)
+                    } else if source.suggestionReason != nil {
+                        Text(L("inbox.noSuggestion"))
+                            .font(Brand.caption)
                             .foregroundStyle(Brand.color.text2)
                             .lineLimit(2)
+                            .truncationMode(.tail)
                     }
-                    projectMenu(L("inbox.choose"))
                 }
             }
         }
@@ -305,11 +322,13 @@ struct InboxRow: View {
 
     // MARK: Helpers
 
-    /// The other messages of the same email thread that are waiting with it.
+    /// The other messages of the same email thread folded into this row: every unsorted one (waiting for a project
+    /// or failed without one), the same set `InboxView.toSort` collapses, so Eliminar can't leave one behind.
     private var threadSiblings: [SourceRecord] {
         guard let thread = source.threadKey else { return [] }
         return state.engine.sources.filter {
-            $0.id != source.id && $0.threadKey == thread && $0.projectSlug == source.projectSlug && $0.status == source.status
+            $0.id != source.id && $0.threadKey == thread && $0.projectSlug == nil
+                && ($0.status == .needsProject || $0.status == .failed)
         }
     }
 

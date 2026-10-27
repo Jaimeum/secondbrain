@@ -3,29 +3,38 @@ import BrainCore
 import SwiftUI
 
 /// Sidebar "Reuniones" (CONTRACT §12.7, §15.2): segments Hoy · Próximas · Anteriores. Hoy has the hero "Ahora /
-/// Siguiente" card; Próximas is grouped by day; Anteriores lists recorded meetings (no calendar needed). The detail
-/// (or "Prepararme") sits on the right, or is pushed when the screen is narrower than `singleColumnBelow`.
+/// Siguiente" card; Próximas is grouped by day; Anteriores lists the meetings the brain knows (no calendar needed). The
+/// detail (or "Prepararme") sits on the right, or is pushed when the screen is narrower than `singleColumnBelow`.
 struct MeetingsView: View {
     @Environment(AppState.self) private var state
-    @ViewState private var segment: MeetingSegment = .today
+    @ViewState private var segment: MeetingSegment
+    /// The event the user picked (click, keyboard, Inicio/⌘K). The default-to-hero fallback is never stored here.
     @ViewState private var selectedId: String?
     @ViewState private var prepEventId: String?
+    /// Prep was opened from the list (hero or row), not from the detail: in single-column mode the stack's back
+    /// returns to the list and the prep shows no second "Atrás".
+    @ViewState private var prepFromList = false
     @ViewState private var pageSheet: VaultPageItem?
     /// Single-column mode: the event whose detail is pushed.
     @ViewState private var pushedId: String?
     @ViewState private var isNarrow = false
     /// The header loader shows only when a refresh takes longer than a moment (no flicker on every visit).
     @ViewState private var showsLoader = false
+    @FocusState private var agendaFocused: Bool
 
     /// Below this width list and detail become one column with push (§15.2).
     static let singleColumnBelow: CGFloat = 700
+    /// One leading inset for the segment picker, the agenda and Anteriores, so their edges line up.
+    private static let inset: CGFloat = 16
 
-    init(initialSegment: MeetingSegment = .today) {
-        _segment = ViewState(initialValue: initialSegment)
+    /// `initialSegment` nil = where the user last was (coming back after "Ver resumen" keeps Anteriores).
+    init(initialSegment: MeetingSegment? = nil) {
+        _segment = ViewState(initialValue: initialSegment ?? MeetingsModel.shared.lastSegment)
     }
 
     private var model: MeetingsModel { MeetingsModel.shared }
     private var hasAccounts: Bool { !state.engine.accounts.accounts.isEmpty }
+    private var isLoaded: Bool { model.isLoaded(state: state) }
 
     var body: some View {
         GeometryReader { geo in
@@ -40,12 +49,16 @@ struct MeetingsView: View {
                     split(width: geo.size.width)
                 }
             }
-            .onChange(of: narrow, initial: true) { isNarrow = narrow }
+            .onChange(of: narrow, initial: true) { _, nowNarrow in
+                isNarrow = nowNarrow
+                // The pushed page is always the meeting the user picked, never an old push from an earlier narrow spell.
+                pushedId = nowNarrow ? selectedId : nil
+            }
         }
         .background(Brand.color.surface)
         .navigationTitle(L("meetings.title"))
         .toolbar {
-            ToolbarItem { RulesToolbarButton() }   // MARK: v0.4 rules
+            // Rules live in Ajustes › Reglas, ⌘K and the in-context offer (§15.2: what is set up once lives in Ajustes).
             ToolbarItem(placement: .primaryAction) {
                 Button { model.refresh(state: state) } label: {
                     Label(L("meetings.refresh"), systemImage: "arrow.clockwise")
@@ -63,8 +76,15 @@ struct MeetingsView: View {
             try? await Task.sleep(for: .milliseconds(400))
             if !Task.isCancelled { showsLoader = model.isLoading }
         }
+        .task(id: "\(segment == .past)|\(state.vaultRevision)|\(state.engineStarted)") {
+            if segment == .past { model.loadPast(state: state) }
+        }
         .onChange(of: state.vaultRevision) { model.reloadPeople(state: state) }
         .onChange(of: segment) { segmentChanged() }
+        .onChange(of: pushedId) { _, id in
+            // Popped with the stack's back: the next tap on that row opens its detail, not the old prep.
+            if id == nil, isNarrow { prepEventId = nil; prepFromList = false; selectedId = nil }
+        }
         .onAppear { consumePendingEvent() }
         .onChange(of: state.pendingEventId) { consumePendingEvent() }
         .onChange(of: model.loadedOnce) { consumePendingEvent() }
@@ -88,11 +108,11 @@ struct MeetingsView: View {
         }
     }
 
-    /// Two columns only when there is an event to show on the right.
+    /// Two columns while loading (the split never jumps when events land) and whenever there is an event to show.
     private var showsDetailColumn: Bool {
-        guard segment != .past, hasAccounts, model.loadedOnce else { return false }
-        let now = Date()
-        return !visibleEvents(now: now).isEmpty
+        guard segment != .past, hasAccounts else { return false }
+        guard isLoaded else { return true }
+        return !visibleEvents(now: Date()).isEmpty
     }
 
     // MARK: Agenda
@@ -113,7 +133,7 @@ struct MeetingsView: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Self.inset)
             .padding(.vertical, 10)
             .animation(Brand.motion.fast, value: showsLoader)
             if segment != .past {
@@ -125,7 +145,7 @@ struct MeetingsView: View {
                         }
                         if let error = model.error { softError(error) }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, Self.inset)
                     .padding(.bottom, 8)
                 }
             }
@@ -155,53 +175,110 @@ struct MeetingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder private func list(now: Date) -> some View {
+    /// A titled run of rows under the hero (or a day of Próximas).
+    private struct AgendaSection: Identifiable {
+        let id: String
+        let title: String?
+        let events: [CalendarEvent]
+    }
+
+    /// What the agenda column lists, in display order (the keyboard walks the same order).
+    private struct AgendaLayout {
+        var hero: (event: CalendarEvent, isNow: Bool)?
+        var sections: [AgendaSection] = []
+        /// Hoy: nothing left after now ("Nada más en la agenda de hoy.").
+        var nothingMoreToday = false
+
+        var isEmpty: Bool { hero == nil && sections.allSatisfy(\.events.isEmpty) }
+        var order: [CalendarEvent] { (hero.map { [$0.event] } ?? []) + sections.flatMap(\.events) }
+    }
+
+    /// Hoy: hero, then what is still ahead ("Resto del día"), then what already ended ("Antes, hoy", newest first).
+    /// Próximas: one section per day.
+    private func layout(now: Date) -> AgendaLayout {
         let hero = segment == .today ? model.hero(now: now) : nil
         // The hero card already shows its meeting: the list below holds the rest.
         let days = model.days(in: segment, now: now)
             .map { (day: $0.day, events: $0.events.filter { $0.id != hero?.event.id }) }
             .filter { !$0.events.isEmpty }
-        let selected = isNarrow ? nil : selectedEvent(now: now)?.id
-        if !model.loadedOnce {
-            BrandLoader(size: 28, text: L("meetings.loading"))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if days.isEmpty && hero == nil {
-            emptyAgenda(now: now)
+        var out = AgendaLayout(hero: hero)
+        if segment == .today {
+            let rows = days.flatMap(\.events)
+            let later = rows.filter { $0.end >= now }
+            let earlier = Array(rows.filter { $0.end < now }.reversed())
+            out.nothingMoreToday = later.isEmpty && !(hero == nil && earlier.isEmpty)
+            if !later.isEmpty {
+                let titled = hero != nil || !earlier.isEmpty
+                out.sections.append(AgendaSection(id: "later", title: titled ? L("meetings.restOfToday") : nil, events: later))
+            }
+            if !earlier.isEmpty {
+                out.sections.append(AgendaSection(id: "earlier", title: L("meetings.earlierToday"), events: earlier))
+            }
         } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    if let hero {
-                        MeetingHeroCard(event: hero.event, isNow: hero.isNow, isSelected: selected == hero.event.id,
-                                        onSelect: { select(hero.event) }, onPrepare: { prepare(hero.event) },
-                                        onShowPage: { pageSheet = VaultPageItem(path: $0) })
-                            .padding(.bottom, 10)
+            out.sections = days.map { AgendaSection(id: "\($0.day.timeIntervalSinceReferenceDate)",
+                                                    title: MeetingTimes.dayTitle($0.day), events: $0.events) }
+        }
+        return out
+    }
+
+    @ViewBuilder private func list(now: Date) -> some View {
+        let layout = layout(now: now)
+        // Single column: only what the user picked is highlighted (the pushed page is the "selection").
+        let selected = isNarrow ? selectedId : selectedEvent(now: now)?.id
+        Group {
+            if layout.isEmpty {
+                if isLoaded {
+                    emptyAgenda(now: now)
+                } else {
+                    BrandLoader(size: 28, text: L("meetings.loading"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            if let hero = layout.hero {
+                                MeetingHeroCard(event: hero.event, isNow: hero.isNow, isSelected: selected == hero.event.id,
+                                                onSelect: { select(hero.event) }, onPrepare: { prepare(hero.event, fromList: true) },
+                                                onShowPage: { pageSheet = VaultPageItem(path: $0) })
+                                    .padding(.bottom, 10)
+                                    .id(hero.event.id)
+                            }
+                            if layout.nothingMoreToday {
+                                Text(L("meetings.nothingMoreToday"))
+                                    .font(Brand.body)
+                                    .foregroundStyle(Brand.color.text2)
+                                    .padding(.vertical, 8)
+                                    .padding(.leading, 4)
+                            }
+                            ForEach(layout.sections) { section in
+                                if let title = section.title { dayHeader(title) }
+                                ForEach(section.events) { row($0, selected: selected).id($0.id) }
+                            }
+                        }
+                        .padding(.horizontal, Self.inset)
+                        .padding(.vertical, 12)
                     }
-                    if segment == .today {
-                        if days.isEmpty {
-                            Text(L("meetings.nothingMoreToday"))
-                                .font(Brand.body)
-                                .foregroundStyle(Brand.color.text2)
-                                .padding(.vertical, 8)
-                                .padding(.leading, 4)
-                        } else if hero != nil {
-                            dayHeader(L("meetings.restOfToday"))
-                        }
-                        ForEach(days.flatMap(\.events)) { row($0, selected: selected) }
-                    } else {
-                        ForEach(days, id: \.day) { group in
-                            dayHeader(MeetingTimes.dayTitle(group.day))
-                            ForEach(group.events) { row($0, selected: selected) }
-                        }
+                    .focusable()
+                    .focused($agendaFocused)
+                    .focusEffectDisabled()
+                    .onKeyPress(.downArrow) { moveSelection(by: 1, now: now, proxy: proxy) }
+                    .onKeyPress(.upArrow) { moveSelection(by: -1, now: now, proxy: proxy) }
+                    .onKeyPress(.return) {
+                        guard isNarrow, let id = selectedId, isVisible(id, now: now) else { return .ignored }
+                        pushedId = id
+                        return .handled
                     }
                 }
-                .padding(12)
             }
         }
+        .transition(.opacity)
+        .animation(Brand.motion.fast, value: layout.isEmpty)
     }
 
     private func row(_ event: CalendarEvent, selected: String?) -> some View {
         MeetingCard(event: event, isSelected: selected == event.id,
-                    onSelect: { select(event) }, onPrepare: { prepare(event) },
+                    onSelect: { select(event) }, onPrepare: { prepare(event, fromList: true) },
                     onShowPage: { pageSheet = VaultPageItem(path: $0) })
     }
 
@@ -229,33 +306,49 @@ struct MeetingsView: View {
     // MARK: Anteriores
 
     @ViewBuilder private var pastList: some View {
-        let items = model.pastMeetings(state: state)
+        let items = model.pastItems(state: state)
         if items.isEmpty {
-            EmptyStateView(symbol: "waveform", title: L("meetings.past.empty.title"), message: L("meetings.past.empty.message"))
+            if model.pastLoaded || !state.engineStarted {
+                EmptyStateView(symbol: "waveform", title: L("meetings.past.empty.title"), message: L("meetings.past.empty.message"))
+            } else {
+                BrandLoader(size: 28, text: L("meetings.loading"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else {
             let cal = Calendar.current
-            let groups = Dictionary(grouping: items) { cal.startOfDay(for: $0.timelineDate) }
+            let groups = Dictionary(grouping: items) { cal.startOfDay(for: $0.date) }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(groups.keys.sorted(by: >), id: \.self) { day in
                         dayHeader(MeetingTimes.dayTitle(day))
-                        ForEach(groups[day] ?? []) { source in
-                            PastMeetingRow(source: source) { openSummary(source) }
+                        ForEach(groups[day] ?? []) { item in
+                            PastMeetingRow(item: item) { openSummary(item) }
                         }
                     }
                 }
-                .padding(.horizontal, Brand.spacing.content)
+                .padding(.horizontal, Self.inset)
                 .padding(.vertical, 12)
-                .frame(maxWidth: 760)
-                .frame(maxWidth: .infinity)
+                // Readable width, but the same leading edge as the segment picker above.
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    /// "Ver resumen": the meeting page in its project (pendingPage + selection), else shown in place.
-    private func openSummary(_ source: SourceRecord) {
-        if let path = state.engine.pagePath(forSourceId: source.id), state.openProjectPage(path) { return }
-        Task { if let path = await state.openMeetingSummary(source) { pageSheet = VaultPageItem(path: path) } }
+    /// "Ver resumen": the meeting page, read in place (Reuniones and its scroll stay; the sheet offers "Abrir en el
+    /// proyecto").
+    private func openSummary(_ item: PastMeetingItem) {
+        switch item {
+        case .page(let entry):
+            if let path = entry.pagePath { pageSheet = VaultPageItem(path: path) }
+        case .source(let source, _):
+            if let path = state.engine.pagePath(forSourceId: source.id) { pageSheet = VaultPageItem(path: path); return }
+            let vault = state.engine.vault
+            Task {
+                let page = await Task.detached { SourcePages.summaryPage(for: source, vault: vault) }.value
+                if let path = page ?? source.rawPath { pageSheet = VaultPageItem(path: path) }
+            }
+        }
     }
 
     // MARK: Selection
@@ -275,16 +368,33 @@ struct MeetingsView: View {
         return visibleEvents(now: now).contains { $0.matches(id) }
     }
 
+    /// Click on a row or the hero: select it (and push it when single-column; the wide layout ignores `pushedId`).
     private func select(_ event: CalendarEvent) {
-        if selectedId != event.id { prepEventId = nil }
+        if selectedId != event.id { prepEventId = nil; prepFromList = false }
         selectedId = event.id
+        agendaFocused = true
         if isNarrow { pushedId = event.id }
     }
 
-    private func prepare(_ event: CalendarEvent) {
+    /// "Prepararme": from the hero or a row (`fromList`), or from the detail of the selected meeting.
+    private func prepare(_ event: CalendarEvent, fromList: Bool) {
         selectedId = event.id
         prepEventId = event.id
+        prepFromList = fromList
         if isNarrow { pushedId = event.id }
+    }
+
+    /// ↑ / ↓ walk the agenda in display order (hero first); ↩ opens the row when single-column.
+    private func moveSelection(by step: Int, now: Date, proxy: ScrollViewProxy) -> KeyPress.Result {
+        let order = layout(now: now).order
+        guard !order.isEmpty else { return .ignored }
+        let current = (isNarrow ? selectedId : selectedEvent(now: now)?.id).flatMap { id in order.firstIndex { $0.id == id } }
+        let next = current.map { min(max($0 + step, 0), order.count - 1) } ?? (step > 0 ? 0 : order.count - 1)
+        let event = order[next]
+        if selectedId != event.id { prepEventId = nil; prepFromList = false }
+        selectedId = event.id
+        withAnimation(Brand.motion.fast) { proxy.scrollTo(event.id) }
+        return .handled
     }
 
     /// The chosen event if it is listed; by default the hero (now / next), else the first one.
@@ -294,24 +404,30 @@ struct MeetingsView: View {
         return model.events(in: segment, now: now).first
     }
 
-    /// A selection that isn't in the new segment's list is cleared (§15.2).
+    /// A selection that isn't in the new segment's list is cleared (§15.2); the segment is remembered for next time.
     private func segmentChanged() {
+        model.lastSegment = segment
         let now = Date()
-        if !isVisible(selectedId, now: now) { selectedId = nil; prepEventId = nil }
+        if !isVisible(selectedId, now: now) { selectedId = nil; prepEventId = nil; prepFromList = false }
         if !isVisible(pushedId, now: now) { pushedId = nil }
     }
 
-    /// Inicio / ⌘K asked for an event: switch to its segment and select it (pushed when single-column).
+    /// Inicio / ⌘K asked for an event: switch to its segment and select it (pushed when single-column: `pushedId` is set
+    /// either way, since `isNarrow` may not be known yet on a fresh view). With `pendingEventPrepare` (Inicio's "Prepararme")
+    /// it opens on the prep, not the plain detail.
     private func consumePendingEvent() {
         guard let id = state.pendingEventId, model.loadedOnce else { return }
         state.pendingEventId = nil
+        let wantsPrep = state.pendingEventPrepare
+        state.pendingEventPrepare = false
         guard let event = model.event(id: id) else { return }
         let now = Date()
         let target: MeetingSegment = MeetingSegment.today.contains(event, now: now) ? .today : .upcoming
         if segment != target { segment = target }
         selectedId = event.id
-        prepEventId = nil
-        if isNarrow { pushedId = event.id }
+        prepEventId = wantsPrep ? event.id : nil
+        prepFromList = wantsPrep
+        pushedId = event.id
     }
 
     // MARK: Detail
@@ -319,19 +435,25 @@ struct MeetingsView: View {
     @ViewBuilder private var detailPane: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             if let event = selectedEvent(now: context.date) {
-                eventDetail(event, isHero: segment == .today && model.hero(now: context.date)?.event.id == event.id)
-            } else if model.loadedOnce {
+                eventDetail(event, isHero: segment == .today && model.hero(now: context.date)?.event.id == event.id,
+                            prepClose: { prepEventId = nil; prepFromList = false })
+            } else if isLoaded {
                 EmptyStateView(symbol: "calendar.badge.clock", title: L("meetings.pick"), message: "")
+            } else {
+                // Loading: the column keeps its place, quietly (the list shows the loader).
+                Color.clear
             }
         }
         .background(Brand.color.surface)
     }
 
-    /// Single column: the pushed detail never sits next to the hero, so it keeps its actions.
+    /// Single column: the pushed detail never sits next to the hero, so it keeps its actions. A prep opened from the
+    /// list has one back control (the stack's); a prep opened from the pushed detail goes back to that detail.
     @ViewBuilder private func pushedDetail(_ id: String) -> some View {
         Group {
             if let event = model.event(id: id) {
-                eventDetail(event, isHero: false)
+                eventDetail(event, isHero: false,
+                            prepClose: prepFromList ? nil : { prepEventId = nil })
             } else {
                 EmptyStateView(symbol: "calendar.badge.clock", title: L("meetings.pick"), message: "")
             }
@@ -340,14 +462,15 @@ struct MeetingsView: View {
         .background(Brand.color.surface)
     }
 
-    @ViewBuilder private func eventDetail(_ event: CalendarEvent, isHero: Bool) -> some View {
+    @ViewBuilder private func eventDetail(_ event: CalendarEvent, isHero: Bool, prepClose: (() -> Void)?) -> some View {
         if prepEventId == event.id {
-            MeetingPrepView(event: event, onClose: { prepEventId = nil },
+            // Next to the hero, the hero keeps the one Grabar / Unirme (§15.2): the prep shows none of its own.
+            MeetingPrepView(event: event, showsActions: !isHero, onClose: prepClose,
                             onShowPage: { pageSheet = VaultPageItem(path: $0) })
                 .id(event.id)
         } else {
             // The hero already holds this meeting's Grabar / Unirme: one visible record button (§15.2).
-            MeetingDetail(event: event, showsActions: !isHero, onPrepare: { prepare(event) },
+            MeetingDetail(event: event, showsActions: !isHero, onPrepare: { prepare(event, fromList: false) },
                           onShowPage: { pageSheet = VaultPageItem(path: $0) })
                 .id(event.id)
         }
@@ -371,12 +494,17 @@ struct MeetingHeroCard: View {
         let recording = event.matches(state.recordingEventId)
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                if recording { BrandRecordingDot(size: 7) }
+                // The red lives in the dot (beating only while recording); the word stays in text for contrast (AA).
+                if recording {
+                    BrandRecordingDot(size: 7)
+                } else if isNow {
+                    Circle().fill(Brand.color.record).frame(width: 6, height: 6).accessibilityHidden(true)
+                }
                 Text(isNow ? L("meetings.now") : L("meetings.next"))
                     .font(Brand.font(11, .semibold))
                     .tracking(0.6)
                     .textCase(.uppercase)
-                    .foregroundStyle(isNow ? Brand.color.record : Brand.color.accent)
+                    .foregroundStyle(isNow ? Brand.color.text : Brand.color.accent)
                     .lineLimit(1)
                     .layoutPriority(2)
                 TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -437,7 +565,9 @@ struct MeetingHeroCard: View {
             HStack(spacing: 8) {
                 action; join
                 Spacer(minLength: 8)
-                AttendeeInitials(attendees: others, size: 26)
+                // Rings match the card: recordSoft is translucent over the agenda's surface, so it is drawn the same way.
+                AttendeeInitials(attendees: others, size: 26, ring: isNow ? Brand.color.surface : Brand.color.card,
+                                 ringTint: isNow ? Brand.color.recordSoft : nil)
             }
             HStack(spacing: 8) { action; join; Spacer(minLength: 0) }
             VStack(alignment: .leading, spacing: 8) { action; join }
@@ -629,10 +759,7 @@ struct MeetingDetail: View {
         let name = a.name ?? a.display
         let nameView = Group {
             if let path {
-                Button(name) { onShowPage(path) }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Brand.color.accent)
-                    .help(L("meetings.openPerson"))
+                PersonLinkButton(name: name) { onShowPage(path) }
             } else {
                 Text(name).foregroundStyle(Brand.color.text)
             }
@@ -667,5 +794,34 @@ struct MeetingDetail: View {
     @ViewBuilder private func roleChips(me: Bool, organizer: Bool) -> some View {
         if me { BrandChip(text: L("meetings.role.you")) }
         if organizer { BrandChip(text: L("meetings.role.organizer")) }
+    }
+}
+
+/// A name that opens what I know about the person: text color like any name, plus a small ↗ and an underline on
+/// hover, so it reads as a link without looking disabled (dark) or invisible (light).
+struct PersonLinkButton: View {
+    let name: String
+    var action: () -> Void
+
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(name)
+                    .underline(hovering)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Image(systemName: "arrow.up.right")
+                    .imageScale(.small)
+                    .foregroundStyle(hovering ? Brand.color.accent : Brand.color.text3)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(L("meetings.openPerson"))
     }
 }

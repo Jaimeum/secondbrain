@@ -92,7 +92,8 @@ enum SearchTarget: Hashable {
 }
 
 struct SearchItem: Identifiable, Hashable {
-    var id: String { group.rawValue + "|" + target.encoded }
+    /// Unique per row: many tasks of one project share the same target (its Pendientes tab).
+    var id: String { group.rawValue + "|" + target.encoded + "|" + uid }
     let group: SearchGroup
     let title: String
     var subtitle = ""
@@ -103,9 +104,12 @@ struct SearchItem: Identifiable, Hashable {
     let target: SearchTarget
     /// Folded title (+ extra terms) the query is matched against.
     var key: String
+    /// Tells apart rows that open the same place (the task's id); empty for everything else.
+    var uid: String
 
     init(group: SearchGroup, title: String, subtitle: String = "", symbol: String = "doc.text", emoji: String? = nil,
-         date: Date? = nil, target: SearchTarget, extra: String = "") {
+         date: Date? = nil, target: SearchTarget, extra: String = "", uid: String = "") {
+        self.uid = uid
         self.group = group
         self.title = title
         self.subtitle = subtitle
@@ -130,8 +134,9 @@ final class SearchIndex {
 
     // MARK: Building
 
+    /// The language is part of it: action titles, "Sin asignar" and "Todo el cerebro" are stored already translated.
     private func revisionKey(_ state: AppState) -> String {
-        "\(state.vaultGeneration)-\(state.vaultRevision)-\(state.tasksRevision)-\(state.accountsRevision)-\(state.projects.count)"
+        "\(state.vaultGeneration)-\(state.vaultRevision)-\(state.tasksRevision)-\(state.accountsRevision)-\(state.projects.count)-\(state.config.uiLanguage)"
     }
 
     /// Rebuilds in the background when something changed since the last build (`debounce`: wait for a burst of
@@ -163,18 +168,56 @@ final class SearchIndex {
         var out: [SearchItem] = []
         func projectLabel(_ slug: String?) -> String { state.projectName(slug) }
 
+        // Every page of every project, read once (off the main thread). Meetings, email threads and documents are
+        // found by the title Claude gave their page, which is what people remember ("Comité de la alianza"), not
+        // by the recording's default title ("Reunión 26 oct 09:00").
+        var projectPages: [(project: Project, page: WikiPage)] = []
+        for project in state.projects {
+            guard !Task.isCancelled else { return out }
+            for page in await engine.vault.pagesAsync(projectSlug: project.slug) { projectPages.append((project, page)) }
+        }
+        var pageByPath: [String: (project: Project, page: WikiPage)] = [:]
+        for entry in projectPages { pageByPath[entry.page.path.lowercased()] = entry }
+        func displayTitle(_ title: String, in project: Project) -> String {
+            for prefix in [project.name + " — ", project.name + " - "] where title.hasPrefix(prefix) {
+                return String(title.dropFirst(prefix.count))
+            }
+            return title
+        }
+        /// The summary page of a source (meeting page, email-thread page, document page), from the pages above.
+        func summaryPage(of source: SourceRecord) -> (project: Project, page: WikiPage)? {
+            guard let slug = source.projectSlug, let raw = source.rawPath else { return nil }
+            let key = ((raw as NSString).lastPathComponent as NSString).deletingPathExtension
+            let path: String
+            switch source.kind {
+            case .meeting: path = "projects/\(slug)/wiki/meetings/\(key).md"
+            case .email: path = "projects/\(slug)/wiki/emails/\(source.threadKey ?? key).md"
+            case .note, .document, .url: path = "projects/\(slug)/wiki/sources/\(key).md"
+            case .github: return nil
+            }
+            return pageByPath[path.lowercased()]
+        }
+        var covered = Set<String>()   // lowercased paths a source row already stands for
+
         // Sources: meetings, notes/documents/links, and one row per email thread (its newest message).
         var threads: [String: SourceRecord] = [:]
+        func sourceItem(_ source: SourceRecord, group: SearchGroup, symbol: String) -> SearchItem {
+            let sub = projectLabel(source.projectSlug) + " · " + Fmt.dayTime(source.timelineDate)
+            if let found = summaryPage(of: source) {
+                covered.insert(found.page.path.lowercased())
+                let title = displayTitle(found.page.title, in: found.project)
+                return SearchItem(group: group, title: title, subtitle: sub, symbol: symbol, date: source.timelineDate,
+                                  target: .page(found.page.path), extra: title == source.title ? "" : source.title)
+            }
+            return SearchItem(group: group, title: source.title, subtitle: sub, symbol: symbol,
+                              date: source.timelineDate, target: .source(source.id))
+        }
         for source in engine.sources {
-            let when = Fmt.dayTime(source.timelineDate)
-            let sub = projectLabel(source.projectSlug) + " · " + when
             switch source.kind {
             case .meeting:
-                out.append(SearchItem(group: .meetings, title: source.title, subtitle: sub, symbol: "waveform",
-                                      date: source.timelineDate, target: .source(source.id)))
+                out.append(sourceItem(source, group: .meetings, symbol: "waveform"))
             case .note, .document, .url:
-                out.append(SearchItem(group: .notes, title: source.title, subtitle: sub, symbol: source.kind.symbol,
-                                      date: source.timelineDate, target: .source(source.id)))
+                out.append(sourceItem(source, group: .notes, symbol: source.kind.symbol))
             case .email:
                 let key = source.threadKey ?? source.id
                 if let current = threads[key], current.timelineDate >= source.timelineDate { continue }
@@ -184,32 +227,39 @@ final class SearchIndex {
             }
         }
         for source in threads.values {
-            out.append(SearchItem(group: .mail, title: source.title,
-                                  subtitle: projectLabel(source.projectSlug) + " · " + Fmt.dayTime(source.timelineDate),
-                                  symbol: "envelope", date: source.timelineDate, target: .source(source.id)))
+            out.append(sourceItem(source, group: .mail, symbol: "envelope"))
         }
 
-        // Pages: global (people apart) and per project, without the pages a source row already represents.
+        // Pages: global (people apart) and per project. Meeting, email and document pages no source row stands for
+        // (written by Claude on another Mac, or imported) go to their own group.
         for page in await engine.vault.pagesAsync(projectSlug: nil) {
             if page.path.hasPrefix("people/") {
                 out.append(SearchItem(group: .people, title: page.title, symbol: "person", target: .page(page.path)))
             } else {
-                out.append(SearchItem(group: .pages, title: page.title, subtitle: L("brand.name"), symbol: "doc.text",
+                out.append(SearchItem(group: .pages, title: page.title, subtitle: L("search.globalPage"), symbol: "doc.text",
                                       target: .page(page.path)))
             }
         }
-        for project in state.projects {
-            guard !Task.isCancelled else { return out }
-            for page in await engine.vault.pagesAsync(projectSlug: project.slug) {
-                let p = page.path
-                if p.contains("/wiki/meetings/") || p.contains("/wiki/emails/") || p.contains("/wiki/sources/") { continue }
-                var title = page.title
-                for prefix in [project.name + " — ", project.name + " - "] where title.hasPrefix(prefix) {
-                    title = String(title.dropFirst(prefix.count))
-                }
+        for (project, page) in projectPages {
+            let p = page.path
+            guard !covered.contains(p.lowercased()) else { continue }
+            let title = displayTitle(page.title, in: project)
+            let group: SearchGroup, symbol: String
+            if p.contains("/wiki/meetings/") {
+                (group, symbol) = (.meetings, "waveform")
+            } else if p.contains("/wiki/emails/") {
+                (group, symbol) = (.mail, "envelope")
+            } else if p.contains("/wiki/sources/") {
+                (group, symbol) = (.notes, "doc.text")
+            } else {
                 out.append(SearchItem(group: .pages, title: title, subtitle: project.name, emoji: project.emoji,
                                       target: .page(p), extra: project.name))
+                continue
             }
+            let date = Self.fileDate(p)
+            let sub = projectLabel(project.slug) + (date.map { " · " + Fmt.dayTime($0) } ?? "")
+            out.append(SearchItem(group: group, title: title, subtitle: sub, symbol: symbol, date: date, target: .page(p),
+                                  extra: project.name))
         }
 
         // Open tasks (mine first by recency boost of the due date).
@@ -217,7 +267,7 @@ final class SearchIndex {
             var sub = projectLabel(task.projectSlug)
             if let due = task.due { sub += " · " + Fmt.relativeDay(due) }
             out.append(SearchItem(group: .tasks, title: task.text, subtitle: sub, symbol: "circle", date: task.due,
-                                  target: .projectTasks(task.projectSlug), extra: task.ownerName ?? ""))
+                                  target: .projectTasks(task.projectSlug), extra: task.ownerName ?? "", uid: task.id))
         }
 
         for project in state.projects {
@@ -230,6 +280,20 @@ final class SearchIndex {
         return out
     }
 
+    /// "2026-10-26-0900-comite-de-la-alianza.md" → 26 oct 2026 09:00 (meeting and email pages are named by date).
+    nonisolated static func fileDate(_ path: String) -> Date? {
+        let name = (path as NSString).lastPathComponent
+        let parts = name.split(separator: "-", maxSplits: 4, omittingEmptySubsequences: false)
+        guard parts.count >= 3, parts[0].count == 4, parts[1].count == 2, parts[2].prefix(2).count == 2,
+              let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2].prefix(2)) else { return nil }
+        var comps = DateComponents(year: y, month: m, day: d)
+        if parts.count >= 4, parts[3].count == 4, let hm = Int(parts[3]) {
+            comps.hour = hm / 100
+            comps.minute = hm % 100
+        }
+        return Calendar.current.date(from: comps)
+    }
+
     // MARK: Matching
 
     nonisolated static func fold(_ s: String) -> String {
@@ -240,6 +304,8 @@ final class SearchIndex {
     nonisolated static func score(_ key: String, query q: String) -> Double {
         if key.hasPrefix(q) { return 3 }
         if let range = key.range(of: q) {
+            // hasPrefix and range(of:) can disagree on unusual input (emoji sequences, enclosing marks).
+            guard range.lowerBound > key.startIndex else { return 3 }
             let before = key[key.index(before: range.lowerBound)]
             return before.isLetter || before.isNumber ? 1 : 2
         }
@@ -281,7 +347,7 @@ final class SearchIndex {
                            date: event.start, target: .event(event.id))
             }
         if !today.isEmpty { out.append((.today, Array(today))) }
-        let recents = Self.recents()
+        let recents = Self.recents(state: AppState.shared)
         if !recents.isEmpty { out.append((.recent, recents)) }
         return out
     }
@@ -305,39 +371,67 @@ final class SearchIndex {
         var target: String
     }
 
-    static func noteOpened(_ item: SearchItem) {
+    /// One list per vault: a recent from another vault would open nothing.
+    private static func recentsKey(_ state: AppState) -> String { recentsKey + "|" + state.config.vaultPath }
+
+    static func noteOpened(_ item: SearchItem, state: AppState) {
         if case .action = item.target { return }   // actions are not "opened"
-        var list = storedRecents().filter { $0.target != item.target.encoded }
+        var list = storedRecents(state).filter { $0.target != item.target.encoded }
         list.insert(RecentEntry(title: item.title, subtitle: item.subtitle, symbol: item.symbol, emoji: item.emoji,
                                 target: item.target.encoded), at: 0)
-        if let data = try? JSONEncoder().encode(Array(list.prefix(5))) {
-            UserDefaults.standard.set(data, forKey: recentsKey)
+        store(Array(list.prefix(5)), state: state)
+    }
+
+    private static func forget(_ target: SearchTarget, state: AppState) {
+        let list = storedRecents(state)
+        let kept = list.filter { $0.target != target.encoded }
+        if kept.count != list.count { store(kept, state: state) }
+    }
+
+    private static func store(_ list: [RecentEntry], state: AppState) {
+        if let data = try? JSONEncoder().encode(list) {
+            UserDefaults.standard.set(data, forKey: recentsKey(state))
         }
     }
 
-    private static func storedRecents() -> [RecentEntry] {
-        guard let data = UserDefaults.standard.data(forKey: recentsKey),
+    private static func storedRecents(_ state: AppState) -> [RecentEntry] {
+        guard let data = UserDefaults.standard.data(forKey: recentsKey(state)),
               let list = try? JSONDecoder().decode([RecentEntry].self, from: data) else { return [] }
         return list
     }
 
-    private static func recents() -> [SearchItem] {
-        storedRecents().compactMap { entry in
-            guard let target = SearchTarget(encoded: entry.target) else { return nil }
+    /// Only what still opens something: a deleted project, source or page drops out of the list.
+    private static func recents(state: AppState) -> [SearchItem] {
+        storedRecents(state).compactMap { entry in
+            guard let target = SearchTarget(encoded: entry.target), resolves(target, state: state) else { return nil }
             return SearchItem(group: .recent, title: entry.title, subtitle: entry.subtitle, symbol: entry.symbol,
                               emoji: entry.emoji, target: target)
+        }
+    }
+
+    private static func resolves(_ target: SearchTarget, state: AppState) -> Bool {
+        switch target {
+        case .page(let path): FileManager.default.fileExists(atPath: state.engine.vault.url(for: path).path)
+        case .source(let id): state.engine.sources.contains { $0.id == id }
+        case .project(let slug), .projectTasks(let slug): state.project(slug) != nil
+        case .event, .action: true
         }
     }
 
     // MARK: Opening
 
     static func perform(_ target: SearchTarget, state: AppState) {
+        guard resolves(target, state: state) else {
+            forget(target, state: state)
+            return
+        }
         switch target {
         case .page(let path):
             state.open(path: path)
         case .source(let id):
             if let source = state.engine.sources.first(where: { $0.id == id }) { state.open(source: source) }
         case .event(let id):
+            state.pendingEventPrepare = false
             state.pendingEventId = id
             state.selection = .meetings
         case .project(let slug):
@@ -348,8 +442,7 @@ final class SearchIndex {
         case .action(let action):
             switch action {
             case .record:
-                if !state.isRecording { state.recordingProjectSlug = state.currentProjectSlug }
-                state.toggleRecording()
+                state.recordNow(placement: .sidebar)
             case .pasteMail: state.requestEmail()
             case .newNote: state.noteRequest = NoteRequest(projectSlug: state.currentProjectSlug)
             case .newProject: state.showNewProject = true

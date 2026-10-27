@@ -9,23 +9,37 @@ final class TaskListModel {
     private(set) var loaded = false
     /// Checkbox state shown before the engine confirms (id → done).
     private(set) var pending: [String: Bool] = [:]
+    /// Tasks toggled moments ago keep the segment they were listed in (id → their done state before the click), so
+    /// a mis-click stays visible — struck through — and can be undone right there. Released after a few seconds or
+    /// when the list's segment/filter changes.
+    private(set) var sticky: [String: Bool] = [:]
+    /// The task just marked done, for the "Hecho · Deshacer" line (nil = no line).
+    private(set) var justDone: TaskItem?
     var error: String?
+    @ObservationIgnored private var stickyGeneration = 0
 
     func isDone(_ task: TaskItem) -> Bool {
         pending[task.id] ?? tasks.first { $0.id == task.id }?.done ?? task.done
     }
 
+    /// The done state that decides which segment lists the task (the pre-click one while it is sticky). `task` is an
+    /// element of `tasks` (no lookup: this runs for every task on every body pass).
+    func listedDone(_ task: TaskItem) -> Bool { sticky[task.id] ?? pending[task.id] ?? task.done }
+
     func load(_ fetch: () async -> [TaskItem]) async {
         let list = await fetch()
         guard !Task.isCancelled else { return }
-        tasks = list
-        loaded = true
+        // The 10 s poll usually brings the same list: don't invalidate every row for nothing.
+        if list != tasks { tasks = list }
+        if !loaded { loaded = true }
         // A reload that already reflects the change makes the optimistic value unnecessary.
-        pending = pending.filter { id, done in tasks.first { $0.id == id }?.done != done }
+        let stillPending = pending.filter { id, done in tasks.first { $0.id == id }?.done != done }
+        if stillPending != pending { pending = stillPending }
     }
 
     func toggle(_ task: TaskItem, state: AppState) {
-        let target = !isDone(task)
+        let before = isDone(task)
+        let target = !before
         pending[task.id] = target
         do {
             try state.engine.setTask(task, done: target)
@@ -34,6 +48,7 @@ final class TaskListModel {
                 tasks[i].doneDate = target ? Date() : nil
             }
             pending[task.id] = nil
+            keepInPlace(task, wasDone: before, nowDone: target)
             state.refreshTasks()
         } catch {
             // Back to how it was, with a human explanation.
@@ -43,6 +58,26 @@ final class TaskListModel {
             } else {
                 self.error = FriendlyError.message(error)
             }
+        }
+    }
+
+    /// Lets every just-toggled row drop to its new segment (the segment or filter changed, or time ran out).
+    func releaseSticky() {
+        stickyGeneration += 1
+        if !sticky.isEmpty { sticky = [:] }
+        if justDone != nil { justDone = nil }
+    }
+
+    private func keepInPlace(_ task: TaskItem, wasDone: Bool, nowDone: Bool) {
+        let original = sticky[task.id] ?? wasDone
+        sticky[task.id] = original == nowDone ? nil : original   // toggled back: nothing to keep
+        justDone = nowDone ? task : (justDone?.id == task.id ? nil : justDone)
+        stickyGeneration += 1
+        let generation = stickyGeneration
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard let self, self.stickyGeneration == generation else { return }
+            withAnimation(Brand.motion.fast) { self.releaseSticky() }
         }
     }
 }
@@ -83,34 +118,41 @@ struct TasksView: View {
 
     // MARK: Filtering
 
-    private func matches(_ task: TaskItem, _ s: Segment) -> Bool {
-        let done = model.isDone(task)
-        switch s {
-        case .mine: return !done && task.isMine
-        case .theirs: return !done && !task.isMine && task.ownerSlug != nil
-        case .unowned: return !done && !task.isMine && task.ownerSlug == nil
-        case .done: return done
+    /// The one segment that lists a task.
+    private func segment(of task: TaskItem) -> Segment {
+        if model.listedDone(task) { return .done }
+        if task.isMine { return .mine }
+        return task.ownerSlug != nil ? .theirs : .unowned
+    }
+
+    /// Everything the header and the list read, computed once per body pass (one source index, one pass per segment).
+    private struct Snapshot {
+        var filtered: [TaskItem] = []
+        var counts: [Segment: Int] = [:]
+        var cited: [CitedSource] = []
+    }
+
+    private func snapshot() -> Snapshot {
+        let index = SourceLabels.shared.index(state)
+        let base: [TaskItem]
+        if let sourceFilter {
+            base = model.tasks.filter { task in task.sourceKeys.contains { sourceGroup($0, index) == sourceFilter } }
+        } else {
+            base = model.tasks
         }
+        var snap = Snapshot()
+        var bySegment: [Segment: [TaskItem]] = [:]
+        for task in base { bySegment[segment(of: task), default: []].append(task) }
+        for s in Segment.allCases { snap.counts[s] = bySegment[s]?.count ?? 0 }
+        let list = bySegment[segment] ?? []
+        // Hechos lists every done task (LazyVStack), so its count and its rows always agree.
+        snap.filtered = segment == .done ? list.sorted(by: TaskSort.doneFirst) : list.sorted(by: TaskSort.byDue)
+        snap.cited = citedSources(index)
+        return snap
     }
 
-    private var sourceFiltered: [TaskItem] {
-        guard let sourceFilter else { return model.tasks }
-        return model.tasks.filter { task in task.sourceKeys.contains { sourceGroup($0) == sourceFilter } }
-    }
-
-    private var filtered: [TaskItem] {
-        let list = sourceFiltered.filter { matches($0, segment) }
-        if segment == .done {
-            let sorted = list.sorted(by: TaskSort.doneFirst)
-            return isAll ? Array(sorted.prefix(50)) : sorted
-        }
-        return list.sorted(by: TaskSort.byDue)
-    }
-
-    private func count(_ s: Segment) -> Int { sourceFiltered.filter { matches($0, s) }.count }
-
-    private func sourceGroup(_ key: String) -> String {
-        state.source(forKey: key)?.threadKey.map { "thread:" + $0 } ?? key
+    private func sourceGroup(_ key: String, _ index: SourceIndex) -> String {
+        index.source(forKey: key)?.threadKey.map { "thread:" + $0 } ?? key
     }
 
     private struct CitedSource: Identifiable {
@@ -122,12 +164,12 @@ struct TasksView: View {
     }
 
     /// Sources cited by at least one task, newest first: one per meeting/document and ONE per email thread.
-    private var citedSources: [CitedSource] {
+    private func citedSources(_ index: SourceIndex) -> [CitedSource] {
         var seen: [String: CitedSource] = [:]
         for task in model.tasks {
             for key in task.sourceKeys {
-                let group = sourceGroup(key)
-                let date = state.source(forKey: key)?.timelineDate ?? .distantPast
+                let group = sourceGroup(key, index)
+                let date = index.source(forKey: key)?.timelineDate ?? .distantPast
                 if let existing = seen[group], existing.date >= date { continue }
                 seen[group] = CitedSource(group: group, key: key, projectSlug: task.projectSlug, date: date)
             }
@@ -144,7 +186,8 @@ struct TasksView: View {
         let days = Fmt.daysFromToday(due)
         if days < 0 { return .overdue }
         if days == 0 { return .today }
-        if days <= 7 || Calendar.current.isDate(due, equalTo: Date(), toGranularity: .weekOfYear) { return .week }
+        // Strictly this calendar week: next Monday is "Más adelante", even when it's 6 days away.
+        if Calendar.current.isDate(due, equalTo: Date(), toGranularity: .weekOfYear) { return .week }
         return .later
     }
 
@@ -165,8 +208,7 @@ struct TasksView: View {
         let tasks: [TaskItem]
     }
 
-    private var groups: [Group] {
-        let list = filtered
+    private func makeGroups(_ list: [TaskItem]) -> [Group] {
         guard isAll, segment != .done else { return [Group(id: -1, title: nil, warn: false, tasks: list)] }
         let byBucket = Dictionary(grouping: list, by: bucket)
         return Bucket.allCases.compactMap { b in
@@ -178,14 +220,17 @@ struct TasksView: View {
     // MARK: Body
 
     var body: some View {
+        let snap = snapshot()
         VStack(spacing: 0) {
-            header
+            header(snap)
                 .padding(.horizontal, Brand.spacing.content)
                 .padding(.vertical, Brand.spacing.m)
             Rectangle().fill(Brand.color.line).frame(height: 1)
-            content
+            content(snap)
         }
         .background(Brand.color.surface)
+        .overlay(alignment: .bottom) { undoLine }
+        .animation(Brand.motion.animation(fast: true), value: model.justDone?.id)
         .modifier(AllScopeTitle(isAll: isAll))
         .task(id: state.tasksRevision) { await reload() }
         .task {
@@ -195,8 +240,9 @@ struct TasksView: View {
                 await reload()
             }
         }
-        .task(id: citedSources.map(\.key)) {
-            let byProject = Dictionary(grouping: citedSources, by: \.projectSlug)
+        // Re-resolved when the vault changes too (a page written or retitled after the first lookup).
+        .task(id: [String(state.vaultRevision)] + snap.cited.map(\.key)) {
+            let byProject = Dictionary(grouping: snap.cited, by: \.projectSlug)
             await withTaskGroup(of: Void.self) { group in
                 for (slug, items) in byProject {
                     let keys = items.map(\.key)
@@ -204,9 +250,11 @@ struct TasksView: View {
                 }
             }
         }
-        .onChange(of: citedSources.map(\.group)) { _, groups in
+        .onChange(of: snap.cited.map(\.group)) { _, groups in
             if let sourceFilter, !groups.contains(sourceFilter) { self.sourceFilter = nil }
         }
+        .onChange(of: segment) { model.releaseSticky() }
+        .onChange(of: sourceFilter) { model.releaseSticky() }
         .sheet(item: $export) { ExportSheet(request: $0) }
         .sheet(item: $preview) { item in PagePreviewSheet(path: item.path, onOpenInProject: onOpenPage) }
         .alert(L("common.oops"), isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
@@ -217,34 +265,34 @@ struct TasksView: View {
     }
 
     /// Segments left; Origen + Exportar right. Folds to icon-only buttons, then to two lines.
-    private var header: some View {
+    private func header(_ snap: Snapshot) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: Brand.spacing.m) {
-                segments
+                segments(snap)
                 Spacer(minLength: Brand.spacing.m)
-                originMenu(compact: false)
-                exportButton(compact: false)
+                originMenu(snap.cited, compact: false)
+                exportButton(snap.filtered, compact: false)
             }
             HStack(spacing: Brand.spacing.s) {
-                segments
+                segments(snap)
                 Spacer(minLength: Brand.spacing.s)
-                originMenu(compact: true)
-                exportButton(compact: true)
+                originMenu(snap.cited, compact: true)
+                exportButton(snap.filtered, compact: true)
             }
             VStack(alignment: .leading, spacing: Brand.spacing.s) {
-                segments
+                segments(snap)
                 HStack(spacing: Brand.spacing.s) {
-                    originMenu(compact: false)
-                    exportButton(compact: true)
+                    originMenu(snap.cited, compact: false)
+                    exportButton(snap.filtered, compact: true)
                     Spacer(minLength: 0)
                 }
             }
         }
     }
 
-    private var segments: some View {
+    private func segments(_ snap: Snapshot) -> some View {
         TaskSegmentControl(
-            items: Segment.allCases.map { s in (s, segmentTitle(s), count(s)) },
+            items: Segment.allCases.map { s in (s, segmentTitle(s), snap.counts[s] ?? 0) },
             selection: $segment)
     }
 
@@ -261,8 +309,7 @@ struct TasksView: View {
         SourceLabels.shared.label(for: item.key, projectSlug: item.projectSlug, state: state)
     }
 
-    @ViewBuilder private func originMenu(compact: Bool) -> some View {
-        let sources = citedSources
+    @ViewBuilder private func originMenu(_ sources: [CitedSource], compact: Bool) -> some View {
         let selected = sources.first { $0.group == sourceFilter }
         Menu {
             Button {
@@ -305,7 +352,7 @@ struct TasksView: View {
         return text
     }
 
-    private func exportButton(compact: Bool) -> some View {
+    private func exportButton(_ filtered: [TaskItem], compact: Bool) -> some View {
         Button {
             export = ExportRequest(target: .tasks(filtered, title: exportTitle))
         } label: {
@@ -321,7 +368,9 @@ struct TasksView: View {
         .help(L("export.button"))
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private func content(_ snap: Snapshot) -> some View {
+        let filtered = snap.filtered
+        let groups = makeGroups(filtered)
         if !model.loaded {
             BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if filtered.isEmpty {
@@ -338,7 +387,7 @@ struct TasksView: View {
                                     .foregroundStyle(group.warn ? Brand.color.warning : Brand.color.text)
                                 Text(group.tasks.count, format: .number)
                                     .font(Brand.caption)
-                                    .foregroundStyle(Brand.color.text3)
+                                    .foregroundStyle(Brand.color.text2)
                                     .monospacedDigit()
                             }
                             .padding(.horizontal, 10)
@@ -357,7 +406,38 @@ struct TasksView: View {
                 .padding(.horizontal, Brand.spacing.content - 10)
                 .padding(.vertical, Brand.spacing.m)
             }
+            // Room for the "Hecho · Deshacer" line so it never covers the last row.
+            .contentMargins(.bottom, model.justDone == nil ? 0 : 44, for: .scrollContent)
             .animation(Brand.motion.fast, value: filtered.map(\.id))
+        }
+    }
+
+    /// "Hecho · Deshacer" for a few seconds after a task is checked (the row also stays put, struck through).
+    @ViewBuilder private var undoLine: some View {
+        if let task = model.justDone {
+            HStack(spacing: Brand.spacing.s) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.color.success)
+                Text(L("tasks.doneToast"))
+                    .font(Brand.callout)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                Text(verbatim: "·").foregroundStyle(Brand.color.text2)
+                Button(L("tasks.undo")) {
+                    withAnimation(Brand.motion.fast) { model.toggle(task, state: state) }
+                }
+                .buttonStyle(.plain)
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.accent)
+                .fixedSize()
+            }
+            .padding(.horizontal, Brand.spacing.m)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Brand.color.card))
+            .overlay(Capsule().strokeBorder(Brand.color.line))
+            .shadow(color: Brand.color.shadow, radius: 12, y: 4)
+            .padding(.bottom, Brand.spacing.m)
+            .transition(.opacity)
+            .accessibilityElement(children: .combine)
         }
     }
 
@@ -368,7 +448,13 @@ struct TasksView: View {
         // First load: open on the first segment that has something (mine, then others', then no owner).
         if !pickedSegment {
             pickedSegment = true
-            segment = initialSegment ?? [Segment.mine, .theirs, .unowned].first { count($0) > 0 } ?? .mine
+            let open = model.tasks.filter { !model.isDone($0) }
+            let has: [Segment: Bool] = [
+                .mine: open.contains(where: \.isMine),
+                .theirs: open.contains { !$0.isMine && $0.ownerSlug != nil },
+                .unowned: open.contains { !$0.isMine && $0.ownerSlug == nil },
+            ]
+            segment = initialSegment ?? [Segment.mine, .theirs, .unowned].first { has[$0] == true } ?? .mine
         }
     }
 
@@ -396,34 +482,43 @@ private struct AllScopeTitle: ViewModifier {
     }
 }
 
-/// Brand segmented control whose counts sit in a fixed-width slot, so a count appearing, growing or disappearing never
-/// changes the control's width (CONTRACT §15.3).
+/// Brand segmented control with counts (same type scale and track as `BrandSegmentedControl`). Each segment reserves
+/// the width of its title in the heavier (selected) weight plus a two-digit count, and centers what it shows inside,
+/// so neither a selection change nor a count appearing, changing or reaching zero moves anything (CONTRACT §15.3).
 private struct TaskSegmentControl<Value: Hashable>: View {
     let items: [(Value, String, Int)]
     @Binding var selection: Value
+
+    private var countFont: Font { Brand.font(11, .medium) }
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(items, id: \.0) { value, title, count in
                 let selected = value == selection
                 Button {
-                    withAnimation(Brand.motion.fast) { selection = value }
+                    withAnimation(Brand.motion.animation(fast: true)) { selection = value }
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(title)
-                            .font(selected ? Brand.callout : Brand.body)
-                            .foregroundStyle(selected ? Brand.color.text : Brand.color.text2)
-                            .lineLimit(1)
-                        Text(count > 0 ? "\(min(count, 999))" : "")
-                            .font(Brand.font(11, .medium))
-                            .foregroundStyle(selected ? Brand.color.text2 : Brand.color.text3)
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .frame(width: 20, alignment: .leading)
+                    ZStack {
+                        // Width reference: heaviest title + "99", never shown.
+                        HStack(spacing: 5) {
+                            Text(title).font(Brand.font(12, .semibold))
+                            Text(verbatim: "99").font(countFont).monospacedDigit()
+                        }
+                        .hidden()
+                        HStack(spacing: 5) {
+                            Text(title)
+                                .font(Brand.font(12, selected ? .semibold : .medium))
+                                .foregroundStyle(selected ? Brand.color.text : Brand.color.text2)
+                            if count > 0 {
+                                Text(count, format: .number)
+                                    .font(countFont)
+                                    .foregroundStyle(selected ? Brand.color.text : Brand.color.text2)
+                                    .monospacedDigit()
+                            }
+                        }
                     }
-                    .padding(.leading, 10)
-                    .padding(.trailing, 4)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
                     .frame(height: 24)
                     .background {
                         if selected {
@@ -442,6 +537,8 @@ private struct TaskSegmentControl<Value: Hashable>: View {
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).fill(Brand.color.cardAlt))
+        // The hairline keeps the track readable in dark mode, where sand is almost the surface's tone.
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
         .fixedSize()
     }
 }
@@ -501,14 +598,11 @@ struct TaskRow: View {
         labels.label(for: key, projectSlug: task.projectSlug, state: state)
     }
 
-    /// Path of the newest cited source, when it has a page.
-    private var primaryPath: String? {
-        chipKeys.lazy.compactMap { label($0).path }.first
-    }
-
-    private var canOpen: Bool { onOpen != nil && primaryPath != nil }
-
     var body: some View {
+        // Computed once per pass (hover re-renders the row): cited keys, their labels, the page a click opens.
+        let keys = chipKeys(SourceLabels.shared.index(state))
+        let primaryPath = keys.lazy.compactMap { label($0).path }.first
+        let canOpen = onOpen != nil && primaryPath != nil
         HStack(alignment: .top, spacing: 10) {
             Button(action: onToggle) {
                 Image(systemName: done ? "checkmark.circle.fill" : "circle")
@@ -528,7 +622,7 @@ struct TaskRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 WrapLayout(spacing: 6, lineSpacing: 6) {
-                    chips
+                    chips(keys)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -542,13 +636,19 @@ struct TaskRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
+        // accentSoft reads both on the surface (Pendientes) and inside a card (Inicio).
         .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-            .fill(hovering && canOpen ? Brand.color.card : Color.clear))
+            .fill(hovering && canOpen ? Brand.color.accentSoft : Color.clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { if let path = primaryPath { onOpen?(path) } }
+        .accessibilityElement(children: .contain)
+        .accessibilityAction(named: Text(L("tasks.openSource"))) {
+            if canOpen, let path = primaryPath { onOpen?(path) }
+        }
         .animation(Brand.motion.fast, value: hovering)
-        .task(id: task.sourceKeys) {
+        // Re-resolved when the vault changes too, so a page written or retitled later updates the chip.
+        .task(id: [String(state.vaultRevision)] + task.sourceKeys) {
             guard showSources || onOpen != nil, !task.sourceKeys.isEmpty else { return }
             await labels.resolve(task.sourceKeys, projectSlug: task.projectSlug, state: state)
         }
@@ -564,30 +664,30 @@ struct TaskRow: View {
         }
     }
 
-    @ViewBuilder private var chips: some View {
+    @ViewBuilder private func chips(_ keys: [String]) -> some View {
         if showOwner {
             Chip(text: task.isMine ? L("tasks.me") : (task.ownerName ?? L("tasks.noOwner")),
-                 tint: task.isMine ? Brand.color.accent : nil, symbol: "person")
+                 tone: task.isMine ? .accent : .neutral, symbol: "person")
         }
         if showProject, let project = state.project(task.projectSlug) {
             Chip(text: "\(project.emoji) \(project.name)", maxWidth: 200)
         }
         if let due = task.due {
-            Chip(text: dueText(due), tint: dueTint(due), symbol: "calendar", strikethrough: done)
+            Chip(text: dueText(due), tone: dueTone(due), symbol: "calendar", strikethrough: done)
         }
         if done, let doneDate = task.doneDate {
-            Chip(text: L("tasks.doneOn", Fmt.dayTime(doneDate, hasTime: false)), tint: Brand.color.success, symbol: "checkmark")
+            Chip(text: L("tasks.doneOn", Fmt.dayTime(doneDate, hasTime: false)), tone: .accent, symbol: "checkmark")
         }
         if showSources {
-            ForEach(chipKeys.prefix(2), id: \.self) { key in
+            ForEach(keys.prefix(2), id: \.self) { key in
                 sourceChip(key)
             }
         }
     }
 
-    private func dueTint(_ due: Date) -> Color? {
-        if done { return Brand.color.text3 }
-        return Fmt.daysFromToday(due) <= 0 ? Brand.color.warning : nil
+    private func dueTone(_ due: Date) -> Chip.Tone {
+        if done { return .neutral }
+        return Fmt.daysFromToday(due) <= 0 ? .warning : .neutral
     }
 
     private func dueText(_ due: Date) -> String {
@@ -596,20 +696,20 @@ struct TaskRow: View {
     }
 
     /// Cited sources newest first, without repeating an email thread (two messages of one thread → one chip).
-    private var chipKeys: [String] {
+    private func chipKeys(_ index: SourceIndex) -> [String] {
         var out: [String] = []
         var groups: [String: Int] = [:]
         for key in task.sourceKeys {
-            let src = state.source(forKey: key)
+            let src = index.source(forKey: key)
             let group = src?.threadKey.map { "thread:" + $0 } ?? key
             if let i = groups[group] {
-                if let s = src, let prev = state.source(forKey: out[i]), s.timelineDate > prev.timelineDate { out[i] = key }
+                if let s = src, let prev = index.source(forKey: out[i]), s.timelineDate > prev.timelineDate { out[i] = key }
             } else {
                 groups[group] = out.count
                 out.append(key)
             }
         }
-        let dates = Dictionary(out.map { ($0, state.source(forKey: $0)?.timelineDate ?? .distantPast) }) { a, _ in a }
+        let dates = Dictionary(out.map { ($0, index.source(forKey: $0)?.timelineDate ?? .distantPast) }) { a, _ in a }
         return out.enumerated().sorted { a, b in
             let da = dates[a.element] ?? .distantPast, db = dates[b.element] ?? .distantPast
             return da == db ? a.offset < b.offset : da > db
@@ -622,7 +722,8 @@ struct TaskRow: View {
         Button {
             if let path = label.path { onOpen?(path) }
         } label: {
-            Chip(text: label.title, tint: missing ? Brand.color.text3 : nil, symbol: label.symbol, maxWidth: 240)
+            // Not found: same readable chip with a "?" symbol; the tooltip says why it can't open.
+            Chip(text: label.title, symbol: missing ? "questionmark.circle" : label.symbol, maxWidth: 240)
         }
         .buttonStyle(.plain)
         .help(missing ? L("tasks.sourceMissing") : label.help)
@@ -706,7 +807,7 @@ struct SourceTasksSheet: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(title).font(Brand.section).foregroundStyle(Brand.color.text)
                 if !tasks.isEmpty {
-                    Text(tasks.count, format: .number).font(Brand.callout).foregroundStyle(Brand.color.text3).monospacedDigit()
+                    Text(tasks.count, format: .number).font(Brand.callout).foregroundStyle(Brand.color.text2).monospacedDigit()
                 }
             }
             .padding(.bottom, 4)

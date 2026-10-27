@@ -8,6 +8,8 @@ import WebKit
 struct WikiWebView: NSViewRepresentable {
     let vault: VaultStore
     let path: String?
+    /// Leave out the "Tipo" chip (the surrounding header already names the page).
+    var hideType = false
     var onNavigate: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -95,6 +97,7 @@ struct WikiWebView: NSViewRepresentable {
                 "lang": Localizer.language,
                 "theme": theme(of: webView),
                 "path": shownPath ?? "",
+                "hideType": parent.hideType,
             ]
             renderGeneration += 1
             let generation = renderGeneration

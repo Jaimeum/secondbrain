@@ -54,11 +54,23 @@ struct MenuBarView: View {
                     }
                     .padding(.top, 8)
                 } label: {
-                    Text(L("menu.details"))
-                        .font(Brand.callout)
-                        .foregroundStyle(Brand.color.text)
-                        .contentShape(Rectangle())
-                        .onTapGesture { withAnimation(Brand.motion.fast) { detailsOpen.toggle() } }
+                    HStack(spacing: 6) {
+                        Text(L("menu.details"))
+                            .font(Brand.callout)
+                            .foregroundStyle(Brand.color.text)
+                            .lineLimit(1)
+                        // Folded, it still says where the next recording goes (no hidden destination).
+                        if !detailsOpen, let destination {
+                            Text(verbatim: "→ " + destination)
+                                .font(Brand.caption)
+                                .foregroundStyle(Brand.color.text2)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(Brand.motion.fast) { detailsOpen.toggle() } }
                 }
 
                 QueueStatusLine()
@@ -74,7 +86,7 @@ struct MenuBarView: View {
             if state.config.onboardingComplete {
                 Button {
                     openMain()
-                    state.requestEmail(projectSlug: state.recordingProjectSlug)
+                    state.requestEmail()
                 } label: {
                     Label(L("email.pasteMenu"), systemImage: "envelope")
                         .foregroundStyle(Brand.color.text)
@@ -98,6 +110,14 @@ struct MenuBarView: View {
         .onChange(of: state.isRecording) { _, recording in
             if recording { detailsOpen = true }
         }
+    }
+
+    /// "🚀 Atlas" (and the format, when one is chosen) for the folded "Detalles".
+    private var destination: String? {
+        var parts: [String] = []
+        if let slug = state.recordingProjectSlug, state.project(slug) != nil { parts.append(state.projectName(slug)) }
+        if let template = state.template(state.recordingTemplateId) { parts.append(template.name) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func fieldLabel(_ text: String) -> some View {

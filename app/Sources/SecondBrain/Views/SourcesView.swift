@@ -480,8 +480,7 @@ struct NoteSheet: View {
                 .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
             TextField(L("note.titlePlaceholder"), text: $title)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.large)
+                .brandTextField()
             TextEditor(text: $text)
                 .font(Brand.body)
                 .scrollContentBackground(.hidden)
@@ -553,13 +552,13 @@ struct PasteLinkSheet: View {
                 .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
             TextField(L("sources.linkPlaceholder"), text: $linkText)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.large)
+                .brandTextField()
                 .onSubmit(add)
             if let error {
                 Text(error)
                     .font(Brand.body)
                     .foregroundStyle(Brand.color.danger)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: Brand.spacing.s) {
@@ -575,7 +574,7 @@ struct PasteLinkSheet: View {
             }
         }
         .padding(Brand.spacing.xxl)
-        .frame(minWidth: 420, idealWidth: 480)
+        .frame(minWidth: 420, idealWidth: 480, maxHeight: 520)
         .background(Brand.color.surface)
     }
 
@@ -618,6 +617,22 @@ struct ImportFilesSheet: View {
     @ViewState private var error: String?
 
     var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                form
+                    .padding(Brand.spacing.xxl)
+            }
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            buttons
+                .padding(.horizontal, Brand.spacing.xxl)
+                .padding(.vertical, Brand.spacing.l)
+        }
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 320, idealHeight: 460)
+        .background(Brand.color.surface)
+        .task { await inspect() }
+    }
+
+    private var form: some View {
         VStack(alignment: .leading, spacing: Brand.spacing.l) {
             Text(urls.count == 1 ? L("import.titleOne") : L("import.titleMany", urls.count))
                 .font(Brand.title)
@@ -668,24 +683,28 @@ struct ImportFilesSheet: View {
                 TemplatePicker(scope: .meeting, selection: $templateId, projectSlug: projectSlug)
             }
             if let error {
-                Text(error).font(Brand.body).foregroundStyle(Brand.color.danger).fixedSize(horizontal: false, vertical: true)
-            }
-            HStack(spacing: Brand.spacing.s) {
-                if busy { BrandLoader(size: 16) }
-                Spacer()
-                Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
-                    .keyboardShortcut(.cancelAction)
-                Button(L("import.go"), action: run)
-                    .buttonStyle(.brandPrimary)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(busy)
+                Text(error)
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.danger)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(Brand.spacing.xxl)
-        .frame(minWidth: 460, idealWidth: 520)
-        .background(Brand.color.surface)
-        .task { await inspect() }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var buttons: some View {
+        HStack(spacing: Brand.spacing.s) {
+            if busy { BrandLoader(size: 16) }
+            Spacer()
+            Button(L("common.cancel")) { dismiss() }
+                .buttonStyle(.brandSecondary)
+                .keyboardShortcut(.cancelAction)
+            Button(L("import.go"), action: run)
+                .buttonStyle(.brandPrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(busy)
+        }
     }
 
     private func inspect() async {
@@ -723,7 +742,27 @@ struct ImportFilesSheet: View {
                 }
             }
             busy = false
-            if failed.isEmpty { dismiss() } else { error = failed.joined(separator: "\n") }
+            if failed.isEmpty {
+                dismiss()
+            } else {
+                // At most three reasons, then "y N más" (the sheet never grows past the window).
+                var lines = Array(failed.prefix(3))
+                if failed.count > 3 { lines.append(L("import.andMore", failed.count - 3)) }
+                error = lines.joined(separator: "\n")
+            }
         }
+    }
+}
+
+private extension View {
+    /// A one-line field in the brand style (card fill, hairline, control radius), like the chat input: never the
+    /// AppKit bezel next to a brand-styled editor.
+    func brandTextField() -> some View {
+        textFieldStyle(.plain)
+            .font(Brand.body)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
     }
 }

@@ -64,8 +64,12 @@ final class MailModel {
     private(set) var loadMoreError: String?
     private(set) var failure: Failure?
     private(set) var selectedId: String?
+    /// The message on screen. While another one loads, the previous one stays (dimmed, its actions off: `isStale`)
+    /// instead of blanking the reader; the loader shows only when there is nothing to keep and loading is slow.
     private(set) var detail: Detail?
     private(set) var detailLoading = false
+    /// Loading has taken more than 300 ms with nothing on screen: show the loader.
+    private(set) var detailSlow = false
     private(set) var detailError: String?
     /// Where the smart button adds to (nil = Sin asignar).
     private(set) var projectSlug: String?
@@ -82,7 +86,8 @@ final class MailModel {
     @ObservationIgnored private var ownerRevision = -1
     /// §15.2: one floating message at a time. A rule offer earned by a save waits until its toast is gone, then shows
     /// in the reader's action bar.
-    @ObservationIgnored private var deferredOffer: (subject: RoutingSubject, projectSlug: String)?
+    /// It belongs to the message it was earned on: it is dropped if the user moved to another one.
+    @ObservationIgnored private var deferredOffer: (messageId: String, subject: RoutingSubject, projectSlug: String)?
     /// Correo is on screen (set by MailView): a deferred offer never pops up from a screen the user left.
     @ObservationIgnored var isOnScreen = false
 
@@ -92,6 +97,11 @@ final class MailModel {
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var detailTask: Task<Void, Never>?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private var slowTask: Task<Void, Never>?
+    /// The stored-thread match of the open message is still running: a save waits for it (`queuedAdd`), so it never
+    /// starts a duplicate thread.
+    @ObservationIgnored private var matchPending = false
+    @ObservationIgnored private var queuedAdd: Bool?
 
     static let window: TimeInterval = 30 * 86_400
     static let toastSeconds: Double = 6
@@ -237,20 +247,37 @@ final class MailModel {
 
     // MARK: Reading
 
+    /// The reader shows a message other than the selected one (the new one is still loading): dimmed, no actions.
+    var isStale: Bool { detail != nil && detail?.message.summary.id != selectedId }
+
     func select(_ id: String?) {
-        guard id != selectedId || (id != nil && detail == nil && !detailLoading) else { return }
+        guard id != selectedId || (id != nil && detail?.message.summary.id != id && !detailLoading) else { return }
+        let changed = id != selectedId
         selectedId = id
         detailTask?.cancel()
+        slowTask?.cancel()
+        detailSlow = false
         detailError = nil
         actionError = nil   // an error belongs to the message it happened on
         projectPicked = false
+        matchPending = false
+        queuedAdd = nil
+        // §15.2: an offer about the previous message never stays under the next one.
+        if changed, ruleOffer.current?.phase == .asking { ruleOffer.dismiss() }
         guard let id, let state, let account, let summary = messages.first(where: { $0.id == id }) else {
             detail = nil
             detailLoading = false
             return
         }
-        if detail?.message.summary.id != id { detail = nil }
         detailLoading = true
+        if detail == nil {
+            // Nothing to keep on screen: a loader, but only if this is slow (cached messages render at once).
+            slowTask = Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, self.detailLoading, self.selectedId == id else { return }
+                self.detailSlow = true
+            }
+        }
         let provider = state.engine.accounts.provider(for: account)
         let engine = state.engine
         let cachedMessage = MailCache.shared.message(account.id, id)
@@ -271,24 +298,45 @@ final class MailModel {
                                                     language: engine.config.uiLanguage)
                 var found = Detail(message: message, thread: thread, parsed: parsed)
                 // A message of this conversation is already in the brain: continue its thread.
-                if let stored = thread.lazy.compactMap({ engine.emailSource(externalId: MailImport.externalId(account: account, messageId: $0.summary.id)) })
-                    .first(where: { $0.threadKey != nil }) {
+                let stored = thread.lazy.compactMap({ engine.emailSource(externalId: MailImport.externalId(account: account, messageId: $0.summary.id)) })
+                    .first(where: { $0.threadKey != nil })
+                if let stored {
                     found.existingThreadKey = stored.threadKey
                     found.existingThreadProject = stored.projectSlug
                     found.continuesStoredThread = true
-                } else if let match = await engine.matchThreadsAsync(for: parsed).first(where: { $0.score >= 0.8 }) {
-                    found.existingThreadKey = match.thread.key
-                    found.existingThreadProject = match.thread.projectSlug
                 }
-                guard !Task.isCancelled else { return }
-                detail = found
-                if !projectPicked { (projectSlug, destinationReason) = suggestedDestination(for: found) }
+                // On screen now; the fuzzy thread match (reads every stored email) patches it afterwards.
+                show(found)
+                guard stored == nil else { finishLoading(); return }
+                matchPending = true
+                let match = await engine.matchThreadsAsync(for: parsed).first(where: { $0.score >= 0.8 })
+                guard !Task.isCancelled, selectedId == id, self.detail?.message.summary.id == id else { return }
+                matchPending = false
+                if let match {
+                    self.detail?.existingThreadKey = match.thread.key
+                    self.detail?.existingThreadProject = match.thread.projectSlug
+                    if !projectPicked, let detail = self.detail { (projectSlug, destinationReason) = suggestedDestination(for: detail) }
+                }
+                finishLoading()
+                if let onlyThis = queuedAdd { queuedAdd = nil; add(onlyThis: onlyThis) }
             } catch {
                 guard !Task.isCancelled, !(error is CancellationError) else { return }
+                detail = nil
                 detailError = FriendlyError.message(error)
+                finishLoading()
             }
-            detailLoading = false
         }
+    }
+
+    private func show(_ found: Detail) {
+        detail = found
+        if !projectPicked { (projectSlug, destinationReason) = suggestedDestination(for: found) }
+    }
+
+    private func finishLoading() {
+        slowTask?.cancel()
+        detailLoading = false
+        detailSlow = false
     }
 
     private nonisolated static func fetchMessage(_ provider: MailCalendarProvider, id: String,
@@ -372,7 +420,8 @@ final class MailModel {
 
     /// The smart action: the whole conversation (what is missing of it) unless `onlyThis`.
     func add(onlyThis: Bool) {
-        guard let state, let account, let detail, !isSaving else { return }
+        guard let state, let account, let detail, !isSaving, !isStale else { return }
+        if matchPending { queuedAdd = onlyThis; return }   // runs as soon as the thread match is in
         let list = onlyThis ? [detail.message] : newInThread
         guard !list.isEmpty else { return }
         actionError = nil
@@ -399,7 +448,7 @@ final class MailModel {
                 if case .rule = reason, !picked { _ = state.engine.routing.route(subject) }
                 let routed = state.engine.routingPreview(subject).projectSlug
                 if picked || reason == .lastUsed, let project, project != routed {
-                    deferredOffer = (subject, project)   // shown once the toast is gone
+                    deferredOffer = (detail.message.summary.id, subject, project)   // shown once the toast is gone
                 }
             }
             guard let first = added.first else {
@@ -415,7 +464,9 @@ final class MailModel {
             // Their ingest (or classify) waits until the toast is gone, so "Deshacer" always finds them still queued
             // and can delete them (a running job can't be deleted).
             state.engine.hold(sourceIds: added.map(\.id), until: Date().addingTimeInterval(Self.toastSeconds + 2))
-            showToast(Toast(text: L("mail.learning"), sourceIds: added.map(\.id)))
+            // The toast names the email, so "Deshacer" can't look as if it applies to another message on screen.
+            showToast(Toast(text: L("mail.learningSubject", Self.shortSubject(detail.message.summary.subject)),
+                            sourceIds: added.map(\.id)))
         } catch {
             actionError = FriendlyError.message(error)
         }
@@ -437,12 +488,20 @@ final class MailModel {
         toast = nil
     }
 
-    /// The rule offer a save earned, now that its toast is gone (§15.2: never two messages at once).
+    /// The rule offer a save earned, now that its toast is gone (§15.2: never two messages at once). Only while that
+    /// message is still the one on screen.
     private func showDeferredOffer() {
         guard let offer = deferredOffer, let state else { return }
         deferredOffer = nil
-        guard isOnScreen else { return }
+        guard isOnScreen, detail?.message.summary.id == offer.messageId, !isStale else { return }
         ruleOffer.propose(offer.subject, projectSlug: offer.projectSlug, state: state)
+    }
+
+    /// "«Contrato actualizado — Acme»", shortened so the toast stays one line.
+    static func shortSubject(_ subject: String) -> String {
+        let s = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return L("mail.noSubject") }
+        return s.count > 40 ? String(s.prefix(39)).trimmingCharacters(in: .whitespaces) + "…" : s
     }
 
     /// "Deshacer": sources not learned yet are deleted (raw too); learned ones are undone first.
@@ -498,11 +557,44 @@ final class MailModel {
         try engine.delete(sourceId: sourceId)
     }
 
-    /// "Guardado · Ver en el proyecto": the thread's page when it exists, else the project (or Sin asignar).
+    /// "Guardado · Ver en el proyecto": the thread's page when it exists (looked up off the main thread), else what
+    /// `AppState.open(source:)` does (the learned page, the project's Contenido, or Inicio › Sin asignar).
     func open(_ source: SourceRecord) {
         guard let state else { return }
-        if let page = SourcePages.summaryPage(for: source, vault: state.engine.vault) { state.pendingPage = page }
-        state.selection = source.projectSlug.map { .project($0) } ?? .inbox
+        let vault = state.engine.vault
+        Task {
+            let page = await Task.detached { SourcePages.summaryPage(for: source, vault: vault) }.value
+            if let page { state.open(path: page) } else { state.open(source: source) }
+        }
+    }
+
+    /// A saved email in Sin asignar gets its project from Correo ("Elegir proyecto ▾" / "Asignar"): the whole thread
+    /// moves. A manual choice may earn the §14.3 rule offer (after the toast, if one is showing).
+    func assign(_ source: SourceRecord, to slug: String) {
+        guard let state else { return }
+        actionError = nil
+        let subject = state.engine.routingSubject(forSourceId: source.id)
+        do {
+            try state.engine.assign(sourceId: source.id, to: slug)
+        } catch {
+            actionError = (error as? EngineError)?.errorDescription ?? L("sources.moveFailed")
+            return
+        }
+        if let detail, detail.existingThreadKey == source.threadKey || detail.existingThreadKey == nil {
+            self.detail?.existingThreadKey = source.threadKey
+            self.detail?.existingThreadProject = slug
+            self.detail?.continuesStoredThread = true
+        }
+        projectSlug = slug
+        destinationReason = .thread
+        state.bumpVault()
+        guard let subject, slug != state.engine.routingPreview(subject).projectSlug, let messageId = detail?.message.summary.id
+        else { return }
+        if toast != nil {
+            deferredOffer = (messageId, subject, slug)
+        } else {
+            ruleOffer.propose(subject, projectSlug: slug, state: state)
+        }
     }
 
     // MARK: Debug snapshots
@@ -510,7 +602,8 @@ final class MailModel {
     /// Waits (bounded) until the list and the open message are loaded.
     func waitUntilReady() async {
         for _ in 0..<60 {
-            guard isLoading || detailLoading || (selectedId != nil && detail == nil && detailError == nil) else { return }
+            guard isLoading || detailLoading || (selectedId != nil && detail?.message.summary.id != selectedId && detailError == nil)
+            else { return }
             try? await Task.sleep(for: .milliseconds(50))
         }
     }

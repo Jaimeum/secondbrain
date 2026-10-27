@@ -10,7 +10,9 @@ struct TrustSheet: View {
     var context: ConnectContext = .settings
 
     var body: some View {
-        Group {
+        // One stable size for every phase (CONTRACT §15.3): the window never jumps while the content cross-fades.
+        // Forms (trust, blocked fork) sit at the top; the status phases (waiting, failed) are centered.
+        StableSheetBody(alignment: phaseAlignment) {
             if let flow = connector.flow {
                 switch flow.phase {
                 case .trust: trust(flow.provider)
@@ -23,12 +25,18 @@ struct TrustSheet: View {
                 }
             }
         }
-        .frame(minWidth: 440, idealWidth: 460, maxWidth: 520)
-        .frame(maxHeight: .infinity)
+        .frame(minWidth: 440, idealWidth: 460, maxWidth: 520, minHeight: 360, idealHeight: 460, maxHeight: .infinity)
         .background(Brand.color.surface)
         .animation(Brand.motion.animation(), value: connector.flow?.phase)
         // Closed some other way (Esc, window closing): stop waiting for the browser.
         .onDisappear { if connector.flow == nil { connector.cancel() } }
+    }
+
+    private var phaseAlignment: Alignment {
+        switch connector.flow?.phase {
+        case .waiting, .failed: .center
+        default: .top
+        }
     }
 
     // MARK: Trust
@@ -85,7 +93,7 @@ struct TrustSheet: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L("accounts.waiting.reopen")) { connector.reopenBrowser() }
-                .buttonStyle(.settingsLink)
+                .buttonStyle(.settingsExternalLink)
             Button(L("common.cancel")) { connector.cancel() }
                 .buttonStyle(.brandSecondary)
                 .keyboardShortcut(.cancelAction)
@@ -123,6 +131,23 @@ struct TrustSheet: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// The body of a connect sheet with a fixed ideal size: scrolls when a phase is taller than the sheet (the blocked
+/// fork at the minimum height), otherwise fills it and places the phase at `alignment`.
+struct StableSheetBody<Content: View>: View {
+    var alignment: Alignment = .top
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView(.vertical) {
+                content
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: alignment)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
     }
 }
 

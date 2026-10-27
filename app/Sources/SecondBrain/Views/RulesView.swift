@@ -16,8 +16,8 @@ struct RulesSettingsPage: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        // Same column width as the other tabs (640 + padding).
-        RulesPanel(store: state.engine.routing)
+        // Same column width as the other tabs (640 + padding). The tab already says "Reglas": no page title.
+        RulesPanel(store: state.engine.routing, showsTitle: false)
             .frame(maxWidth: 688)
             .frame(maxWidth: .infinity)
             .background(Brand.color.surface)
@@ -72,11 +72,17 @@ struct RulesPanel: View {
     @Environment(AppState.self) private var state
     let store: RoutingStore
     var mail: [MailMessageSummary] = []
+    /// The sheet shows "Reglas" as its title; Ajustes → Reglas doesn't repeat the tab's name.
+    var showsTitle = true
     @ViewState private var editing: RuleEditorItem?
     @ViewState private var error: String?
     @ViewState private var deleted: (rule: RoutingRule, index: Int)?
 
     private var lang: String { state.config.uiLanguage }
+
+    /// One row of the list (two lines of text + padding), used to size the card to its rows.
+    private static let rowHeight: CGFloat = 48
+    private var listHeight: CGFloat { CGFloat(store.rules.count) * Self.rowHeight + 22 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -87,7 +93,11 @@ struct RulesPanel: View {
                 list
             }
             footer
+            // Leftover height goes below the controls, never inside the card.
+            Spacer(minLength: 0)
         }
+        .animation(Brand.motion.animation(), value: deleted?.rule.id)
+        .onChange(of: editing?.id) { if editing != nil { deleted = nil } }
         .sheet(item: $editing) { item in
             RuleEditorSheet(store: store, item: item, mail: mail)
         }
@@ -97,7 +107,9 @@ struct RulesPanel: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(L("rules.title")).font(Brand.title).foregroundStyle(Brand.color.text)
+                if showsTitle {
+                    Text(L("rules.title")).font(Brand.title).foregroundStyle(Brand.color.text)
+                }
                 Text(L("rules.subtitle"))
                     .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -111,7 +123,7 @@ struct RulesPanel: View {
             .buttonStyle(.brandPrimary)
         }
         .padding(.horizontal, Brand.spacing.contentWide)
-        .padding(.top, 20)
+        .padding(.top, showsTitle ? 20 : Brand.spacing.contentWide)
         .padding(.bottom, 12)
     }
 
@@ -145,8 +157,10 @@ struct RulesPanel: View {
         .background(Brand.color.card)
         .clipShape(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
+        // Sized to its rows (scrolls when they don't fit), so no empty block sits under the last rule.
+        .frame(minHeight: min(120, listHeight), idealHeight: listHeight, maxHeight: listHeight)
         .padding(.horizontal, Brand.spacing.contentWide)
-        .frame(minHeight: 120, maxHeight: .infinity)
+        .layoutPriority(1)
     }
 
     private var footer: some View {
@@ -157,6 +171,7 @@ struct RulesPanel: View {
                     Button(L("rules.undo")) { restore(deleted) }
                         .buttonStyle(.settingsLink)
                 }
+                .transition(.opacity)
             }
             if store.rules.count > 1 {
                 Text(L("rules.footer"))
@@ -299,12 +314,13 @@ struct RulesPanel: View {
         copy.hits = 0
         attempt {
             try store.add(copy)
+            // Only a copy that is really in the store opens in the editor.
+            editing = RuleEditorItem(rule: copy, isNew: false)
             if let from = store.rules.firstIndex(where: { $0.id == copy.id }),
                let original = store.rules.firstIndex(where: { $0.id == rule.id }) {
                 try store.move(fromOffsets: IndexSet(integer: from), toOffset: original + 1)
             }
         }
-        editing = RuleEditorItem(rule: copy, isNew: false)
     }
 
     private func delete(_ rule: RoutingRule) {
@@ -312,6 +328,12 @@ struct RulesPanel: View {
         attempt {
             try store.remove(id: rule.id)
             deleted = (rule, index)
+        }
+        // "Regla eliminada · Deshacer" lasts a few seconds (a later deletion replaces it).
+        let id = rule.id
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(6))
+            if deleted?.rule.id == id { deleted = nil }
         }
     }
 

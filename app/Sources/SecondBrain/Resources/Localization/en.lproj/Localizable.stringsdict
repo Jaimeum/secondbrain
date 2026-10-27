@@ -259,5 +259,21 @@
 			<string>%ld kinds</string>
 		</dict>
 	</dict>
+	<key>mail.saveRestOfThread</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Save the other message of the thread</string>
+			<key>other</key>
+			<string>Save the rest of the thread (%ld)</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

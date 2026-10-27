@@ -34,7 +34,6 @@ struct ProjectView: View {
     @ViewState private var graphFocus: String?
     @ViewState private var chat = ChatModel()
     @ViewState private var sheet: ProjectSheet?
-    @ViewState private var lintQueued = false
     @ViewState private var error: String?
 
     init(project: Project, initialTab: ProjectTab = .content) {
@@ -63,7 +62,10 @@ struct ProjectView: View {
             .onChange(of: state.pendingGraphFocus) { consumePending() }
             .onChange(of: state.pendingProjectTab) { consumePending() }
             .onChange(of: state.pendingQuestion) { consumePending() }
-            .onChange(of: state.historyRevision) { lintQueued = false }   // the review finished (or anything else did)
+            .onChange(of: tab) { old, _ in
+                // "Ver en el grafo" centers the graph once; the next visit from the tab bar starts from the overview.
+                if old == .graph { graphFocus = nil }
+            }
             .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button(L("common.ok")) { error = nil }
             } message: {
@@ -71,10 +73,27 @@ struct ProjectView: View {
             }
     }
 
-    @ViewBuilder private var content: some View {
+    /// Contenido stays alive under the other tabs (its list, scroll position and page survive a tab switch: no loader
+    /// flash, no reload of the page); the other tabs are built when shown, over an opaque background.
+    private var content: some View {
+        ZStack {
+            ProjectContentView(project: project, selection: $page, isActive: tab == .content)
+                .opacity(tab == .content ? 1 : 0)
+                .allowsHitTesting(tab == .content)
+                .accessibilityHidden(tab != .content)
+            if tab != .content {
+                otherTab
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Brand.color.surface)
+                    .contentShape(Rectangle())
+            }
+        }
+    }
+
+    @ViewBuilder private var otherTab: some View {
         switch tab {
         case .content:
-            ProjectContentView(project: project, selection: $page)
+            EmptyView()
         case .tasks:
             ProjectTasksView(project: project, onOpen: openPage)
         case .ask:
@@ -112,7 +131,8 @@ struct ProjectView: View {
         .help(L("project.addHelp"))
     }
 
-    /// ⋯: settings of the project that are used rarely.
+    /// ⋯: settings of the project that are used rarely (§15.2: Formato por defecto ▸ · Repositorios… · Mostrar en
+    /// Finder). "Revisar mi cerebro" lives in Historial, next to the changes it makes.
     private var moreMenu: some View {
         Menu {
             Menu(L("tpl.projectDefault")) {
@@ -131,14 +151,6 @@ struct ProjectView: View {
                 }
             }
             Button { sheet = .repos } label: { Label(L("project.repos"), systemImage: "chevron.left.forwardslash.chevron.right") }
-            Button {
-                state.engine.lint(projectSlug: project.slug)
-                lintQueued = true
-            } label: {
-                Label(lintQueued ? L("chat.lintQueued") : L("chat.lint"), systemImage: "stethoscope")
-            }
-            .disabled(lintQueued)
-            .help(L("chat.lintHelp"))
             Divider()
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([state.engine.vault.url(for: "projects/\(project.slug)")])
@@ -192,9 +204,10 @@ struct ProjectView: View {
 
     // MARK: Navigation
 
-    /// Requests from elsewhere (Inicio, ⌘K, Pendientes, "Ver en el grafo"): a page, a tab, a question.
+    /// Requests from elsewhere (Inicio, ⌘K, Pendientes, "Ver en el grafo"): a page, a tab, a question. Only this
+    /// project's pages are taken; a person or global page waits for the screen it belongs to.
     private func consumePending() {
-        if let path = state.pendingPage {
+        if let path = state.pendingPage, path.hasPrefix("projects/\(project.slug)/") {
             state.pendingPage = nil
             openPage(path)
         }
@@ -302,26 +315,35 @@ struct BrainView: View {
 }
 
 struct PeopleView: View {
+    @Environment(AppState.self) private var state
     @ViewState private var page: String?
 
     var body: some View {
         WikiBrowser(scope: .people, selection: $page)
             .navigationTitle(L("sidebar.people"))
+            .onAppear(perform: consumePending)
+            .onChange(of: state.pendingPage) { consumePending() }
+    }
+
+    /// A person opened from elsewhere (`AppState.open(path:)`, ⌘K, a wikilink): select it and clear the request.
+    private func consumePending() {
+        guard let path = state.pendingPage, path.hasPrefix("people/") else { return }
+        state.pendingPage = nil
+        page = path
     }
 }
 
-/// The section switcher: segmented while it fits, a pop-up menu when it doesn't (never wider than its bar).
+/// The section switcher: the brand segmented control (the same as Por fecha | Por tema under it) while it fits, a
+/// pop-up menu when it doesn't (never wider than its bar). No `fixedSize` (§15.2): ViewThatFits measures the
+/// control's ideal width (equal 104 pt minimum segments, so labels never shift), then the chosen one fills the bar.
 struct TabPicker: View {
     let tabs: [ProjectTab]
     @Binding var selection: ProjectTab
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            Picker("", selection: $selection) {
-                ForEach(tabs, id: \.self) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            BrandSegmentedControl(options: tabs.map { ($0, $0.title) }, selection: $selection,
+                                  minSegmentWidth: 104, height: 26)
             Picker("", selection: $selection) {
                 ForEach(tabs, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
             }

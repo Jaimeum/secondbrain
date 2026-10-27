@@ -212,7 +212,8 @@ private struct AdvancedSettings: View {
     }
 }
 
-/// "Listo para transcribir" · linear progress with the real percentage · "Descargar ahora".
+/// "Listo para transcribir" · linear progress with the real percentage · "Sin descargar · Descargar ahora" · the error
+/// with "Reintentar" (the same states as the onboarding's ModelsStatusLine).
 private struct ModelStatusControl: View {
     @Environment(AppState.self) private var state
 
@@ -228,9 +229,25 @@ private struct ModelStatusControl: View {
                     .foregroundStyle(Brand.color.text2)
                     .monospacedDigit()
             }
+        } else if let error = state.modelError {
+            HStack(spacing: 10) {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.warning)
+                    .lineLimit(2)
+                    .frame(maxWidth: 260, alignment: .trailing)
+                    .help(error)
+                Button(L("onb.models.retry")) { state.prepareModels() }
+                    .buttonStyle(.brandSecondary)
+            }
         } else {
-            Button(L("settings.whisper.download")) { state.prepareModels() }
-                .buttonStyle(.brandSecondary)
+            HStack(spacing: 10) {
+                Text(L("settings.whisper.notDownloaded"))
+                    .foregroundStyle(Brand.color.text2)
+                    .lineLimit(1)
+                Button(L("settings.whisper.download")) { state.prepareModels() }
+                    .buttonStyle(.brandSecondary)
+            }
         }
     }
 }
@@ -360,18 +377,48 @@ struct SettingsDivider: View {
     }
 }
 
-/// A text link in `accent` (the system `.link` style ignores the brand tint and inherits the footer's grey).
+/// A text link (the system `.link` style ignores the brand tint and inherits the footer's grey): link color, medium
+/// weight and a faint underline that strengthens on hover/press, so it never reads as body text. In dark mode `accent` equals `text2`, so links
+/// use a lighter sage there. `external`: a trailing ↗ for links that leave the app.
 struct SettingsLinkButtonStyle: ButtonStyle {
+    var external = false
+
+    /// Light: the brand olive (`accent`). Dark: #C9D0BE, distinct from `text2` (#AEB5A4) on every surface.
+    static let linkColor = Brand.dynamic(light: 0x475243, dark: 0xC9D0BE)
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Brand.color.accent)
+        LinkLabel(configuration: configuration, external: external)
+    }
+
+    private struct LinkLabel: View {
+        let configuration: Configuration
+        let external: Bool
+        @ViewState private var hovering = false
+
+        var body: some View {
+            HStack(spacing: 3) {
+                // A faint underline always (it's a link, not body text); full strength on hover/press.
+                configuration.label
+                    .underline(true, color: SettingsLinkButtonStyle.linkColor
+                        .opacity(hovering || configuration.isPressed ? 1 : 0.35))
+                if external {
+                    Image(systemName: "arrow.up.right").imageScale(.small)
+                }
+            }
+            .fontWeight(.medium)
+            .foregroundStyle(SettingsLinkButtonStyle.linkColor)
             .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .pointerStyle(.link)
+        }
     }
 }
 
 extension ButtonStyle where Self == SettingsLinkButtonStyle {
     static var settingsLink: SettingsLinkButtonStyle { SettingsLinkButtonStyle() }
+    /// A link that opens something outside the app (browser, mail, System Settings): adds ↗.
+    static var settingsExternalLink: SettingsLinkButtonStyle { SettingsLinkButtonStyle(external: true) }
 }
 
 /// The label of a brand-styled pull-down ("Usar por defecto ▾", "Conectar otra cuenta ▾"): use inside

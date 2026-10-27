@@ -112,6 +112,7 @@ private struct ForkButton: View {
                     .frame(width: 30, height: 30)
                     .background(prominent ? Brand.color.accent : Brand.color.accentSoft,
                                 in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                // The text takes every point up to the chevron (a Spacer would split the width with it).
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(Brand.callout).foregroundStyle(Brand.color.text)
                     Text(detail)
@@ -119,7 +120,8 @@ private struct ForkButton: View {
                         .foregroundStyle(Brand.color.text2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
                 Image(systemName: "chevron.right").font(Brand.font(11, .semibold)).foregroundStyle(Brand.color.text3)
             }
             .padding(.horizontal, 12)

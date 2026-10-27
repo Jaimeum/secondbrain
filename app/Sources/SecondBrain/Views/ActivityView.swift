@@ -114,11 +114,17 @@ struct ActivityView: View {
     }
 }
 
-/// "Historial" as a sheet (project toolbar, Inicio): a header with Cerrar over `ActivityView`.
+/// "Historial" as a sheet (project toolbar, Inicio): a header with "Revisar mi cerebro" and Cerrar over `ActivityView`.
 struct ActivitySheet: View {
+    @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
     let projectSlug: String?
     var onOpenPage: (String) -> Void
+
+    /// A review of this scope is queued or running (the engine's jobs): the button waits, its label never changes.
+    private var reviewing: Bool {
+        state.engine.jobs.contains { $0.kind == .lint && $0.projectSlug == projectSlug && ($0.status == .queued || $0.status == .running) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -127,7 +133,18 @@ struct ActivitySheet: View {
                     .font(Brand.title)
                     .foregroundStyle(Brand.color.text)
                     .lineLimit(1)
-                Spacer()
+                    .layoutPriority(1)
+                Spacer(minLength: Brand.spacing.s)
+                if reviewing { BrandLoader(size: 14) }
+                Button {
+                    state.engine.lint(projectSlug: projectSlug)
+                } label: {
+                    Label(L("chat.lint"), systemImage: "stethoscope")
+                        .lineLimit(1)
+                }
+                .buttonStyle(.brandSecondary)
+                .disabled(reviewing || !state.engineStarted)
+                .help(reviewing ? L("chat.lintQueued") : L("chat.lintHelp"))
                 Button(L("common.close")) { dismiss() }
                     .buttonStyle(.brandSecondary)
                     .keyboardShortcut(.cancelAction)
@@ -187,10 +204,18 @@ private struct HistoryRow: View {
                     if entry.undone {
                         BrandChip(text: L("activity.undone"))
                     } else {
-                        Button(L("activity.undoShort"), action: onUndo)
-                            .buttonStyle(.brandSecondary)
-                            .controlSize(.small)
-                            .help(L("activity.undo"))
+                        // Undo is one step away (⋯ or right-click), not a button on every card.
+                        Menu {
+                            Button(L("activity.undo"), role: .destructive, action: onUndo)
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundStyle(Brand.color.text2)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help(L("project.more"))
+                        .accessibilityLabel(Text(L("project.more")))
                     }
                 }
                 if let summary, !summary.isEmpty {
@@ -227,6 +252,9 @@ private struct HistoryRow: View {
             }
         }
         .opacity(entry.undone ? 0.6 : 1)
+        .contextMenu {
+            if !entry.undone { Button(L("activity.undo"), role: .destructive, action: onUndo) }
+        }
     }
 
     private var symbol: String {
@@ -267,7 +295,7 @@ private struct ChangeRow: View {
                 .help(title)
             Text(label)
                 .font(Brand.caption)
-                .foregroundStyle(Brand.color.text3)
+                .foregroundStyle(Brand.color.text2)
                 .lineLimit(1)
                 .layoutPriority(-1)
             Spacer(minLength: Brand.spacing.s)

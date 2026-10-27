@@ -87,7 +87,12 @@ struct ClaudeConnectView: View {
     @ViewState private var model = ClaudeConnectModel()
     @ViewState private var showInstallLog = false
     @ViewState private var showTrouble = false
+    /// The raw `claude setup-token` terminal, folded behind "Ver detalles" (it keeps running hidden, so the token is
+    /// still captured). Opens by itself only when the CLI stops without handing over a token.
+    @ViewState private var showTerminalDetails = false
     var autoVerify = true
+    /// Reports whether Claude is connected (the reconnect sheet makes "Listo" primary only then).
+    var onConnectedChange: ((Bool) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -101,6 +106,7 @@ struct ClaudeConnectView: View {
             }
         }
         .onAppear { if model.install == .checking { model.locate(config: state.config, autoVerify: autoVerify) } }
+        .onChange(of: model.auth) { onConnectedChange?(model.auth == .connected) }
     }
 
     private var installCard: some View {
@@ -189,23 +195,11 @@ struct ClaudeConnectView: View {
             Text(L("claude.connectMessage")).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
 
             if model.showTerminal, let url = model.claudeURL {
-                ClaudeTerminalView(executable: url,
-                                   onToken: { model.received(token: $0, config: state.config) },
-                                   onExit: { _ in })
-                    .id(model.terminalRun)
-                    .frame(height: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
-                HStack {
-                    Text(L("claude.terminalHint")).font(Brand.caption).foregroundStyle(Brand.color.text2)
-                    Spacer()
-                    Button(L("claude.restartTerminal")) { model.terminalRun += 1 }
-                        .buttonStyle(.settingsLink)
-                        .font(Brand.caption)
-                }
+                waitingForBrowser(url)
             } else {
                 Button {
                     model.terminalRun += 1
+                    showTerminalDetails = false
                     model.showTerminal = true
                 } label: {
                     Label(L("claude.connect"), systemImage: "person.badge.key")
@@ -232,6 +226,53 @@ struct ClaudeConnectView: View {
                         Text(error).font(Brand.caption).foregroundStyle(Brand.color.danger)
                     }
                 }
+            }
+        }
+    }
+}
+
+extension ClaudeConnectView {
+    /// After "Conectar con Claude": a calm waiting line; the terminal stays mounted (it reads the token) but only shows
+    /// under "Ver detalles".
+    fileprivate func waitingForBrowser(_ url: URL) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                BrandLoader(size: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("claude.waitingBrowser")).font(Brand.callout).foregroundStyle(Brand.color.text)
+                    Text(L("claude.waitingBrowserHint"))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Disclosure(title: L("claude.details"), isOpen: $showTerminalDetails) { EmptyView() }
+                .padding(.top, 12)
+            ClaudeTerminalView(executable: url,
+                               onToken: { model.received(token: $0, config: state.config) },
+                               onExit: { code in
+                                   // Stopped without a token: show what the CLI said.
+                                   if model.auth != .verifying && model.auth != .connected { showTerminalDetails = true }
+                                   _ = code
+                               })
+                .id(model.terminalRun)
+                .frame(height: 220)
+                .clipShape(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                .opacity(showTerminalDetails ? 1 : 0)
+                .frame(height: showTerminalDetails ? 220 : 0, alignment: .top)
+                .allowsHitTesting(showTerminalDetails)
+                .accessibilityHidden(!showTerminalDetails)
+                .padding(.top, showTerminalDetails ? 10 : 0)
+            if showTerminalDetails {
+                HStack {
+                    Text(L("claude.terminalHint")).font(Brand.caption).foregroundStyle(Brand.color.text2)
+                    Spacer()
+                    Button(L("claude.restartTerminal")) { model.terminalRun += 1 }
+                        .buttonStyle(.settingsLink)
+                        .font(Brand.caption)
+                }
+                .padding(.top, 8)
             }
         }
     }
@@ -267,13 +308,15 @@ private struct Disclosure<Content: View>: View {
 /// every other sheet.
 struct ReconnectClaudeSheet: View {
     @Environment(\.dismiss) private var dismiss
+    /// "Listo" is the primary action (and Return) only once Claude is connected; before that "Conectar con Claude" is.
+    @ViewState private var connected = false
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(L("claude.reconnectTitle")).font(Brand.title).foregroundStyle(Brand.color.text)
-                    ClaudeConnectView(autoVerify: false)
+                    ClaudeConnectView(autoVerify: false, onConnectedChange: { connected = $0 })
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -281,9 +324,15 @@ struct ReconnectClaudeSheet: View {
             Rectangle().fill(Brand.color.line).frame(height: 1)
             HStack {
                 Spacer()
-                Button(L("common.done")) { dismiss() }
-                    .buttonStyle(.brandPrimary)
-                    .keyboardShortcut(.defaultAction)
+                if connected {
+                    Button(L("common.done")) { dismiss() }
+                        .buttonStyle(.brandPrimary)
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    Button(L("common.done")) { dismiss() }
+                        .buttonStyle(.brandSecondary)
+                        .keyboardShortcut(.cancelAction)
+                }
             }
             .padding(12)
         }

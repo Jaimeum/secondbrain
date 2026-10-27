@@ -55,6 +55,7 @@ struct AddEmailSheet: View {
     /// Width of the label column of the fields, so Asunto/De/Para/Enviado and Proyecto line up across the cards.
     private static let labelWidth: CGFloat = 64
     @ViewState private var editingFrom = false
+    @ViewState private var editingTo = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -82,7 +83,7 @@ struct AddEmailSheet: View {
         .background(Brand.color.surface)
         .frame(minWidth: 640, idealWidth: 760, maxWidth: .infinity, minHeight: 440, idealHeight: 520, maxHeight: .infinity)
         .onAppear(perform: start)
-        .onChange(of: text) { scheduleParse() }
+        .onChange(of: text) { error = nil; scheduleParse() }
         .onChange(of: subject) { refreshMatches() }
         .onChange(of: from) { refreshMatches() }
     }
@@ -107,9 +108,15 @@ struct AddEmailSheet: View {
                             .foregroundStyle(Brand.color.success)
                         Spacer(minLength: 0)
                     }
-                    Button(L("rules.offer.done")) { dismiss() }
-                        .buttonStyle(.brandPrimary)
-                        .keyboardShortcut(.defaultAction)
+                    // While the offer asks, "Sí, siempre" is the one primary button and Return doesn't answer for it.
+                    if ruleOffer.current?.phase == .asking {
+                        Button(L("rules.offer.done")) { dismiss() }
+                            .buttonStyle(.brandSecondary)
+                    } else {
+                        Button(L("rules.offer.done")) { dismiss() }
+                            .buttonStyle(.brandPrimary)
+                            .keyboardShortcut(.defaultAction)
+                    }
                 }
             } else {
                 HStack(spacing: 8) {
@@ -155,6 +162,7 @@ struct AddEmailSheet: View {
                     .font(Brand.body)
                     .foregroundStyle(Brand.color.text)
                     .scrollContentBackground(.hidden)
+                    .scrollIndicators(.never)   // no legacy scroller strip inside the box (light bar in dark mode)
                     .padding(8)
                 if text.isEmpty {
                     Text(L("email.placeholder"))
@@ -198,7 +206,7 @@ struct AddEmailSheet: View {
             } else {
                 understood
                 threadBox
-                projectRow.padding(.horizontal, 12)
+                projectRow.padding(.horizontal, 12)   // the same field column as inside the cards
             }
         }
     }
@@ -243,7 +251,7 @@ struct AddEmailSheet: View {
                 }
                 GridRow {
                     gridLabel(L("email.to"))
-                    TextField("", text: $to).textFieldStyle(.roundedBorder)
+                    toCell
                 }
                 GridRow {
                     gridLabel(L("email.date"))
@@ -291,6 +299,35 @@ struct AddEmailSheet: View {
         }
     }
 
+    /// "Para": the names only ("Ana García, Luis Pérez"; addresses in the tooltip), editable with the pencil.
+    @ViewBuilder private var toCell: some View {
+        let names = to.split(whereSeparator: { $0 == "," || $0 == ";" })
+            .map { part -> String in
+                let address = Self.address(String(part))
+                return address.name ?? address.email ?? String(part).trimmingCharacters(in: .whitespaces)
+            }
+            .filter { !$0.isEmpty }
+        if editingTo || names.isEmpty {
+            TextField("", text: $to).textFieldStyle(.roundedBorder)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(names.joined(separator: ", "))
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(to)
+                Button { editingTo = true } label: {
+                    Image(systemName: "pencil").foregroundStyle(Brand.color.text2)
+                }
+                .buttonStyle(.plain)
+                .help(L("email.editTo"))
+            }
+        }
+    }
+
+    /// One choice, one line: "Se une a «X» · Cambiar ▾" or "Nuevo hilo · Unir a otro ▾". The menu lists "Nuevo hilo"
+    /// and the suggested thread first, then the 15 most recent.
     @ViewBuilder private var threadBox: some View {
         card {
             Label(L("email.thread"), systemImage: "bubble.left.and.bubble.right")
@@ -300,65 +337,78 @@ struct AddEmailSheet: View {
                 threadSummary(fixedThread)
             } else {
                 let best = matches.first.flatMap { $0.score >= 0.5 ? $0 : nil }
-                if let best {
+                let chosen = chosenThread
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        threadChoiceText(chosen)
+                        threadMenu(best: best, joined: chosen != nil)
+                    }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(best.score >= 0.8 ? L("email.looksLike", best.thread.subject) : L("email.mightBe", best.thread.subject))
-                            .font(Brand.callout)
-                            .foregroundStyle(Brand.color.text)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text(threadFacts(best.thread) + " · " + best.reason)
-                            .font(Brand.caption)
-                            .foregroundStyle(Brand.color.text2)
-                            .fixedSize(horizontal: false, vertical: true)
+                        threadChoiceText(chosen)
+                        threadMenu(best: best, joined: chosen != nil)
                     }
-                    Picker("", selection: Binding(get: { choice }, set: { choice = $0; userPickedThread = true })) {
-                        Text(L("email.addToThread")).tag(ThreadChoice.existing(best.thread.key))
-                        Text(L("email.newThread")).tag(ThreadChoice.new)
-                    }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
                 }
-                if let thread = chosenThread, thread.key != best?.thread.key {
-                    threadSummary(thread)
-                } else if best == nil {
-                    Text(L("email.newThread")).foregroundStyle(Brand.color.text2)
+                if let chosen {
+                    Text(threadFacts(chosen) + (best?.thread.key == chosen.key ? " · " + (best?.reason ?? "") : ""))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if let best {
+                    // A possible match the user (or the 0.8 threshold) didn't take: say so, one click away in the menu.
+                    Text(L("email.mightBe", best.thread.subject))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                otherThreadMenu
             }
         }
     }
 
-    /// "Elegir otro hilo…": the 15 most recent threads (and "Nuevo hilo" to go back).
-    private var otherThreadMenu: some View {
-        Menu {
-            if case .existing = choice {
-                Button(L("email.newThread")) { choice = .new; userPickedThread = true }
+    private func threadChoiceText(_ chosen: EmailThread?) -> some View {
+        Text(chosen.map { L("email.joins", $0.subject) } ?? L("email.newThread"))
+            .font(Brand.callout)
+            .foregroundStyle(Brand.color.text)
+            .lineLimit(2)
+            .truncationMode(.middle)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// "Cambiar ▾" / "Unir a otro ▾": Nuevo hilo, the suggestion, then the 15 most recent threads; ✓ on the current one.
+    private func threadMenu(best: ThreadMatch?, joined: Bool) -> some View {
+        let recent = allThreads.sorted { ($0.lastDate ?? .distantPast) > ($1.lastDate ?? .distantPast) }
+            .filter { $0.key != best?.thread.key }.prefix(15)
+        return Menu {
+            threadButton(L("email.newThread"), selected: choice == .new) { choice = .new }
+            if let best {
                 Divider()
+                threadButton("\(best.thread.subject) — \(state.projectName(best.thread.projectSlug))",
+                             selected: choice == .existing(best.thread.key)) { choice = .existing(best.thread.key) }
             }
-            ForEach(allThreads.sorted { ($0.lastDate ?? .distantPast) > ($1.lastDate ?? .distantPast) }.prefix(15)) { thread in
-                Button("\(thread.subject) — \(state.projectName(thread.projectSlug))") {
-                    choice = .existing(thread.key)
-                    userPickedThread = true
+            if !recent.isEmpty {
+                Divider()
+                ForEach(Array(recent)) { thread in
+                    threadButton("\(thread.subject) — \(state.projectName(thread.projectSlug))",
+                                 selected: choice == .existing(thread.key)) { choice = .existing(thread.key) }
                 }
             }
         } label: {
-            Text(otherThreadTitle)
+            Text(joined ? L("email.changeThread") : L("email.joinOther"))
                 .font(Brand.callout)
                 .foregroundStyle(Brand.color.accent)
                 .lineLimit(1)
-                .truncationMode(.middle)
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .disabled(allThreads.isEmpty)
+        .menuStyle(.borderlessButton)
+        .fixedSize()   // a short, fixed label
+        .disabled(allThreads.isEmpty && best == nil && !joined)
     }
 
-    private var otherThreadTitle: String {
-        if case .existing(let key) = choice, key != matches.first?.thread.key, let t = allThreads.first(where: { $0.key == key }) {
-            return L("email.otherThreadChosen", t.subject)
+    private func threadButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+            userPickedThread = true
+        } label: {
+            if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
         }
-        return L("email.otherThread")
     }
 
     private func threadSummary(_ thread: EmailThread) -> some View {
@@ -419,7 +469,7 @@ struct AddEmailSheet: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(maxWidth: 260, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         if let rule = routedRule {
                             Text(L("rules.mail.byRule", ruleLabel(rule)))
                                 .font(Brand.caption).foregroundStyle(Brand.color.text2)
@@ -489,6 +539,8 @@ struct AddEmailSheet: View {
         }
         parsed = email
         all = parsedAll
+        editingFrom = false
+        editingTo = false
         subject = email.subject ?? ""
         from = email.from.map(Self.format) ?? ""
         to = (email.to + email.cc).map(Self.format).joined(separator: ", ")
@@ -544,6 +596,7 @@ struct AddEmailSheet: View {
     }
 
     private func save() {
+        error = nil
         guard var email = edited() else { return }
         if email.date == nil { email.date = date }
         do {
@@ -680,7 +733,7 @@ struct ThreadSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
-                            MessageCard(message: message, startExpanded: index == messages.count - 1)
+                            MessageCard(content: .init(message), startExpanded: index == messages.count - 1)
                         }
                     }
                     .padding(Brand.spacing.content)
@@ -810,14 +863,45 @@ struct ThreadSheet: View {
     }
 }
 
-/// One email of the thread: sender (name only), "Para: …", one timestamp (when it was sent; when it was added is in
+/// What a `MessageCard` shows: a stored email of the vault (thread sheet) or a fetched one (Correo's "Hilo · N").
+struct MessageCardContent {
+    var from: String          // "Ana García <ana@acme.com>"
+    var to: String            // comma-separated, same format
+    var date: Date
+    var dateHelp: String?
+    var body: String
+    var quoted: String?
+
+    init(_ message: ThreadMessage) {
+        from = message.from
+        to = message.to
+        date = message.date
+        dateHelp = L("thread.sentAdded", Fmt.dayTime(message.date), Fmt.dayTime(message.source.createdAt))
+        body = message.body
+        quoted = message.quoted
+    }
+
+    init(_ message: MailMessageFull) {
+        let split = MailImport.splitBody(message.bodyText)
+        from = AddEmailSheet.format(message.summary.from)
+        to = (message.summary.to + message.cc).map(AddEmailSheet.format).joined(separator: ", ")
+        date = message.summary.date
+        dateHelp = nil
+        body = split.body
+        quoted = split.quoted
+    }
+}
+
+/// One email of a thread: sender (name only), "Para: …", one timestamp (when it was sent; when it was added is in
 /// the tooltip), the new text, and the quoted history folded.
-private struct MessageCard: View {
-    let message: ThreadMessage
+struct MessageCard: View {
+    let content: MessageCardContent
     let startExpanded: Bool
 
     @ViewState private var expanded: Bool?
     @ViewState private var showQuoted = false
+
+    private var message: MessageCardContent { content }
 
     private var sender: String {
         guard !message.from.isEmpty else { return L("thread.unknownSender") }
@@ -866,7 +950,7 @@ private struct MessageCard: View {
                         .foregroundStyle(Brand.color.text2)
                         .lineLimit(1)
                         .layoutPriority(1)
-                        .help(L("thread.sentAdded", Fmt.dayTime(message.date), Fmt.dayTime(message.source.createdAt)))
+                        .help(message.dateHelp ?? Fmt.dayTime(message.date))
                 }
                 .contentShape(Rectangle())
             }

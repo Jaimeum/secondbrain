@@ -57,7 +57,7 @@ struct NewProjectSheet: View {
             .padding(.vertical, 14)
         }
         .background(Brand.color.surface)
-        .frame(minWidth: 440, idealWidth: 480, minHeight: 360, idealHeight: 470)
+        .frame(minWidth: 440, idealWidth: 480, minHeight: 360, idealHeight: 440)
     }
 
     private func save() {
@@ -101,8 +101,7 @@ struct ProjectFormFields: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(L("newProject.name")).font(Brand.callout).foregroundStyle(Brand.color.text)
                 TextField(L("newProject.namePlaceholder"), text: $form.name)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.large)
+                    .brandField()
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(L("newProject.emoji")).font(Brand.callout).foregroundStyle(Brand.color.text)
@@ -114,12 +113,36 @@ struct ProjectFormFields: View {
                     .font(Brand.caption)
                     .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
+                // Room for the 1–2 sentences it asks for: three lines reserved, up to five.
                 TextField(L("newProject.descriptionPlaceholder"), text: $form.description, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
                     .lineLimit(3...5)
+                    .brandField()
             }
         }
     }
+}
+
+/// A brand text field: plain text on `card` with a hairline `line` border and 8 pt of inner room, so the name and
+/// the description share one look and one height per line.
+private struct BrandFieldStyle: ViewModifier {
+    @FocusState private var focused: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+        content
+            .textFieldStyle(.plain)
+            .font(Brand.body)
+            .foregroundStyle(Brand.color.text)
+            .focused($focused)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(shape.fill(Brand.color.card))
+            .overlay(shape.strokeBorder(focused ? Brand.color.accent : Brand.color.line, lineWidth: focused ? 1.5 : 1))
+    }
+}
+
+private extension View {
+    func brandField() -> some View { modifier(BrandFieldStyle()) }
 }
 
 /// Two rows of six (fits a 380 pt sheet). A project's own emoji outside the list shows first.

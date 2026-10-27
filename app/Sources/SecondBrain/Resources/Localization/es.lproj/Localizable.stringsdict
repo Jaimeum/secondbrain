@@ -291,5 +291,23 @@
 			<string>%ld tipos</string>
 		</dict>
 	</dict>
+	<key>mail.saveRestOfThread</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Guardar el otro correo del hilo</string>
+			<key>many</key>
+			<string>Guardar el resto del hilo (%ld)</string>
+			<key>other</key>
+			<string>Guardar el resto del hilo (%ld)</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

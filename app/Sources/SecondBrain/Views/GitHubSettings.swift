@@ -9,7 +9,9 @@ struct GitHubSettingsPage: View {
     @Environment(AppState.self) private var state
     @ViewState private var connect: GitHubConnectRequest?
     @ViewState private var showOrgHelp = false
-    @ViewState private var ghAvailable = false
+    /// nil until the GitHub CLI lookup finishes (cached for the session): the connect button waits for it, so its
+    /// label and method never switch under the pointer.
+    @ViewState private var ghAvailable: Bool? = GHDetection.cached
     @ViewState private var confirmDisconnect = false
     @ViewState private var showToken = false
 
@@ -98,8 +100,7 @@ struct GitHubSettingsPage: View {
             Text(L("settings.disconnect.message"))
         }
         .task {
-            if github.isDemo { ghAvailable = true; return }
-            ghAvailable = await Task.detached(priority: .utility) { GitHubAuth.locateGH() != nil }.value
+            ghAvailable = await GHDetection.check(demo: github.isDemo)
         }
     }
 
@@ -111,19 +112,24 @@ struct GitHubSettingsPage: View {
             Text(L("github.none"))
                 .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
-            let cliFirst = ghAvailable && !hasClientId
-            Button {
-                connect = GitHubConnectRequest(method: cliFirst ? .ghCLI : .deviceFlow)
-            } label: {
-                Label(cliFirst ? L("github.useCLI") : L("github.connect"),
-                      systemImage: cliFirst ? "terminal" : "chevron.left.forwardslash.chevron.right")
-            }
-            .buttonStyle(.brandPrimary)
-            if ghAvailable {
-                Button(cliFirst ? L("github.connect") : L("github.useCLI")) {
-                    connect = GitHubConnectRequest(method: cliFirst ? .deviceFlow : .ghCLI)
+            if let ghAvailable {
+                let cliFirst = ghAvailable && !hasClientId
+                Button {
+                    connect = GitHubConnectRequest(method: cliFirst ? .ghCLI : .deviceFlow)
+                } label: {
+                    Label(cliFirst ? L("github.useCLI") : L("github.connect"),
+                          systemImage: cliFirst ? "terminal" : "chevron.left.forwardslash.chevron.right")
                 }
-                .buttonStyle(.settingsLink)
+                .buttonStyle(.brandPrimary)
+                if ghAvailable {
+                    Button(cliFirst ? L("github.connect") : L("github.useCLI")) {
+                        connect = GitHubConnectRequest(method: cliFirst ? .deviceFlow : .ghCLI)
+                    }
+                    .buttonStyle(.settingsLink)
+                }
+            } else {
+                // Same height as the button: nothing below moves when the lookup ends.
+                BrandLoader(size: 16).frame(height: 28)
             }
         }
     }
@@ -137,6 +143,20 @@ struct GitHubSettingsPage: View {
 
     private var intervalBinding: Binding<Int> {
         Binding(get: { state.config.githubSyncMinutes }, set: { value in state.update { $0.githubSyncMinutes = value } })
+    }
+}
+
+/// Whether the GitHub CLI (`gh`) is installed, looked up once per session off the main thread.
+@MainActor
+enum GHDetection {
+    private(set) static var cached: Bool?
+
+    static func check(demo: Bool) async -> Bool {
+        if demo { return true }
+        if let cached { return cached }
+        let found = await Task.detached(priority: .userInitiated) { GitHubAuth.locateGH() != nil }.value
+        cached = found
+        return found
     }
 }
 
@@ -355,7 +375,7 @@ struct GitHubConnectSheet: View {
     @ViewState private var connector: GitHubConnector
     @ViewState private var copied = false
     @ViewState private var showOrgHelp = false
-    @ViewState private var ghAvailable = false
+    @ViewState private var ghAvailable = GHDetection.cached ?? false
 
     init(method: GitHubAuthMethod = .deviceFlow, preview: GitHubConnectPhase? = nil, onUseToken: (() -> Void)? = nil) {
         self.method = method
@@ -364,7 +384,8 @@ struct GitHubConnectSheet: View {
     }
 
     var body: some View {
-        Group {
+        // One stable size for every phase (CONTRACT §15.3), like the account connect sheet.
+        StableSheetBody(alignment: phaseAlignment) {
             switch connector.phase {
             case .trust: trust
             case .code(let code): codeStep(code)
@@ -372,17 +393,20 @@ struct GitHubConnectSheet: View {
             case .failed(let message, let org, let notConfigured): failed(message, org: org, notConfigured: notConfigured)
             }
         }
-        .frame(minWidth: 440, idealWidth: 460, maxWidth: 520)
-        .frame(maxHeight: .infinity)
+        .frame(minWidth: 440, idealWidth: 460, maxWidth: 520, minHeight: 360, idealHeight: 460, maxHeight: .infinity)
         .background(Brand.color.surface)
         .animation(Brand.motion.animation(), value: connector.phase)
         .onChange(of: connector.connected) { if connector.connected != nil { dismiss() } }
         .onDisappear { connector.cancel() }
         .sheet(isPresented: $showOrgHelp) { GitHubOrgHelpSheet() }
         .task {
-            if state.engine.github.isDemo { ghAvailable = true; return }
-            ghAvailable = await Task.detached(priority: .utility) { GitHubAuth.locateGH() != nil }.value
+            ghAvailable = await GHDetection.check(demo: state.engine.github.isDemo)
         }
+    }
+
+    private var phaseAlignment: Alignment {
+        if case .trust = connector.phase { return .top }
+        return .center
     }
 
     // MARK: Trust (§13.6: three promises)

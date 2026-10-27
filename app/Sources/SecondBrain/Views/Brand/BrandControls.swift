@@ -45,10 +45,10 @@ struct BrandSecondaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Record / stop: muted `record` background, white label. The app's only red control.
+/// Record / stop: muted `record` background, `onRecord` label. The app's only red control.
 struct BrandRecordButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        BrandButtonBody(configuration: configuration, background: Brand.color.record, foreground: .white)
+        BrandButtonBody(configuration: configuration, background: Brand.color.record, foreground: Brand.color.onRecord)
     }
 }
 

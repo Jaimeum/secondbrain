@@ -19,6 +19,11 @@ struct HomeView: View {
     @ViewState private var importing = 0
     @ViewState private var ruleOffer = RuleOffer()
     @ViewState private var error: String?
+    /// The latest timeline entries with a page (Recientes when few sources are learned on this Mac).
+    @ViewState private var timelineRecents: [TimelineEntry] = []
+    @ViewState private var timelineLoaded = false
+    /// A page cited by an answer, shown over Inicio so the answer stays where it was.
+    @ViewState private var citedPage: VaultPageItem?
 
     static let maxWidth: CGFloat = 880
     /// Below this content width the grids collapse to one column.
@@ -31,17 +36,24 @@ struct HomeView: View {
         }
         .onAppear(perform: consumeRoute)
         .onChange(of: state.homeRoute) { consumeRoute() }
+        // "Inicio" (sidebar, ⌘1) while already here: back to the root.
+        .onChange(of: state.homePopToken) { routes.removeAll() }
+        .sheet(item: $citedPage) { VaultPageSheet(path: $0.path) }
     }
 
     // MARK: Data
 
-    private var isEmptyVault: Bool { previewEmpty || state.engine.sources.isEmpty }
+    /// A new vault: nothing on this Mac and nothing in the vault's timelines (decided once they are read).
+    private var isEmptyVault: Bool {
+        previewEmpty || (state.engine.sources.isEmpty && timelineLoaded && timelineRecents.isEmpty)
+    }
     private var oneColumn: Bool { width < Self.oneColumnBelow }
 
-    /// Sin asignar and failed sources, newest first; one row per email thread (as Sin asignar shows them).
+    /// Sin asignar and the failed sources without a project, newest first; one row per email thread. The same items
+    /// as Sin asignar ("Ver todo"), so the counts match: a failed source of a project shows in its "Procesando".
     private var toSort: [SourceRecord] {
         InboxView.onePerThread(state.engine.sources
-            .filter { $0.status == .needsProject || $0.status == .failed })
+            .filter { $0.status == .needsProject || ($0.projectSlug == nil && $0.status == .failed) })
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
@@ -54,12 +66,37 @@ struct HomeView: View {
             .sorted(by: TaskSort.byDue)
     }
 
-    /// In progress first, then the last learned (6 in all).
-    private var recents: [SourceRecord] {
+    /// In progress first, then the last learned, then (when this Mac learned fewer than 6) the latest pages of the
+    /// vault's timelines, so a vault with content never shows an empty Recientes. 6 in all.
+    private var recents: [HomeRecentItem] {
         let sources = state.engine.sources.filter { $0.kind != .github }
         let busy = sources.filter { $0.status.isInProgress }.sorted { $0.updatedAt > $1.updatedAt }
         let done = sources.filter { $0.status == .done }.sorted { $0.updatedAt > $1.updatedAt }
-        return Array((busy + done).prefix(6))
+        var items = (busy + done).prefix(6).map(HomeRecentItem.init(source:))
+        guard items.count < 6 else { return items }
+        var seen = Set(items.compactMap(\.sourceId))
+        var seenPaths = Set<String>()
+        for entry in timelineRecents where items.count < 6 {
+            guard let path = entry.pagePath else { continue }
+            if let id = entry.sourceId, seen.contains(id) { continue }
+            guard seenPaths.insert(path).inserted else { continue }
+            if let id = entry.sourceId { seen.insert(id) }
+            items.append(HomeRecentItem(entry: entry))
+        }
+        return items
+    }
+
+    /// Meetings, emails, documents, notes, links and decisions that already happened, newest first, with a page to open
+    /// (not the project's timeline/tasks pages a milestone or a due date points at).
+    private static func recentEntries(_ all: [TimelineEntry], now: Date) -> [TimelineEntry] {
+        let kinds: Set<TimelineKind> = [.meeting, .email, .document, .note, .url, .decision]
+        return all.filter { entry in
+            guard kinds.contains(entry.kind), entry.date <= now, let path = entry.pagePath else { return false }
+            return !path.hasSuffix("/wiki/timeline.md") && !path.hasSuffix("/wiki/tasks.md") && path.hasSuffix(".md")
+        }
+        .sorted { $0.date > $1.date }
+        .prefix(12)
+        .map { $0 }
     }
 
     // MARK: Screen
@@ -68,7 +105,7 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 header
-                if !previewEmpty { HomeNowSection() }
+                HomeNowSection()
                 if isEmptyVault {
                     emptyState
                 } else {
@@ -120,6 +157,7 @@ struct HomeView: View {
             if !MeetingsModel.shared.isRunning, state.engineStarted { MeetingsModel.shared.start(state: state) }
         }
         .task(id: state.tasksRevision) { await loadTasks() }
+        .task(id: "\(state.vaultRevision)-\(state.vaultGeneration)") { await loadTimeline() }
         .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button(L("common.ok")) { error = nil }
         } message: {
@@ -159,7 +197,39 @@ struct HomeView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            if let question = lastQuestion { lastQuestionRow(question) }
         }
+    }
+
+    /// The last whole-brain question, while it is recent and its answer isn't on screen: back to it without asking again.
+    private var lastQuestion: String? {
+        guard let asked = state.homeChatAskedAt, MeetingsModel.shared.now.timeIntervalSince(asked) < 30 * 60,
+              !routes.contains(where: { if case .ask = $0 { true } else { false } }) else { return nil }
+        return state.homeChat.messages.last { $0.role == .user }?.text
+    }
+
+    private func lastQuestionRow(_ question: String) -> some View {
+        Button {
+            routes.append(.ask(question))
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .foregroundStyle(Brand.color.accent)
+                Text(L("home.lastQuestion", question))
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Image(systemName: "arrow.right")
+                    .imageScale(.small)
+                    .foregroundStyle(Brand.color.accent)
+                Spacer(minLength: 0)
+            }
+            .frame(height: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(question)
     }
 
     // MARK: Por ordenar
@@ -228,8 +298,8 @@ struct HomeView: View {
                 HomeLink(title: L("home.seeByDate")) { routes.append(.timeline) }
             }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                ForEach(recents) { source in
-                    HomeRecentCard(source: source)
+                ForEach(recents) { item in
+                    HomeRecentCard(item: item)
                 }
             }
         }
@@ -260,6 +330,12 @@ struct HomeView: View {
 
     // MARK: Empty vault
 
+    /// The big "Grabar" only when Ahora doesn't already show one (the hero's or the recording's): one "Grabar" on
+    /// screen besides the sidebar's.
+    private var showsRecordTile: Bool {
+        !state.isRecording && HomeNowSection.heroEvent(now: MeetingsModel.shared.now) == nil
+    }
+
     private var emptyState: some View {
         VStack(spacing: 20) {
             BrandMark(size: 56)
@@ -268,13 +344,15 @@ struct HomeView: View {
                 .foregroundStyle(Brand.color.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+            let showsRecord = showsRecordTile
             let columns = oneColumn
                 ? [GridItem(.flexible())]
-                : Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+                : Array(repeating: GridItem(.flexible(), spacing: 12), count: showsRecord ? 3 : 2)
             LazyVGrid(columns: columns, spacing: 12) {
-                HomeBigAction(symbol: "record.circle", title: L("home.emptyRecord"), shortcut: nil, tint: Brand.color.record) {
-                    state.recordingProjectSlug = nil
-                    state.toggleRecording()
+                if showsRecord {
+                    HomeBigAction(symbol: "record.circle", title: L("home.emptyRecord"), shortcut: nil, tint: Brand.color.record) {
+                        state.recordNow(placement: .sidebar)
+                    }
                 }
                 HomeBigAction(symbol: "envelope", title: L("home.emptyPaste"), shortcut: "⌘⇧V", tint: Brand.color.accent) {
                     state.requestEmail()
@@ -332,17 +410,21 @@ struct HomeView: View {
         case .inbox:
             InboxView()
         case .ask:
-            ChatView(model: state.homeChat, projectSlug: nil, onOpenPage: { state.open(path: $0) })
+            // A cited page opens over the answer (a sheet), so the answer is still here after reading it.
+            ChatView(model: state.homeChat, projectSlug: nil, onOpenPage: { citedPage = VaultPageItem(path: $0) })
         }
     }
 
-    /// Pushes `state.homeRoute` (set by ⌘K, `AppState.open(path:)` or `ask`). A question is asked here, once.
+    /// Pushes `state.homeRoute` (set by ⌘K, `AppState.open(path:)` or `ask`). A question is asked here, once; one
+    /// still being answered is stopped first (as a project's Preguntar does), else the new one would be dropped.
     private func consumeRoute() {
         guard let route = state.homeRoute else { return }
         state.homeRoute = nil
         if case .ask(let question) = route, state.engineStarted {
+            if state.homeChat.isAsking { state.homeChat.stop() }
             state.homeChat.draft = question
             state.homeChat.ask(engine: state.engine, projectSlug: nil)
+            state.homeChatAskedAt = Date()
             if let existing = routes.firstIndex(where: { if case .ask = $0 { true } else { false } }) {
                 routes.removeSubrange(existing...)
             }
@@ -351,6 +433,15 @@ struct HomeView: View {
     }
 
     // MARK: Actions
+
+    private func loadTimeline() async {
+        guard state.engineStarted else { return }
+        let all = await state.engine.timeline(projectSlug: nil)
+        guard !Task.isCancelled else { return }
+        let recent = Self.recentEntries(all, now: Date())
+        if recent != timelineRecents { timelineRecents = recent }
+        timelineLoaded = true
+    }
 
     private func loadTasks() async {
         guard state.engineStarted else { return }
@@ -392,14 +483,20 @@ struct HomeView: View {
     }
 }
 
-/// A global page (index.md, log.md…) inside Inicio's stack.
+/// A global page (index.md, log.md…) inside Inicio's stack. Its title is read off the main thread (the file name
+/// until then).
 struct HomePageView: View {
     @Environment(AppState.self) private var state
     let path: String
+    @ViewState private var title: String?
 
     var body: some View {
         WikiWebView(vault: state.engine.vault, path: path) { next in state.open(path: next) }
             .background(Brand.color.surface)
-            .navigationTitle(state.engine.vault.title(of: path))
+            .navigationTitle(title ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension)
+            .task(id: path) {
+                let vault = state.engine.vault, path = self.path
+                title = await Task.detached { vault.title(of: path) }.value
+            }
     }
 }

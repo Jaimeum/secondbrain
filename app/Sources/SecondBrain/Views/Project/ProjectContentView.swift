@@ -2,15 +2,18 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// A project's "Contenido" tab (CONTRACT §15.2): a list on the left — *Por fecha* (what happened, by month, with the
-/// sources still being processed pinned on top) or *Por tema* (the wiki groups) — and the page on the right.
-/// The whole tab accepts dropped files and links.
+/// A project's "Contenido" tab (CONTRACT §15.2): a list on the left — *Por fecha* (newest first: the sources still
+/// being processed, then what is ahead, then what happened by month) or *Por tema* (the wiki groups), with the project
+/// summary pinned above both — and the page on the right. The whole tab accepts dropped files and links.
+/// `ProjectView` keeps this view alive across tab switches (`isActive` = the tab is showing), so the list, its scroll
+/// position and the page survive a visit to another tab.
 struct ProjectContentView: View {
     enum Mode: String, Hashable { case byDate = "date", byTopic = "topic" }
 
     @Environment(AppState.self) private var state
     let project: Project
     @Binding var selection: String?
+    var isActive = true
 
     @ViewState private var mode: Mode
     @ViewState private var entries: [TimelineEntry] = []
@@ -25,13 +28,15 @@ struct ProjectContentView: View {
     /// Pages that source rows resolved to (a source's summary), by timeline entry id.
     @ViewState private var entryPaths: [String: String] = [:]
     @ViewState private var showAllProcessing = false
+    @ViewState private var showAllUpcoming = false
     @ViewState private var actions = SourceActionsState()
 
     private static let modeKey = "content.mode"
 
-    init(project: Project, selection: Binding<String?>, initialMode: Mode? = nil) {
+    init(project: Project, selection: Binding<String?>, isActive: Bool = true, initialMode: Mode? = nil) {
         self.project = project
         _selection = selection
+        self.isActive = isActive
         let saved = UserDefaults.standard.string(forKey: Self.modeKey).flatMap(Mode.init(rawValue:))
         _mode = ViewState(initialValue: initialMode ?? saved ?? .byDate)
     }
@@ -45,19 +50,29 @@ struct ProjectContentView: View {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
-    private var months: [TimelineGroups.Month] {
+    /// The date feed without the sources shown under "Procesando".
+    private func feed(hiding processing: [SourceRecord]) -> TimelineGroups.Feed {
         let hidden = Set(processing.map(\.id))
-        return TimelineGroups.months(entries.filter { $0.sourceId.map { !hidden.contains($0) } ?? true }, kinds: kinds)
+        return TimelineGroups.feed(entries.filter { $0.sourceId.map { !hidden.contains($0) } ?? true }, kinds: kinds)
     }
 
+    /// Por tema without the summary: it is pinned above both lists.
     private var topicGroups: [WikiGrouping.Group] {
-        WikiGrouping.groups(for: pages, scope: .project(slug), projectName: project.name)
+        WikiGrouping.groups(for: pages, scope: .project(slug), projectName: project.name).filter { $0.key != "pinned" }
+    }
+
+    /// The project summary ("En breve"), pinned above the list in both modes.
+    private var overviewPath: String? {
+        pages.first { WikiGrouping.baseName($0.path) == "overview" && WikiGrouping.groupKey($0.path) == "general" }?.path
     }
 
     var body: some View {
+        // Computed once per update and passed down (it filters and sorts every source and entry).
+        let processing = self.processing
+        let processingIds = processing.map(\.id)
         GeometryReader { geo in
             HStack(spacing: 0) {
-                listColumn
+                listColumn(processing: processing)
                     .frame(width: ContentLayout.listWidth(for: geo.size.width))
                 Rectangle().fill(Brand.color.line).frame(width: 1)
                 pageColumn
@@ -71,9 +86,9 @@ struct ProjectContentView: View {
         .onChange(of: selection) {
             if selection != nil { selectedSourceId = nil }
         }
-        .onChange(of: processing.map(\.id)) {
+        .onChange(of: processingIds) {
             // A processed source left the group: show its page when it was the one selected.
-            if let id = selectedSourceId, !processing.contains(where: { $0.id == id }) {
+            if let id = selectedSourceId, !processingIds.contains(id) {
                 selectedSourceId = nil
                 if let source = state.engine.source(id) { openSource(source) }
             }
@@ -82,8 +97,13 @@ struct ProjectContentView: View {
             await reloadPages()
             await reloadEntries()
         }
-        .task {
-            // Claude edits pages and adds entries in the background: keep the lists fresh.
+        .task(id: isActive) {
+            // Claude edits pages and adds entries in the background: keep the lists fresh while the tab shows.
+            guard isActive else { return }
+            if entriesLoaded {   // back from another tab: catch up at once
+                await reloadPages()
+                await reloadEntries()
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 if Task.isCancelled { break }
@@ -95,18 +115,24 @@ struct ProjectContentView: View {
 
     // MARK: List column
 
-    private var listColumn: some View {
+    private func listColumn(processing: [SourceRecord]) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: Brand.spacing.s) {
                 BrandSegmentedControl(options: [(Mode.byDate, L("tabs.byDate")), (Mode.byTopic, L("tabs.byTopic"))],
                                       selection: $mode)
+                if let overview = overviewPath {
+                    ContentListRow(symbol: "sparkles", title: L("graph.overviewLabel"),
+                                   isSelected: selectedSourceId == nil && selection == overview) {
+                        openPath(overview)
+                    }
+                }
             }
             .padding(.horizontal, Brand.spacing.m)
             .padding(.top, Brand.spacing.m)
             .padding(.bottom, Brand.spacing.s)
 
             switch mode {
-            case .byDate: dateList
+            case .byDate: dateList(processing: processing, feed: feed(hiding: processing))
             case .byTopic: topicList
             }
         }
@@ -124,32 +150,51 @@ struct ProjectContentView: View {
         }
     }
 
-    private var dateList: some View {
-        ScrollViewReader { proxy in
+    /// Por fecha, newest first: Procesando · Próximo · this month and back. Everything scrolls together (the group
+    /// headers pin), so no group can squeeze the others out at a small window size.
+    private func dateList(processing: [SourceRecord], feed: TimelineGroups.Feed) -> some View {
+        let presentKinds = TimelineGroups.presentKinds(in: entries)
+        return ScrollViewReader { proxy in
             VStack(spacing: 0) {
-                if !TimelineGroups.presentKinds(in: entries).isEmpty {
+                if !presentKinds.isEmpty {
                     HStack(spacing: Brand.spacing.s) {
-                        TimelineKindMenu(kinds: TimelineGroups.presentKinds(in: entries), selected: $kinds)
+                        TimelineKindMenu(kinds: presentKinds, selected: $kinds)
                         Spacer(minLength: 4)
-                        Button(L("timeline.today")) { scrollToAnchor(proxy, animated: true) }
-                            .buttonStyle(.borderless)
-                            .font(Brand.font(11, .medium))
-                            .foregroundStyle(Brand.color.accent)
-                            .help(L("timeline.todayHelp"))
+                        Button(L("timeline.today")) {
+                            withAnimation(Brand.motion.animation()) { proxy.scrollTo(TimelineGroups.topAnchor, anchor: .top) }
+                        }
+                        .buttonStyle(.borderless)
+                        .font(Brand.font(11, .medium))
+                        .foregroundStyle(Brand.color.accent)
+                        .help(L("timeline.todayHelp"))
                     }
                     .padding(.horizontal, Brand.spacing.m)
                     .padding(.bottom, Brand.spacing.xs)
                 }
-                if !processing.isEmpty { processingGroup }
                 Rectangle().fill(Brand.color.line).frame(height: 1)
-                if !entriesLoaded {
+                if !entriesLoaded && processing.isEmpty {
                     BrandLoader(size: 24).frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if months.isEmpty {
-                    if processing.isEmpty { listEmpty } else { Spacer() }
+                } else if feed.isEmpty && processing.isEmpty {
+                    listEmpty
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                            ForEach(months) { month in
+                            Color.clear.frame(height: 0).id(TimelineGroups.topAnchor)
+                            if !processing.isEmpty {
+                                SwiftUI.Section {
+                                    processingRows(processing)
+                                } header: {
+                                    listHeader(L("content.processing"), trailing: "\(processing.count)")
+                                }
+                            }
+                            if !feed.upcoming.isEmpty {
+                                SwiftUI.Section {
+                                    upcomingRows(feed)
+                                } header: {
+                                    listHeader(L("timeline.upcoming"), trailing: "\(feed.upcomingCount)")
+                                }
+                            }
+                            ForEach(feed.months) { month in
                                 SwiftUI.Section {
                                     ForEach(month.days) { day in
                                         VStack(alignment: .leading, spacing: 1) {
@@ -158,23 +203,52 @@ struct ProjectContentView: View {
                                         .timelineAnchor(day.start, headerHeight: Self.monthHeaderHeight)
                                     }
                                 } header: {
-                                    ContentListHeader(title: TimelineGroups.monthTitle(month.start))
-                                        .frame(height: Self.monthHeaderHeight, alignment: .bottom)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(Brand.color.surface)
+                                    listHeader(TimelineGroups.monthTitle(month.start))
                                         .id(TimelineGroups.MonthAnchor(start: month.start))
                                 }
+                            }
+                            if !entriesLoaded {
+                                BrandLoader(size: 20).frame(maxWidth: .infinity).padding(Brand.spacing.l)
                             }
                         }
                         .padding(.horizontal, Brand.spacing.s)
                         .padding(.bottom, Brand.spacing.l)
                     }
-                    .onAppear { scrollToAnchor(proxy, animated: false) }
-                    .onChange(of: kinds) { scrollToAnchor(proxy, animated: false) }
-                    .onChange(of: entriesLoaded) { scrollToAnchor(proxy, animated: false) }
+                    .onChange(of: kinds) { proxy.scrollTo(TimelineGroups.topAnchor, anchor: .top) }
                 }
             }
         }
+    }
+
+    /// A pinned group title: opaque, fixed height (the day anchors sit exactly that far above their rows).
+    private func listHeader(_ title: String, trailing: String? = nil) -> some View {
+        ContentListHeader(title: title, trailing: trailing)
+            .frame(height: Self.monthHeaderHeight, alignment: .bottom)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Brand.color.surface)
+    }
+
+    /// Due dates and milestones still ahead, soonest first: three, then "Ver todos (n)".
+    @ViewBuilder private func upcomingRows(_ feed: TimelineGroups.Feed) -> some View {
+        let all = feed.upcoming.flatMap(\.entries)
+        let shown = showAllUpcoming ? all : Array(all.prefix(3))
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(shown) { entry in entryRow(entry) }
+            if all.count > 3 {
+                seeAllButton(expanded: showAllUpcoming, count: all.count) { showAllUpcoming.toggle() }
+            }
+        }
+    }
+
+    private func seeAllButton(expanded: Bool, count: Int, toggle: @escaping () -> Void) -> some View {
+        Button(expanded ? L("content.showLess") : L("home.seeAllTasks", count)) {
+            withAnimation(Brand.motion.animation(fast: true)) { toggle() }
+        }
+        .buttonStyle(.borderless)
+        .font(Brand.caption)
+        .foregroundStyle(Brand.color.accent)
+        .padding(.horizontal, Brand.spacing.s)
+        .padding(.vertical, Brand.spacing.xs)
     }
 
     private static let monthHeaderHeight: CGFloat = 32
@@ -189,22 +263,11 @@ struct ProjectContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private func scrollToAnchor(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let target = TimelineGroups.anchorTarget(in: months) else { return }
-        if animated {
-            withAnimation(Brand.motion.animation()) { proxy.scrollTo(target, anchor: .top) }
-        } else {
-            proxy.scrollTo(target, anchor: .top)
-        }
-    }
+    // MARK: Processing ("Procesando", first in the date list)
 
-    // MARK: Processing ("Procesando", pinned above the dates)
-
-    private var processingGroup: some View {
-        let list = processing
+    @ViewBuilder private func processingRows(_ list: [SourceRecord]) -> some View {
         let shown = showAllProcessing ? list : Array(list.prefix(3))
-        return VStack(alignment: .leading, spacing: 1) {
-            ContentListHeader(title: L("content.processing"), trailing: "\(list.count)")
+        VStack(alignment: .leading, spacing: 1) {
             ForEach(shown) { source in
                 ProcessingRow(source: source, isSelected: selectedSourceId == source.id,
                               onSelect: { selectProcessing(source) },
@@ -213,17 +276,9 @@ struct ProjectContentView: View {
                     .contextMenu { SourceMenuItems(source: source, trimmed: true, onOpen: { openPath($0) }, actions: $actions) }
             }
             if list.count > 3 {
-                Button(showAllProcessing ? L("content.showLess") : L("home.seeAllTasks", list.count)) {
-                    withAnimation(Brand.motion.animation(fast: true)) { showAllProcessing.toggle() }
-                }
-                .buttonStyle(.borderless)
-                .font(Brand.caption)
-                .foregroundStyle(Brand.color.accent)
-                .padding(.horizontal, Brand.spacing.s)
-                .padding(.vertical, Brand.spacing.xs)
+                seeAllButton(expanded: showAllProcessing, count: list.count) { showAllProcessing.toggle() }
             }
         }
-        .padding(.horizontal, Brand.spacing.s)
         .padding(.bottom, Brand.spacing.s)
     }
 
@@ -328,6 +383,12 @@ struct ProjectContentView: View {
         guard !Task.isCancelled, vault === state.engine.vault else { return }
         if all != pages { pages = all }
         pagesLoaded = true
+        // A page deleted or renamed in the background: fall back to the default page (like WikiBrowser).
+        if let current = selection, !current.contains("/raw/"), !all.contains(where: { $0.path == current }),
+           !FileManager.default.fileExists(atPath: vault.url(for: current).path) {
+            selectEntry(nil)
+            selection = nil
+        }
         if selection == nil, selectedSourceId == nil {
             selection = WikiGrouping.defaultPage(in: all)?.path
         }
@@ -481,6 +542,9 @@ private struct ProcessingPanel: View {
 struct BrandSegmentedControl<Value: Hashable>: View {
     let options: [(Value, String)]
     @Binding var selection: Value
+    /// Equal segments that never shift (the project's main tabs); nil = share the width.
+    var minSegmentWidth: CGFloat? = nil
+    var height: CGFloat = 24
 
     var body: some View {
         HStack(spacing: 2) {
@@ -491,12 +555,14 @@ struct BrandSegmentedControl<Value: Hashable>: View {
                     withAnimation(Brand.motion.animation(fast: true)) { selection = value }
                 } label: {
                     Text(title)
-                        .font(Brand.font(12, selected ? .semibold : .medium))
-                        .foregroundStyle(selected ? Brand.color.text : Brand.color.text2)
+                        .font(Brand.font(height > 24 ? 13 : 12, selected ? .semibold : .medium))
+                        // Unselected: the text token softened, still ≥ 4.5:1 on the cardAlt track (text2 is 3.6:1).
+                        .foregroundStyle(selected ? Brand.color.text : Brand.color.text.opacity(0.78))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 24)
+                        .padding(.horizontal, minSegmentWidth == nil ? 0 : Brand.spacing.s)
+                        .frame(minWidth: minSegmentWidth, maxWidth: .infinity)
+                        .frame(height: height)
                         .background {
                             if selected {
                                 RoundedRectangle(cornerRadius: Brand.radius.control - 2, style: .continuous)

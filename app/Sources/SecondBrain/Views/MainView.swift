@@ -39,7 +39,7 @@ struct MainView: View {
         }
         .onChange(of: state.selection) { normalizeSelection() }
         // Keeps ⌘K's index fresh (debounced; the palette also refreshes when it opens).
-        .task(id: "\(state.vaultRevision)-\(state.tasksRevision)-\(state.accountsRevision)-\(state.projects.count)") {
+        .task(id: "\(state.vaultRevision)-\(state.tasksRevision)-\(state.accountsRevision)-\(state.projects.count)-\(state.config.uiLanguage)") {
             SearchIndex.shared.refresh(state: state)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -67,8 +67,6 @@ struct MainView: View {
                 EmptyStateView(symbol: "folder", title: L("project.missing"), message: L("project.missing.message"),
                                actionTitle: L("project.missing.action")) { state.selection = .home }
             }
-        case .inbox:
-            InboxView()
         case .mail:
             MailView()
         case .meetings:
@@ -77,16 +75,19 @@ struct MainView: View {
             PeopleView()
         case .tasks, .myTasks:
             MyTasksView()
-        case .home, .brain, .templates, nil:
+        case .home, .brain, .inbox, .templates, nil:
             HomeView()
         }
     }
 
-    /// Deprecated aliases (CONTRACT §15.2): `.brain` → Inicio, `.myTasks` → Pendientes, `.templates` → Ajustes ›
-    /// Formatos and Inicio behind it. `.inbox` stays (Sin asignar, reached from Inicio).
+    /// Deprecated aliases (CONTRACT §15.2): `.brain` → Inicio, `.inbox` → Inicio with Sin asignar pushed,
+    /// `.myTasks` → Pendientes, `.templates` → Ajustes › Formatos and Inicio behind it.
     private func normalizeSelection() {
         guard let selection = state.selection else { return }
-        if selection == .templates {
+        if selection == .inbox {
+            state.selection = .home
+            state.homeRoute = .inbox
+        } else if selection == .templates {
             state.selection = .home
             SettingsLink.open(tab: "formats")
         } else if let normalized = selection.normalized, normalized != selection {

@@ -9,6 +9,8 @@ import SwiftUI
 struct MeetingPrepView: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
+    /// false next to the hero card, which already holds this meeting's Grabar / Unirme (§15.2: one Grabar on screen).
+    var showsActions = true
     var onClose: (() -> Void)? = nil
     /// A page outside any project (people, global) to show in place; project pages open in their project.
     var onShowPage: (String) -> Void = { _ in }
@@ -19,8 +21,10 @@ struct MeetingPrepView: View {
     @ViewState private var showMore = false
     @ViewState private var showReconnect = false
 
-    init(event: CalendarEvent, onClose: (() -> Void)? = nil, onShowPage: @escaping (String) -> Void = { _ in }) {
+    init(event: CalendarEvent, showsActions: Bool = true, onClose: (() -> Void)? = nil,
+         onShowPage: @escaping (String) -> Void = { _ in }) {
         self.event = event
+        self.showsActions = showsActions
         self.onClose = onClose
         self.onShowPage = onShowPage
         let models = MeetingPrepCache.models(for: event.id)
@@ -56,8 +60,13 @@ struct MeetingPrepView: View {
 
     // MARK: Header
 
-    /// Pinned: Atrás on the left, the meeting's action + Unirme on the right (icon-only when tight).
-    private var toolbar: some View {
+    /// Pinned: Atrás on the left, the meeting's action + Unirme on the right (icon-only when tight). Nothing pinned
+    /// when there is neither (a prep next to the hero, pushed from the list: the stack's back is the way out).
+    @ViewBuilder private var toolbar: some View {
+        if onClose != nil || showsActions { toolbarBar }
+    }
+
+    private var toolbarBar: some View {
         let action = MeetingActionButton(event: event, showsPrepare: false, onPrepare: {}, onShowPage: onShowPage).fixedSize()   // fixed only inside ViewThatFits candidates: it measures true widths
         let join = MeetingJoinButton(event: event).fixedSize()
         return VStack(spacing: 0) {
@@ -74,9 +83,11 @@ struct MeetingPrepView: View {
                     .keyboardShortcut(.cancelAction)
                 }
                 Spacer(minLength: 8)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) { action; join }
-                    HStack(spacing: 8) { action; join }.labelStyle(.iconOnly)
+                if showsActions {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { action; join }
+                        HStack(spacing: 8) { action; join }.labelStyle(.iconOnly)
+                    }
                 }
             }
             .padding(.horizontal, Brand.spacing.content)
@@ -199,10 +210,7 @@ struct MeetingPrepView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Group {
                         if let path = a.personPath {
-                            Button(a.name) { open(path) }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(Brand.color.accent)
-                                .help(L("meetings.openPerson"))
+                            PersonLinkButton(name: a.name) { open(path) }
                         } else {
                             Text(a.name).foregroundStyle(Brand.color.text)
                         }
@@ -216,14 +224,18 @@ struct MeetingPrepView: View {
                                 .font(Brand.caption)
                                 .multilineTextAlignment(.leading)
                                 .lineLimit(3)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Brand.color.accent)
                     } else {
+                        // No fixedSize: inside a grid cell it measures at a narrower width than it is placed at and
+                        // wraps early; a flexible frame lets the caption use the card's whole text column.
                         Text(a.personPath == nil ? L("prep.unknownPerson") : L("prep.firstMeeting"))
                             .font(Brand.caption)
                             .foregroundStyle(Brand.color.text2)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if !a.openTasks.isEmpty {
                         VStack(alignment: .leading, spacing: 3) {
@@ -238,6 +250,7 @@ struct MeetingPrepView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

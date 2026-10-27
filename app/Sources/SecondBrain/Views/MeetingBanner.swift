@@ -3,7 +3,7 @@ import BrainCore
 import SwiftUI
 
 // The one recording control (CONTRACT §15.2), shared by the sidebar footer and the menu bar:
-// - a meeting on now (§12.7): a record-soft card "● Grabar «Kickoff…»" · "hace 3 min" · "o grabar otra cosa";
+// - a meeting on now (§12.7): a record-soft card "Kickoff… · empezó hace 3 min ›", "● Grabar", "o grabar otra cosa";
 // - no meeting: a plain "Grabar" (with "Siguiente: X · 15:30" above it when one starts within the hour);
 // - recording: "Detener 12:04" (or "¿Sigues en la reunión?" when it runs past the meeting's end).
 // Warnings and errors of the recorder show right under it.
@@ -15,10 +15,20 @@ enum RecordControlPlacement {
     case menuBar
 }
 
+/// Snapshots only (DebugSnapshots): a state of the control that is hard to reach offscreen.
+enum RecordControlPreview {
+    /// No meeting on now.
+    case plain
+    /// Recording for 12:04.
+    case recording
+}
+
 struct RecordControl: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
     var placement: RecordControlPlacement = .sidebar
+    var preview: RecordControlPreview?
+    @ViewState private var titleHovered = false
 
     private var model: MeetingsModel { MeetingsModel.shared }
 
@@ -29,16 +39,33 @@ struct RecordControl: View {
         VStack(alignment: .leading, spacing: 6) {
             content(now: now)
             if let warning = state.recorderWarning {
-                notice(warning, symbol: "exclamationmark.triangle", color: Brand.color.warning)
+                Label {
+                    Text(warning).lineLimit(2).help(warning)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                }
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.warning)
             }
             if let error = state.recordingError {
-                notice(error, symbol: "exclamationmark.circle", color: Brand.color.danger)
+                errorNotice(error)
             }
+        }
+        // An error never stays in the footer for good: it goes away by itself after a while (or with its ×).
+        .task(id: state.recordingError) {
+            guard state.recordingError != nil else { return }
+            try? await Task.sleep(for: .seconds(15))
+            guard !Task.isCancelled else { return }
+            state.recordingError = nil
         }
     }
 
     @ViewBuilder private func content(now: Date) -> some View {
-        if state.isRecording {
+        if preview == .recording {
+            recordingBlock
+        } else if preview == .plain {
+            plainButton
+        } else if state.isRecording {
             if let id = state.recordingEventId, let event = model.event(id: id),
                MeetingAgenda.isOverrunning(event, now: now, recordingEventId: id) {
                 MeetingOverrunRow(event: event, now: now, compact: true)
@@ -74,7 +101,8 @@ struct RecordControl: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "stop.fill")
-                    if let since = state.recordingSince, !state.isRecorderBusy {
+                    if let since = preview == .recording ? Date().addingTimeInterval(-724) : state.recordingSince,
+                       !state.isRecorderBusy {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             Text(L("record.stopWithTime", Fmt.duration(context.date.timeIntervalSince(since))))
                                 .monospacedDigit()
@@ -99,12 +127,14 @@ struct RecordControl: View {
     }
 
     private var plainButton: some View {
-        Button(action: recordPlain) {
+        Button { state.recordNow(placement: placement, meeting: false) } label: {
             HStack(spacing: 6) {
-                Image(systemName: "record.circle")
-                Text(state.isRecorderBusy
-                     ? (state.recorder.state == .starting ? L("record.starting") : L("record.stopping"))
-                     : L("record.start"))
+                if state.isRecorderBusy {
+                    Text(state.recorder.state == .starting ? L("record.starting") : L("record.stopping"))
+                } else {
+                    PulsingDot(active: false)
+                    Text(L("record.start"))
+                }
             }
             .frame(maxWidth: .infinity)
         }
@@ -113,53 +143,125 @@ struct RecordControl: View {
         .help(destinationHelp)
     }
 
-    /// "● Grabar «Kickoff…»" on a record-soft card, with the time and "o grabar otra cosa" under it.
+    /// A record-soft card, ≤ 64 pt: the meeting's title (a link to Reuniones) with when it started, then "● Grabar" and
+    /// "o grabar otra cosa". The title never goes inside the button, so it is never cut there. Wide: "Kickoff rediseño
+    /// de la app · empezó hace 10 min" over "● Grabar … o grabar otra cosa"; at the default 220 pt the title keeps its
+    /// line and the time moves beside the button, above the link; narrower still, the title gives way.
     private func meetingCard(_ live: CalendarEvent, now: Date) -> some View {
-        let when = now < live.start
-            ? L("record.control.in", Fmt.shortDuration(live.start.timeIntervalSince(now)))
-            : L("record.control.ago", Fmt.shortDuration(now.timeIntervalSince(live.start)))
-        return VStack(alignment: .leading, spacing: 6) {
-            Button {
-                Task { await model.record(live, state: state) }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "record.circle")
-                    Text(L("record.control.meeting", live.title))
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.brandRecord)
-            .disabled(state.isRecorderBusy)
-            .help(live.title + " · " + when)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) {
-                    Button { openMeetings(live) } label: {
-                        Text(when).lineLimit(1).fixedSize()
+        let started = now >= live.start
+        let elapsed = Fmt.shortDuration(started ? now.timeIntervalSince(live.start) : live.start.timeIntervalSince(now))
+        let whenLong = started ? L("record.control.startedAgo", elapsed) : L("record.control.startsIn", elapsed)
+        let whenShort = started ? L("record.control.ago", elapsed) : L("record.control.in", elapsed)
+        return ViewThatFits(in: .horizontal) {
+            VStack(alignment: .leading, spacing: 4) {
+                titleLink(live, when: whenLong) {
+                    HStack(spacing: 4) {
+                        cardTitle(live.title).fixedSize()
+                        cardWhen("· " + whenLong).fixedSize()
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Brand.color.text2)
-                    .help(L("meetings.openAgenda"))
-                    Spacer(minLength: 4)
-                    elseLink
                 }
                 HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    elseLink
+                    recordMeetingButton(live).fixedSize()
+                    Spacer(minLength: 6)
+                    elseLink.fixedSize()
                 }
             }
-            .font(Brand.caption)
+            VStack(alignment: .leading, spacing: 4) {
+                titleLink(live, when: whenLong) { cardTitle(live.title) }
+                HStack(spacing: 0) {
+                    recordMeetingButton(live).fixedSize()
+                    Spacer(minLength: 6)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        cardWhen(whenLong).fixedSize()
+                        elseLink.fixedSize()
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                titleLink(live, when: whenLong) { cardTitle(live.title) }
+                HStack(spacing: 0) {
+                    recordMeetingButton(live).fixedSize()
+                    Spacer(minLength: 6)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        cardWhen(whenShort).fixedSize()
+                        elseLink.fixedSize()
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                titleLink(live, when: whenLong) {
+                    HStack(spacing: 4) {
+                        cardTitle(live.title)
+                        cardWhen("· " + whenShort).layoutPriority(1)
+                    }
+                }
+                recordMeetingButton(live, fullWidth: true)
+                elseLink
+            }
         }
-        .padding(8)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
         .background(Brand.color.recordSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
     }
 
+    /// The card's title line: opens the meeting in Reuniones (chevron, hover tint).
+    private func titleLink(_ live: CalendarEvent, when: String, @ViewBuilder label: () -> some View) -> some View {
+        Button { openMeetings(live) } label: {
+            HStack(spacing: 4) {
+                label()
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(Brand.font(9, .semibold))
+                    .foregroundStyle(Brand.color.text3)
+            }
+            .padding(.horizontal, 4)
+            .frame(height: 16)
+            .background(titleHovered ? Brand.color.accentSoft : .clear,
+                        in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { titleHovered = $0 }
+        .help(live.title + " · " + when + "\n" + L("meetings.openAgenda"))
+    }
+
+    /// "● Grabar" for the meeting on now (its title, attendees and project).
+    private func recordMeetingButton(_ live: CalendarEvent, fullWidth: Bool = false) -> some View {
+        Button {
+            Task { await model.record(live, state: state) }
+        } label: {
+            HStack(spacing: 6) {
+                PulsingDot(active: false)
+                Text(L("record.start"))
+            }
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+        }
+        .buttonStyle(.brandRecord)
+        .disabled(state.isRecorderBusy)
+        .help(L("record.control.meeting", live.title))
+    }
+
+    private func cardTitle(_ title: String) -> some View {
+        Text(title)
+            .font(Brand.font(12, .semibold))
+            .foregroundStyle(Brand.color.text)
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+
+    private func cardWhen(_ text: String) -> some View {
+        Text(text)
+            .font(Brand.caption)
+            .foregroundStyle(Brand.color.text2)
+            .lineLimit(1)
+    }
+
     private var elseLink: some View {
-        Button(L("record.control.else"), action: recordPlain)
+        Button(L("record.control.else")) { state.recordNow(placement: placement, meeting: false) }
             .buttonStyle(.plain)
             .font(Brand.font(11, .medium))
             .foregroundStyle(Brand.color.accent)
             .lineLimit(1)
-            .fixedSize()
             .disabled(state.isRecorderBusy)
             .help(destinationHelp)
     }
@@ -167,7 +269,7 @@ struct RecordControl: View {
     private func nextLine(_ next: CalendarEvent) -> some View {
         Button { openMeetings(next) } label: {
             HStack(spacing: 6) {
-                Image(systemName: "calendar").foregroundStyle(Brand.color.text3)
+                Image(systemName: "calendar").foregroundStyle(Brand.color.text2)
                 Text(L("meetings.nextAt", next.title, Fmt.time(next.start)))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -181,14 +283,34 @@ struct RecordControl: View {
         .help(L("meetings.openAgenda"))
     }
 
-    private func notice(_ text: String, symbol: String, color: Color) -> some View {
-        Label {
-            Text(text).lineLimit(3).fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: symbol)
+    /// Two lines at most (the whole text in the tooltip), a × to dismiss it, and the way to the permission it needs.
+    private func errorNotice(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.circle")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text).lineLimit(2).help(text)
+                if text == L("record.needsPermission") {
+                    Button(L("record.openPermissions")) {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(Brand.font(11, .medium))
+                    .foregroundStyle(Brand.color.accent)
+                    .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button { state.recordingError = nil } label: {
+                Image(systemName: "xmark").font(Brand.font(9, .semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Brand.color.text2)
+            .help(L("common.close"))
         }
         .font(Brand.caption)
-        .foregroundStyle(color)
+        .foregroundStyle(Brand.color.danger)
     }
 
     // MARK: Actions
@@ -198,15 +320,11 @@ struct RecordControl: View {
         var parts: [String] = []
         if placement == .sidebar, let slug = state.currentProjectSlug {
             parts.append(L("record.control.into", state.projectName(slug)))
+        } else if placement == .menuBar, let slug = state.recordingProjectSlug, state.project(slug) != nil {
+            parts.append(L("record.control.into", state.projectName(slug)))
         }
         if state.config.hotkeyEnabled { parts.append(L("record.hotkeyHint")) }
         return parts.joined(separator: "\n")
-    }
-
-    private func recordPlain() {
-        // From the main window a new recording belongs to the project on screen; elsewhere it gets classified.
-        if placement == .sidebar, !state.isRecording { state.recordingProjectSlug = state.currentProjectSlug }
-        state.toggleRecording()
     }
 
     private func openMeetings(_ event: CalendarEvent) {
@@ -214,6 +332,7 @@ struct RecordControl: View {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
+        state.pendingEventPrepare = false
         state.pendingEventId = event.id
         state.selection = .meetings
     }
@@ -312,6 +431,9 @@ struct MeetingOverrunRow: View {
 /// slot in the surrounding stack).
 struct QueueStatusLine: View {
     @Environment(AppState.self) private var state
+    /// The linear bar under "Transcribiendo… 42 %" (the sidebar leaves it out: the text already says it, and the
+    /// footer stays ≤ 96 pt).
+    var showsProgressBar = true
 
     var body: some View {
         if let status = state.queueStatus(now: MeetingsModel.shared.now) {
@@ -332,7 +454,7 @@ struct QueueStatusLine: View {
                         .truncationMode(.middle)
                         .monospacedDigit()
                 }
-                if let progress = status.progress {
+                if showsProgressBar, let progress = status.progress {
                     ProgressView(value: progress)
                         .progressViewStyle(.linear)
                         .tint(Brand.color.accent)

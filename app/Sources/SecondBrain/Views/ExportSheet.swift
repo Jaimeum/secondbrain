@@ -15,6 +15,8 @@ struct ExportSheet: View {
     @ViewState private var error: String?
     @ViewState private var savedURL: URL?
     @ViewState private var copied = false
+    /// Bumped on every copy, so each one restarts the "Copiado" moment.
+    @ViewState private var copyStamp = 0
 
     private var format: ExportFormat { ExportFormat(rawValue: formatRaw) ?? .docx }
 
@@ -137,11 +139,22 @@ struct ExportSheet: View {
         .background(Brand.color.surface)
         .frame(minWidth: 440, idealWidth: 500, maxWidth: 640, minHeight: 300, idealHeight: 440, maxHeight: 640)
         .onChange(of: formatRaw) { savedURL = nil; copied = false }
+        .onChange(of: options) { copied = false }
+        // "Copiado ✓" is a moment, not a state: back to "Copiar" so the next copy shows its own feedback.
+        .task(id: copyStamp) {
+            guard copied else { return }
+            try? await Task.sleep(for: .seconds(2))
+            if !Task.isCancelled { withAnimation(Brand.motion.fast) { copied = false } }
+        }
     }
 
+    /// Task lists have no wikilinks or front matter to keep, so only sources and pages offer options.
     private var hasOptions: Bool {
-        if case .source = request.target { return true }
-        return format == .markdown
+        switch request.target {
+        case .source: true
+        case .page: format == .markdown
+        case .tasks: false
+        }
     }
 
     private var nothingSelected: Bool {
@@ -192,7 +205,7 @@ struct ExportSheet: View {
         case .page(let path, _):
             return try await state.engine.exportDocument(pagePath: path, options: options)
         case .tasks(let tasks, let title):
-            return (title, state.engine.exportTasks(tasks, title: title))
+            return (title, TaskExport.markdown(tasks, title: title, state: state))
         }
     }
 
@@ -223,8 +236,49 @@ struct ExportSheet: View {
             let doc = try await document()
             Exporter.copyToPasteboard(markdown: doc.markdown, options: options)
             copied = true
+            copyStamp += 1
         } catch {
             self.error = L("export.failed", FriendlyError.message(error))
         }
+    }
+}
+
+/// A task list as Markdown, in the words the screen uses: "Míos · De otros · Sin dueño" (the segment names), and
+/// "· 🚀 Proyecto" on each line when the list spans more than one project (sidebar Pendientes).
+enum TaskExport {
+    @MainActor
+    static func markdown(_ tasks: [TaskItem], title: String, state: AppState) -> String {
+        let language = state.config.uiLanguage
+        let manyProjects = Set(tasks.map(\.projectSlug)).count > 1
+        var out = "# \(title)\n"
+        let groups: [(String, [TaskItem])] = [
+            (L("tasks.segment.mine"), tasks.filter(\.isMine)),
+            (L("tasks.segment.theirs"), tasks.filter { !$0.isMine && ($0.ownerName != nil || $0.ownerSlug != nil) }),
+            (L("tasks.segment.unowned"), tasks.filter { !$0.isMine && $0.ownerName == nil && $0.ownerSlug == nil }),
+        ]
+        for (heading, items) in groups where !items.isEmpty {
+            out += "\n## \(heading)\n\n"
+            let sorted = items.sorted { a, b in
+                if a.done != b.done { return !a.done }
+                return (a.due ?? .distantFuture, a.text) < (b.due ?? .distantFuture, b.text)
+            }
+            for task in sorted {
+                var line = "- [\(task.done ? "x" : " ")] \(task.text)"
+                if !task.isMine, let name = task.ownerName { line += " — \(name)" }
+                if let due = task.due {
+                    line += " · " + L("export.tasks.due", SBDate.human(due, hasTime: false, language: language))
+                }
+                if task.done, let doneDate = task.doneDate {
+                    line += " · " + L("export.tasks.done", SBDate.human(doneDate, hasTime: false, language: language))
+                }
+                if manyProjects {
+                    let project = state.project(task.projectSlug)
+                    line += " · " + (project.map { "\($0.emoji) \($0.name)" } ?? task.projectSlug)
+                }
+                out += line + "\n"
+            }
+        }
+        if tasks.isEmpty { out += "\n" + L("export.tasks.none") + "\n" }
+        return out
     }
 }

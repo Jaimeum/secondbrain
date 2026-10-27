@@ -34,6 +34,8 @@ enum Brand {
         let sage = Brand.dynamic(light: 0x818979, dark: 0x818979)
         /// Record / stop / in progress: the app's only red, muted.
         let record = Brand.dynamic(light: 0xB4533E, dark: 0xD27A66)
+        /// Label and dot on `record` (white in light; dark ink in dark, where white on #D27A66 is only ~3.1:1).
+        let onRecord = Brand.dynamic(light: 0xFFFFFF, dark: 0x202721)
         /// Background of a record card or "recording" highlight (record 10 % / 16 %).
         let recordSoft = Brand.dynamic(light: 0xB4533E, lightAlpha: 0.10, dark: 0xD27A66, darkAlpha: 0.16)
         /// Notices, due today, reconnect.

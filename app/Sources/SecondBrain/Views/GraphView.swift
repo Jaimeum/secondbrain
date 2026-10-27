@@ -15,6 +15,8 @@ struct GraphView: View {
 
     @ViewState private var loaded: GraphPayloadData?
     @ViewState private var controller = GraphController()
+    /// The whole brain's graph (Inicio) takes "Ver en el grafo" of a person or global page from `pendingGraphFocus`.
+    @ViewState private var requestedFocus: String?
 
     var body: some View {
         Group {
@@ -30,16 +32,21 @@ struct GraphView: View {
                     }
             } else if loaded == nil {
                 BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if projectSlug != nil {
+                // No extra "Grabar" here (§15.2: one record control); "+ Agregar" is in the toolbar.
+                EmptyStateView(symbol: "point.3.connected.trianglepath.dotted", title: L("graph.empty.title"),
+                               message: L("graph.empty.message"), actionTitle: L("graph.empty.seeContent")) {
+                    state.pendingProjectTab = .content
+                }
             } else {
                 EmptyStateView(symbol: "point.3.connected.trianglepath.dotted", title: L("graph.empty.title"),
-                               message: L("graph.empty.message"), actionTitle: L("record.start")) {
-                    if case .project(let slug) = scope { state.recordingProjectSlug = slug }
-                    state.toggleRecording()
-                }
+                               message: L("graph.empty.message"))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Brand.color.surface)
+        .onAppear(perform: consumePendingFocus)
+        .onChange(of: state.pendingGraphFocus) { consumePendingFocus() }
         .task(id: TaskKey(revision: state.vaultRevision, scope: scopeKey)) {
             let graph = await state.engine.graph(projectSlug: projectSlug)
             let data = await Task.detached(priority: .userInitiated) { GraphPayloadData(graph) }.value
@@ -57,9 +64,16 @@ struct GraphView: View {
 
     private var scopeKey: String { projectSlug.map { "project:\($0)" } ?? "global" }
 
+    /// Only the whole brain's graph shown without a focus of its own; project pages are ProjectView's.
+    private func consumePendingFocus() {
+        guard projectSlug == nil, focus == nil, let page = state.pendingGraphFocus, !page.hasPrefix("projects/") else { return }
+        state.pendingGraphFocus = nil
+        requestedFocus = page
+    }
+
     /// A project's index page has no node of its own: it stands for the project hub.
     private var graphFocus: String? {
-        guard let focus else { return nil }
+        guard let focus = focus ?? requestedFocus else { return nil }
         let parts = focus.split(separator: "/")
         if parts.count == 4, parts[0] == "projects", parts[2] == "wiki", parts[3] == "index.md" { return "project:\(parts[1])" }
         return focus

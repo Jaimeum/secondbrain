@@ -14,9 +14,10 @@
   --card-alt: #E9E0D4;
   --line: #DAD3C9;
   --text: #232B25;
-  --text2: #6F766D;
+  --text2: #5F665D;
   --text3: #AEB5A4;
   --accent: #475243;
+  --link: #475243;
   --on-accent: #F5F0E8;
   --accent-soft: rgba(71, 82, 67, 0.10);
   --accent-line: rgba(71, 82, 67, 0.35);
@@ -38,6 +39,7 @@
   --text2: #AEB5A4;
   --text3: #818979;
   --accent: #AEB5A4;
+  --link: #CCD0C3;
   --on-accent: #232B25;
   --accent-soft: rgba(174, 181, 164, 0.14);
   --accent-line: rgba(174, 181, 164, 0.40);
@@ -58,6 +60,7 @@
     --text2: #AEB5A4;
     --text3: #818979;
     --accent: #AEB5A4;
+    --link: #CCD0C3;
     --on-accent: #232B25;
     --accent-soft: rgba(174, 181, 164, 0.14);
     --accent-line: rgba(174, 181, 164, 0.40);
@@ -94,8 +97,10 @@ li > p { margin: 0.2em 0; }
 hr { border: none; border-top: 1px solid var(--line); margin: 2em 0; }
 strong { font-weight: 600; }
 
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 3px; }
+/* Links read as links: underlined (a quiet line that darkens on hover), and in dark never the same tone as text2. */
+a { color: var(--link); text-decoration: underline; text-decoration-color: var(--accent-line);
+    text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
 a.wikilink { font-weight: 500; }
 span.wikilink.broken { color: var(--text3); border-bottom: 1px dashed var(--text3); cursor: help; }
 
@@ -118,9 +123,8 @@ th { font-weight: 600; color: var(--text2); }
 
 input[type=checkbox] { margin-right: 0.45em; accent-color: var(--accent); }
 
-/* Metadata: one quiet row; whatever does not fit is clipped, never wrapped. */
-#props { display: flex; flex-wrap: nowrap; gap: 6px; margin-bottom: 12px; overflow: hidden; white-space: nowrap;
-         -webkit-mask-image: linear-gradient(to right, var(--text) 92%, transparent); }
+/* Metadata: one quiet row; chips that do not fit are left out whole (wiki.js fitChips), never wrapped or cut. */
+#props { display: flex; flex-wrap: nowrap; gap: 6px; margin-bottom: 12px; overflow: hidden; white-space: nowrap; }
 #props:empty { display: none; }
 .chip { flex: none; font-size: 12px; line-height: 20px; color: var(--text2); background: var(--card-alt); border-radius: 999px; padding: 1px 10px; }
 .chip b { font-weight: 500; color: var(--text); }
@@ -129,7 +133,7 @@ input[type=checkbox] { margin-right: 0.45em; accent-color: var(--accent); }
 #backlinks:empty { display: none; }
 #backlinks h5 { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text2); }
 #backlinks ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-#backlinks a { display: inline-block; font-size: 13px; background: var(--card-alt); color: var(--text); border-radius: 999px; padding: 3px 10px; }
+#backlinks a { display: inline-block; font-size: 13px; background: var(--card-alt); color: var(--text); border-radius: 999px; padding: 3px 10px; text-decoration: none; }
 #backlinks a:hover { background: var(--accent-soft); text-decoration: none; }
 
 .empty { color: var(--text2); text-align: center; margin-top: 80px; }

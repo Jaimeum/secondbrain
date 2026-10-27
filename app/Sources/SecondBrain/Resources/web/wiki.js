@@ -133,6 +133,23 @@
     return value;
   }
 
+  // The chip row is one line: chips that do not fit are left out whole (never cut mid-word), again on resize.
+  let chipsHTML = "";
+  function fitChips() {
+    const row = document.getElementById("props");
+    row.innerHTML = chipsHTML;
+    const right = row.getBoundingClientRect().right;
+    for (const chip of [...row.children].reverse()) {
+      if (row.children.length > 1 && chip.getBoundingClientRect().right > right + 0.5) chip.remove();
+    }
+  }
+  let fitPending = false;
+  window.addEventListener("resize", () => {
+    if (fitPending) return;
+    fitPending = true;
+    requestAnimationFrame(() => { fitPending = false; fitChips(); });
+  });
+
   window.SB = {
     // Ajustes → Apariencia may force light/dark: WikiWebView tells the page explicitly (CONTRACT §15.1 Tema).
     setTheme(theme) {
@@ -147,14 +164,15 @@
       const { body, props } = splitFrontMatter(payload.markdown || "");
 
       const labels = payload.propLabels || {};
-      document.getElementById("props").innerHTML = props
-        .filter(([k]) => labels[k])
+      chipsHTML = props
+        .filter(([k]) => labels[k] && !(k === "type" && payload.hideType))
         .sort((a, b) => PROP_ORDER.indexOf(a[0]) - PROP_ORDER.indexOf(b[0]))
         .map(([k, v]) => [k, chipValue(k, v, payload)])
         .filter(([, v]) => v)
         .map(([k, v]) => '<span class="chip" title="' + escapeHTML(labels[k] + ": " + v) + '">' + escapeHTML(labels[k]) +
           ": <b>" + escapeHTML(v) + "</b></span>")
         .join("");
+      fitChips();
 
       const content = document.getElementById("content");
       content.innerHTML = body.trim() ? md.render(body) : '<p class="empty">' + escapeHTML(payload.emptyText || "") + "</p>";

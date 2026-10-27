@@ -1,9 +1,10 @@
 import BrainCore
 import SwiftUI
 
-/// Everything in the order it HAPPENED (meetings, emails, documents, decisions, milestones, due dates), grouped by
-/// month and day. Standalone for Inicio ("Ver todo por fecha", every project); a project's Contenido tab shows the
-/// same entries as a compact list (`ProjectContentView`).
+/// Everything in the order it HAPPENED (meetings, emails, documents, decisions, milestones, due dates): newest first,
+/// grouped by month and day, with what is still ahead (due dates, milestones) in a short "Próximo" group on top. Opens
+/// on the most recent content. Standalone for Inicio ("Ver todo por fecha", every project); a project's Contenido tab
+/// shows the same feed as a compact list (`ProjectContentView`).
 struct BrainTimelineView: View {
     @Environment(AppState.self) private var state
     /// nil = every project.
@@ -14,40 +15,60 @@ struct BrainTimelineView: View {
     @ViewState private var entries: [TimelineEntry] = []
     @ViewState private var loaded = false
     @ViewState private var kinds: Set<TimelineKind> = []
-
-    private var presentKinds: [TimelineKind] { TimelineGroups.presentKinds(in: entries) }
-    private var months: [TimelineGroups.Month] { TimelineGroups.months(entries, kinds: kinds) }
+    @ViewState private var showAllUpcoming = false
 
     var body: some View {
+        let presentKinds = TimelineGroups.presentKinds(in: entries)
+        let feed = TimelineGroups.feed(entries, kinds: kinds)
         ScrollViewReader { proxy in
             VStack(spacing: 0) {
                 if !presentKinds.isEmpty {
-                    filterBar(proxy)
+                    filterBar(presentKinds, proxy)
                     Rectangle().fill(Brand.color.line).frame(height: 1)
                 }
                 if !loaded {
                     BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if months.isEmpty {
+                } else if feed.isEmpty {
                     EmptyStateView(symbol: "calendar", title: L("timeline.emptyTitle"),
                                    message: entries.isEmpty ? L("timeline.emptyMessage") : L("timeline.allHidden"))
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                            ForEach(months) { month in
+                            Color.clear.frame(height: 0).id(TimelineGroups.topAnchor)
+                            if !feed.upcoming.isEmpty {
+                                let shown = showAllUpcoming ? feed.upcoming : TimelineGroups.prefix(feed.upcoming, entries: 3)
+                                SwiftUI.Section {
+                                    ForEach(shown) { day in dayView(day) }
+                                    let total = feed.upcomingCount
+                                    if total > 3 {
+                                        Button(showAllUpcoming ? L("content.showLess") : L("home.seeAllTasks", total)) {
+                                            withAnimation(Brand.motion.animation(fast: true)) { showAllUpcoming.toggle() }
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .font(Brand.caption)
+                                        .foregroundStyle(Brand.color.accent)
+                                        .padding(.horizontal, Brand.spacing.content + 80)
+                                        .padding(.bottom, Brand.spacing.s)
+                                    }
+                                } header: {
+                                    sectionHeader(L("timeline.upcoming"))
+                                }
+                            }
+                            ForEach(feed.months) { month in
                                 SwiftUI.Section {
                                     ForEach(month.days) { day in
                                         dayView(day)
                                             .timelineAnchor(day.start, headerHeight: TimelineGroups.fullHeaderHeight)
                                     }
                                 } header: {
-                                    monthHeader(month)
+                                    sectionHeader(TimelineGroups.monthTitle(month.start))
+                                        .id(TimelineGroups.MonthAnchor(start: month.start))
                                 }
                             }
                         }
                         .padding(.bottom, Brand.spacing.xxl)
                     }
-                    .onAppear { scrollToAnchor(proxy, animated: false) }
-                    .onChange(of: kinds) { scrollToAnchor(proxy, animated: false) }
+                    .onChange(of: kinds) { proxy.scrollTo(TimelineGroups.topAnchor, anchor: .top) }
                 }
             }
         }
@@ -62,21 +83,23 @@ struct BrainTimelineView: View {
         }
     }
 
-    private func filterBar(_ proxy: ScrollViewProxy) -> some View {
+    /// Kind chips, and "Hoy" as a chip of the same set (back to the top: the newest content).
+    private func filterBar(_ presentKinds: [TimelineKind], _ proxy: ScrollViewProxy) -> some View {
         HStack(alignment: .top, spacing: Brand.spacing.m) {
             TimelineKindChips(kinds: presentKinds, selected: $kinds)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button(L("timeline.today")) { scrollToAnchor(proxy, animated: true) }
-                .buttonStyle(.brandSecondary)
-                .controlSize(.small)
-                .help(L("timeline.todayHelp"))
+            FilterChip(title: L("timeline.today"), symbol: "calendar", isOn: false) {
+                withAnimation(Brand.motion.animation()) { proxy.scrollTo(TimelineGroups.topAnchor, anchor: .top) }
+            }
+            .fixedSize()
+            .help(L("timeline.todayHelp"))
         }
         .padding(.horizontal, Brand.spacing.content)
         .padding(.vertical, Brand.spacing.m)
     }
 
-    private func monthHeader(_ month: TimelineGroups.Month) -> some View {
-        Text(TimelineGroups.monthTitle(month.start))
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
             .font(Brand.section)
             .foregroundStyle(Brand.color.text)
             .lineLimit(1)
@@ -84,16 +107,6 @@ struct BrainTimelineView: View {
             .frame(maxWidth: .infinity, minHeight: TimelineGroups.fullHeaderHeight, alignment: .leading)
             .background(Brand.color.surface)
             .overlay(alignment: .bottom) { Rectangle().fill(Brand.color.line).frame(height: 1) }
-            .id(TimelineGroups.MonthAnchor(start: month.start))
-    }
-
-    private func scrollToAnchor(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let target = TimelineGroups.anchorTarget(in: months) else { return }
-        if animated {
-            withAnimation(Brand.motion.animation()) { proxy.scrollTo(target, anchor: .top) }
-        } else {
-            proxy.scrollTo(target, anchor: .top)
-        }
     }
 
     @ViewBuilder private func dayView(_ day: TimelineGroups.Day) -> some View {
@@ -163,9 +176,19 @@ enum TimelineGroups {
         var id: Date { start }
     }
 
-    /// Scroll targets: a day (its anchor sits a header's height above it) or a month header.
+    /// What a date list shows: `upcoming` = days after today, soonest first ("Próximo"); `months` = today and before,
+    /// newest month, day and entry first (the list opens on the most recent content).
+    struct Feed {
+        let upcoming: [Day]
+        let months: [Month]
+        var isEmpty: Bool { upcoming.isEmpty && months.isEmpty }
+        var upcomingCount: Int { upcoming.reduce(0) { $0 + $1.entries.count } }
+    }
+
+    /// Scroll targets: a day (its anchor sits a header's height above it), a month header, the top of the list.
     struct DayAnchor: Hashable { let start: Date }
     struct MonthAnchor: Hashable { let start: Date }
+    static let topAnchor = "timeline.top"
 
     static let fullHeaderHeight: CGFloat = 40
 
@@ -175,28 +198,35 @@ enum TimelineGroups {
     }
 
     /// `kinds` empty = every kind.
-    static func months(_ entries: [TimelineEntry], kinds: Set<TimelineKind>) -> [Month] {
+    static func feed(_ entries: [TimelineEntry], kinds: Set<TimelineKind>, now: Date = Date()) -> Feed {
         let cal = Calendar.current
-        let visible = entries.filter { kinds.isEmpty || kinds.contains($0.kind) }.sorted { $0.date < $1.date }
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now
+        let visible = entries.filter { kinds.isEmpty || kinds.contains($0.kind) }
         let byDay = Dictionary(grouping: visible) { cal.startOfDay(for: $0.date) }
-        let days = byDay.keys.sorted().map { Day(start: $0, entries: byDay[$0] ?? []) }
-        let byMonth = Dictionary(grouping: days) { cal.dateInterval(of: .month, for: $0.start)?.start ?? $0.start }
-        return byMonth.keys.sorted().map { Month(start: $0, days: byMonth[$0] ?? []) }
+        let upcoming = byDay.keys.filter { $0 >= tomorrow }.sorted()
+            .map { Day(start: $0, entries: (byDay[$0] ?? []).sorted { $0.date < $1.date }) }
+        let past = byDay.keys.filter { $0 < tomorrow }.sorted(by: >)
+            .map { Day(start: $0, entries: (byDay[$0] ?? []).sorted { $0.date > $1.date }) }
+        let byMonth = Dictionary(grouping: past) { cal.dateInterval(of: .month, for: $0.start)?.start ?? $0.start }
+        let months = byMonth.keys.sorted(by: >).map { Month(start: $0, days: (byMonth[$0] ?? []).sorted { $0.start > $1.start }) }
+        return Feed(upcoming: upcoming, months: months)
+    }
+
+    /// The first days holding at most `entries` entries (always at least one day).
+    static func prefix(_ days: [Day], entries limit: Int) -> [Day] {
+        var left = limit
+        var out: [Day] = []
+        for day in days where left > 0 {
+            let taken = Array(day.entries.prefix(left))
+            out.append(Day(start: day.start, entries: taken))
+            left -= taken.count
+        }
+        return out
     }
 
     static func monthTitle(_ date: Date) -> String {
         let text = Fmt.month(date)
         return text.prefix(1).uppercased() + text.dropFirst()
-    }
-
-    /// Where a timeline opens: the first day today or later (else the last one). The first day of a month scrolls
-    /// to the month header itself, so the pinned header never hides it.
-    static func anchorTarget(in months: [Month]) -> AnyHashable? {
-        let today = Calendar.current.startOfDay(for: Date())
-        let days = months.flatMap(\.days).map(\.start)
-        guard let day = days.first(where: { $0 >= today }) ?? days.last else { return nil }
-        if let month = months.first(where: { $0.days.first?.start == day }) { return AnyHashable(MonthAnchor(start: month.start)) }
-        return AnyHashable(DayAnchor(start: day))
     }
 }
 

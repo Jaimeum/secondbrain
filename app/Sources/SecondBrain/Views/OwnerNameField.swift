@@ -9,6 +9,7 @@ struct OwnerNameField: View {
     @ViewState private var loadedName: String?
     /// The vault the name was read from: after a vault switch, an edit still goes back to where it came from.
     @ViewState private var vault: VaultStore?
+    @ViewState private var saveError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -16,6 +17,7 @@ struct OwnerNameField: View {
             TextField("", text: $name, prompt: Text(L("owner.placeholder")))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(save)
+            if let saveError { OwnerSaveError(message: saveError) }
             if showsHint {
                 Text(L("owner.hint"))
                     .font(Brand.caption)
@@ -26,6 +28,11 @@ struct OwnerNameField: View {
         .onAppear(perform: load)
         .onChange(of: state.engineStarted) { load() }
         .onDisappear(perform: save)
+        // Saved shortly after typing stops, not only on Return or when the field goes away.
+        .task(id: name) {
+            try? await Task.sleep(for: .milliseconds(800))
+            if !Task.isCancelled { save() }
+        }
     }
 
     private func load() {
@@ -42,7 +49,10 @@ struct OwnerNameField: View {
         do {
             try vault.setOwnerName(name)
             loadedName = name
-        } catch {}
+            saveError = nil
+        } catch {
+            saveError = FriendlyError.message(error)
+        }
     }
 }
 
@@ -76,6 +86,7 @@ struct OwnerAddressesField: View {
     @ViewState private var text = ""
     @ViewState private var loaded: String?
     @ViewState private var vault: VaultStore?
+    @ViewState private var saveError: String?
 
     private var accountEmails: [String] { state.engineStarted ? OwnerAddresses.fromAccounts(state) : [] }
 
@@ -95,6 +106,7 @@ struct OwnerAddressesField: View {
                                                                            : L("settings.ownerEmails.extraPlaceholder")))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(save)
+            if let saveError { OwnerSaveError(message: saveError) }
             if showsHint {
                 Text(accountEmails.isEmpty ? L("owner.emailsHint") : L("settings.ownerEmails.hint"))
                     .font(Brand.caption)
@@ -109,6 +121,10 @@ struct OwnerAddressesField: View {
             reloadText()
         }
         .onDisappear(perform: save)
+        .task(id: text) {
+            try? await Task.sleep(for: .milliseconds(800))
+            if !Task.isCancelled { save() }
+        }
     }
 
     private func load() {
@@ -118,9 +134,11 @@ struct OwnerAddressesField: View {
         reloadText()
     }
 
-    /// The field shows the stored addresses that aren't a connected account.
+    /// The field shows the stored addresses that aren't a connected account. Typed, unsaved input is saved first, so an
+    /// account connecting meanwhile never wipes it.
     private func reloadText() {
         guard let vault else { return }
+        if loaded != nil, text != loaded { save() }
         let accounts = Set(accountEmails)
         let extra = vault.ownerEmails().filter { !accounts.contains($0) }.joined(separator: ", ")
         text = extra
@@ -136,6 +154,21 @@ struct OwnerAddressesField: View {
         do {
             try vault.setOwnerEmails(accounts + typed.filter { !accounts.contains($0) })
             loaded = text
-        } catch {}
+            saveError = nil
+        } catch {
+            saveError = FriendlyError.message(error)
+        }
+    }
+}
+
+/// "No pude guardar: …" under an owner field, in `warning`.
+private struct OwnerSaveError: View {
+    let message: String
+
+    var body: some View {
+        Label(L("owner.saveFailed", message), systemImage: "exclamationmark.triangle")
+            .font(Brand.caption)
+            .foregroundStyle(Brand.color.warning)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

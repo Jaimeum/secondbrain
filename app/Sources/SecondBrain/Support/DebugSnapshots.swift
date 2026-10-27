@@ -38,7 +38,10 @@ enum DebugSnapshots {
             }
             shots.append(("mytasks", CGSize(width: 900, height: 560), AnyView(MyTasksView())))
             shots.append(("timeline-all", CGSize(width: 900, height: 700), AnyView(BrainTimelineView(projectSlug: nil) { _, _ in })))
-            shots.append(("email", CGSize(width: 820, height: 640),
+            // Sheets at their declared ideal size and at their minimum (CONTRACT §15.3).
+            shots.append(("email", CGSize(width: 760, height: 520),
+                          AnyView(AddEmailSheet(request: EmailRequest(threadKey: nil, projectSlug: slug), initialText: email ?? ""))))
+            shots.append(("email-min", CGSize(width: 640, height: 440),
                           AnyView(AddEmailSheet(request: EmailRequest(threadKey: nil, projectSlug: slug), initialText: email ?? ""))))
             if let source {
                 shots.append(("export", CGSize(width: 540, height: 520), AnyView(ExportSheet(request: ExportRequest(target: .source(source))))))
@@ -46,7 +49,8 @@ enum DebugSnapshots {
                 shots.append(("change-date", CGSize(width: 460, height: 320), AnyView(ChangeDateSheet(source: source))))
             }
             if let thread = state.engine.emailThreads(projectSlug: nil).first {
-                shots.append(("thread", CGSize(width: 720, height: 640), AnyView(ThreadSheet(threadKey: thread.key))))
+                shots.append(("thread", CGSize(width: 680, height: 520), AnyView(ThreadSheet(threadKey: thread.key))))
+                shots.append(("thread-min", CGSize(width: 560, height: 420), AnyView(ThreadSheet(threadKey: thread.key))))
             }
             shots.append(("note", CGSize(width: 560, height: 520), AnyView(NoteSheet(projectSlug: slug))))
             shots.append(("menubar", CGSize(width: 320, height: 440), AnyView(MenuBarView())))
@@ -95,6 +99,11 @@ enum DebugSnapshots {
             // Integration: the project screen with its tab bar (the sidebar lives in window-* now).
             if let project {
                 shots.append(("web-project", CGSize(width: 1100, height: 720), AnyView(ProjectView(project: project))))
+                // §15.5: the Contenido tab on each list.
+                shots.append(("content-by-date", CGSize(width: 880, height: 600), AnyView(ProjectContentView(
+                    project: project, selection: .constant(nil), initialMode: .byDate))))
+                shots.append(("content-by-topic", CGSize(width: 880, height: 600), AnyView(ProjectContentView(
+                    project: project, selection: .constant(nil), initialMode: .byTopic))))
             }
             // MARK: v0.5 shell (CONTRACT §15.5): Inicio, ⌘K, the recording control, the project sheet.
             await SearchIndex.shared.rebuild(state: state)
@@ -103,12 +112,24 @@ enum DebugSnapshots {
             shots.append(("home-empty", CGSize(width: 900, height: 620), AnyView(HomeView(previewEmpty: true))))
             shots.append(("search", CGSize(width: 760, height: 600), AnyView(SearchPalette(initialQuery: "comi"))))
             shots.append(("search-empty", CGSize(width: 760, height: 420), AnyView(SearchPalette())))
-            shots.append(("record-control", CGSize(width: 220, height: 130), AnyView(
-                RecordControl(placement: .sidebar).padding(12).frame(maxHeight: .infinity, alignment: .bottom)
-                    .background(Brand.color.bg))))
-            shots.append(("new-project", CGSize(width: 480, height: 470), AnyView(NewProjectSheet())))
+            // The sidebar footer at its default width (220): the meeting card, a plain "Grabar", recording, an error.
+            func footer(_ preview: RecordControlPreview?) -> AnyView {
+                AnyView(VStack(alignment: .leading, spacing: 4) {
+                    RecordControl(placement: .sidebar, preview: preview)
+                    QueueStatusLine(showsProgressBar: false)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .background(Brand.color.bg))
+            }
+            shots.append(("record-control", CGSize(width: 220, height: 130), footer(nil)))
+            shots.append(("record-control-280", CGSize(width: 280, height: 130), footer(nil)))
+            shots.append(("record-control-plain", CGSize(width: 220, height: 130), footer(.plain)))
+            shots.append(("record-control-recording", CGSize(width: 220, height: 130), footer(.recording)))
+            shots.append(("record-control-error", CGSize(width: 220, height: 170), footer(.plain)))
+            shots.append(("new-project", CGSize(width: 480, height: 440), AnyView(NewProjectSheet())))
             if let project {
-                shots.append(("edit-project", CGSize(width: 480, height: 470), AnyView(NewProjectSheet(editing: project))))
+                shots.append(("edit-project", CGSize(width: 480, height: 440), AnyView(NewProjectSheet(editing: project))))
             }
             // MARK: v0.3 graph — focused graph + web views need a run loop and WKWebView.takeSnapshot.
             if let topic = await state.engine.graph(projectSlug: nil).nodes.filter({ $0.kind == .topic }).max(by: { $0.links < $1.links }) {
@@ -120,12 +141,24 @@ enum DebugSnapshots {
             }
             shots += await RulesSnapshots.shots(state: state)   // MARK: v0.4 rules
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
+            // v0.5 shell: these also render dark ("<name>-dark").
+            let darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "record-control", "record-control-plain",
+                                        "record-control-recording", "record-control-error", "menubar", "new-project",
+                                        "content-by-date", "content-by-topic"]
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
-                if name.hasPrefix("graph") || name.hasPrefix("web-") {   // views with a WKWebView
-                    await GraphSnapshot.render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
-                    continue
+                for dark in darkToo.contains(name) ? [false, true] : [false] {
+                    let file = dir.appendingPathComponent(name + (dark ? "-dark" : "") + ".png")
+                    if name == "record-control-error" { state.recordingError = L("record.needsPermission") }
+                    defer { if name == "record-control-error" { state.recordingError = nil } }
+                    let previous = NSApp.appearance
+                    NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    defer { NSApp.appearance = previous }
+                    if name.hasPrefix("graph") || name.hasPrefix("web-") || name.hasPrefix("content-") {   // views with a WKWebView
+                        await GraphSnapshot.render(view.environment(state), size: size, to: file)
+                        continue
+                    }
+                    await render(view.environment(state), size: size, dark: dark, to: file)
                 }
-                await render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
             }
             // Integration: the optional accounts step of the onboarding, then its primary button ("Más tarde" without
             // accounts) pressed through the default-action shortcut: the next shot must be the last step.
@@ -194,6 +227,14 @@ enum DebugSnapshots {
             }
         }
         log("migrationNotice=\(engine.migrationNotice ?? "nil") templates=\(state.templates.count)")
+        // ⌘K finds meetings by their page's title, also without a source record on this Mac (§15.2).
+        await SearchIndex.shared.rebuild(state: state)
+        let found = SearchIndex.shared.results(for: "comi")
+        let meetings = found.first { $0.0 == .meetings }?.1.map(\.title) ?? []
+        log("search comi → \(found.map { "\($0.0.rawValue)=\($0.1.map(\.title))" }.joined(separator: " "))")
+        log("search comi meetings \(meetings.contains("Comité de la alianza") ? "PASS" : "FAIL")")
+        let ids = SearchIndex.shared.items.map(\.id)
+        log("search ids unique \(Set(ids).count == ids.count ? "PASS" : "FAIL (\(ids.count - Set(ids).count) dup)")")
     }
 
     /// "onboarding-accounts" and "onboarding-accounts-next" (after pressing Return = the primary button).
@@ -236,14 +277,20 @@ enum DebugSnapshots {
             let tabs: [(String, ProjectTab)] = [("content", .content), ("tasks", .tasks), ("ask", .ask), ("graph", .graph)]
             for (tabName, tab) in tabs { items.append(("project-\(tabName)", .project(project.slug), tab)) }
         }
+        // ⌘K over Inicio (the palette inside the real window, with its query).
+        items.append(("search", .home, nil))
         let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""
         for entry in items where only.isEmpty || entry.name.hasPrefix(only) {
             for (sizeName, size) in [("1100", CGSize(width: 1100, height: 720)), ("min", CGSize(width: 920, height: 620))] {
                 for dark in [false, true] {
                     state.selection = entry.item
                     state.pendingProjectTab = entry.tab
+                    state.searchPresented = false   // "search" lays its own palette (with a query) over the window
                     let file = "window-\(entry.name)-\(sizeName)-\(dark ? "dark" : "light").png"
-                    await renderWindow(MainView().environment(state), size: size, dark: dark, to: dir.appendingPathComponent(file))
+                    let view = entry.name == "search"
+                        ? AnyView(ZStack { MainView(); SearchPalette(initialQuery: "comi") })
+                        : AnyView(MainView())
+                    await renderWindow(view.environment(state), size: size, dark: dark, to: dir.appendingPathComponent(file))
                 }
             }
         }
@@ -271,13 +318,14 @@ enum DebugSnapshots {
         window.contentView = nil
     }
 
-    private static func render(_ view: some View, size: CGSize, to url: URL) async {
+    private static func render(_ view: some View, size: CGSize, dark: Bool = false, to url: URL) async {
         let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height)
             .background(Brand.color.surface).brandEnvironment())
         host.frame = CGRect(origin: .zero, size: size)
         // An offscreen, never-ordered-in window gives the view a real layout/appearance context.
         let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),
                               styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.contentView = host
         host.layoutSubtreeIfNeeded()
         try? await Task.sleep(for: .seconds(2.5))   // let .task loaders finish

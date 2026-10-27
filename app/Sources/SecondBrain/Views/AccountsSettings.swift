@@ -57,7 +57,12 @@ struct AccountsSettingsPage: View {
                             isPresented: Binding(get: { pendingDisconnect != nil }, set: { if !$0 { pendingDisconnect = nil } })) {
             Button(L("accounts.disconnect"), role: .destructive) {
                 if let account = pendingDisconnect {
-                    do { try state.disconnectAccount(account.id) } catch { connector.error = FriendlyError.message(error) }
+                    do {
+                        try state.disconnectAccount(account.id)
+                        connector.clearStatus()   // "✓ Conectado: …" must not outlive the account
+                    } catch {
+                        connector.error = FriendlyError.message(error)
+                    }
                 }
                 pendingDisconnect = nil
             }
@@ -121,8 +126,9 @@ final class AccountConnector {
     /// The Mac Calendar permission was refused: offer System Settings.
     private(set) var calendarDenied = false
     private(set) var connectingLocal = false
-    /// Last account connected here ("✓ Conectado: ana@contoso.com").
+    /// Last account connected here ("✓ Conectado: ana@contoso.com"); fades after a few seconds.
     private(set) var lastConnected: ConnectedAccount?
+    @ObservationIgnored private var fadeTask: Task<Void, Never>?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var browserURL: URL?
 
@@ -148,7 +154,7 @@ final class AccountConnector {
                     Task { @MainActor in self?.browserURL = url }
                 }
                 guard let self, !Task.isCancelled else { return }
-                lastConnected = account
+                didConnect(account)
                 OwnerAddresses.merge(state: state)   // "Mis direcciones de correo" includes the new account
                 flow = nil
             } catch {
@@ -173,6 +179,23 @@ final class AccountConnector {
 
     func retry() { flow?.phase = .trust }
 
+    /// Forgets the inline result (after a disconnect, or once the success line has been read).
+    func clearStatus() {
+        fadeTask?.cancel()
+        lastConnected = nil
+        error = nil
+    }
+
+    private func didConnect(_ account: ConnectedAccount) {
+        lastConnected = account
+        fadeTask?.cancel()
+        fadeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard let self, !Task.isCancelled, lastConnected?.id == account.id else { return }
+            withAnimation(Brand.motion.animation()) { self.lastConnected = nil }
+        }
+    }
+
     static func phase(for error: Error) -> ConnectPhase {
         switch error {
         case AccountError.notConfigured: return .blocked(.notRegistered)
@@ -187,7 +210,7 @@ final class AccountConnector {
         Task {
             defer { connectingLocal = false }
             do {
-                lastConnected = try await state.connectAccount(.local) { _ in }
+                didConnect(try await state.connectAccount(.local) { _ in })
             } catch {
                 self.error = FriendlyError.message(error)
                 calendarDenied = !state.engine.accounts.isDemo && LocalCalendarProvider.isDenied
@@ -243,7 +266,9 @@ struct ConnectAccountControls: View {
                 ConnectAccountButtons(includeMacCalendar: includeMacCalendar, busyLocal: connector.connectingLocal,
                                       centered: centered, macCalendarFirst: context == .meetings) { connector.start($0, state: state) }
             }
-            if let account = connector.lastConnected, connector.error == nil {
+            // Only while that account is still connected (a disconnect elsewhere must not leave "✓ Conectado").
+            if let account = connector.lastConnected, connector.error == nil,
+               state.engine.accounts.accounts.contains(where: { $0.id == account.id }) {
                 Label(L("accounts.connected", account.provider == .local ? L("accounts.macCalendar") : account.email),
                       systemImage: "checkmark.circle")
                     .foregroundStyle(Brand.color.success)
@@ -344,8 +369,8 @@ struct ConnectAccountButtons: View {
                     .controlSize(.large)
                 Text(L("accounts.orConnect")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) { oauthButtons }
-                    VStack(alignment: centered ? .center : .leading, spacing: 8) { oauthButtons }
+                    HStack(spacing: 10) { oauthButtons(primaryFirst: false) }
+                    VStack(alignment: centered ? .center : .leading, spacing: 8) { oauthButtons(primaryFirst: false) }
                 }
             }
         } else {
@@ -355,27 +380,35 @@ struct ConnectAccountButtons: View {
 
     private var allButtons: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { oauthButtons; macCalendarButton.buttonStyle(.brandSecondary) }
+            HStack(spacing: 10) { oauthButtons(primaryFirst: true); macCalendarButton.buttonStyle(.brandSecondary) }
             VStack(alignment: centered ? .center : .leading, spacing: 8) {
-                HStack(spacing: 10) { oauthButtons }
+                HStack(spacing: 10) { oauthButtons(primaryFirst: true) }
                 macCalendarButton.buttonStyle(.brandSecondary)
             }
-            VStack(alignment: centered ? .center : .leading, spacing: 8) { oauthButtons; macCalendarButton.buttonStyle(.brandSecondary) }
+            VStack(alignment: centered ? .center : .leading, spacing: 8) {
+                oauthButtons(primaryFirst: true)
+                macCalendarButton.buttonStyle(.brandSecondary)
+            }
         }
     }
 
-    @ViewBuilder private var oauthButtons: some View {
-        ForEach([AccountProvider.microsoft, .google], id: \.self) { provider in
-            Button {
-                onConnect(provider)
-            } label: {
-                // The same "M" / "G" tokens as the account rows and the trust sheet.
-                ButtonContent(text: L(provider == .microsoft ? "accounts.connectMicrosoft" : "accounts.connectGoogle")) {
-                    ProviderBadge(provider: provider, size: 16)
-                }
+    /// `primaryFirst`: the first button is the screen's one primary action (unless the Mac calendar already is).
+    @ViewBuilder private func oauthButtons(primaryFirst: Bool) -> some View {
+        oauthButton(.microsoft, primary: primaryFirst)
+        oauthButton(.google, primary: false)
+    }
+
+    @ViewBuilder private func oauthButton(_ provider: AccountProvider, primary: Bool) -> some View {
+        let button = Button {
+            onConnect(provider)
+        } label: {
+            // The same "M" / "G" tokens as the account rows and the trust sheet, on a `card` disc so they stay
+            // visible on the button's own fill.
+            ButtonContent(text: L(provider == .microsoft ? "accounts.connectMicrosoft" : "accounts.connectGoogle")) {
+                ProviderBadge(provider: provider, size: 16, onFill: true)
             }
-            .buttonStyle(.brandSecondary)
         }
+        if primary { button.buttonStyle(.brandPrimary) } else { button.buttonStyle(.brandSecondary) }
     }
 
     @ViewBuilder private var macCalendarButton: some View {
@@ -452,6 +485,8 @@ private struct AccountRow: View {
 struct ProviderBadge: View {
     let provider: AccountProvider
     var size: CGFloat = 26
+    /// Inside a button (whose fill is `cardAlt` or `accent`): a `card` disc with a hairline, so the token keeps its shape.
+    var onFill = false
 
     var body: some View {
         Group {
@@ -464,7 +499,8 @@ struct ProviderBadge: View {
         }
         .foregroundStyle(Brand.avatar.initials)
         .frame(width: size, height: size)
-        .background(Brand.avatar.background, in: Circle())
+        .background(onFill ? Brand.color.card : Brand.avatar.background, in: Circle())
+        .overlay { if onFill { Circle().strokeBorder(Brand.color.line, lineWidth: 1) } }
         .accessibilityLabel(provider == .local ? L("accounts.macCalendar") : provider.displayName)
     }
 }

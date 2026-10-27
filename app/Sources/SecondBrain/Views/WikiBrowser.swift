@@ -15,6 +15,8 @@ struct WikiBrowser: View {
     @Binding var selection: String?
 
     @ViewState private var pages: [WikiPage] = []
+    /// The first listing came back (until then a loader, not the empty state).
+    @ViewState private var loaded = false
 
     private var projectName: String? {
         if case .project(let slug) = scope { return state.project(slug)?.name }
@@ -26,7 +28,9 @@ struct WikiBrowser: View {
     var body: some View {
         GeometryReader { geo in
             HStack(spacing: 0) {
-                if pages.isEmpty && selection == nil {
+                if !loaded {
+                    BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if pages.isEmpty && selection == nil {
                     emptyState
                 } else {
                     WikiPageList(groups: groups, selection: $selection)
@@ -74,6 +78,7 @@ struct WikiBrowser: View {
         if selection == nil {
             selection = WikiGrouping.defaultPage(in: all)?.path
         }
+        loaded = true
     }
 }
 
@@ -138,7 +143,7 @@ struct ContentListHeader: View {
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let trailing {
-                Text(trailing).font(Brand.caption).foregroundStyle(Brand.color.text3).monospacedDigit()
+                Text(trailing).font(Brand.caption).foregroundStyle(Brand.color.text2).monospacedDigit()
             }
         }
         .padding(.horizontal, Brand.spacing.s)
@@ -217,8 +222,8 @@ extension ContentListRow where Trailing == EmptyView {
 
 // MARK: - Page pane
 
-/// The rendered page with its header (back · title · grafo / exportar / Finder, folded into ⋯ below 560 pt).
-/// Wikilink navigation inside the page keeps a back history.
+/// The rendered page with its header (back · title · pendientes / grafo / exportar / Finder, folded into ⋯ below
+/// 560 pt). Every page change (a wikilink or a list row) goes into the back history; Back walks it.
 struct WikiPagePane: View {
     @Environment(AppState.self) private var state
     @Binding var selection: String?
@@ -226,7 +231,10 @@ struct WikiPagePane: View {
     var title: String? = nil
 
     @ViewState private var history: [String] = []
+    /// The next selection change comes from Back: not recorded.
+    @ViewState private var goingBack = false
     @ViewState private var export: ExportRequest?
+    @ViewState private var tasksSource: SourceRecord?
     @ViewState private var threadKey: String?
     @ViewState private var loadedTitle: String?
     @ViewState private var width: CGFloat = 800
@@ -235,12 +243,22 @@ struct WikiPagePane: View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
-            WikiWebView(vault: state.engine.vault, path: selection) { path in navigate(to: path) }
+            // The header already names the page: the "Tipo" chip would only repeat it.
+            WikiWebView(vault: state.engine.vault, path: selection, hideType: true) { path in navigate(to: path) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .task(id: selection) { await loadTitle() }
+        .onChange(of: selection) { old, new in
+            if goingBack {
+                goingBack = false
+            } else if let old, let new, old != new {
+                history.append(old)
+                if history.count > 50 { history.removeFirst(history.count - 50) }
+            }
+        }
         .sheet(item: $export) { ExportSheet(request: $0) }
+        .sheet(item: $tasksSource) { SourceTasksSheet(source: $0) }
         .sheet(item: Binding(get: { threadKey.map(ThreadKeyItem.init) }, set: { threadKey = $0?.key })) { item in
             ThreadSheet(threadKey: item.key) { navigate(to: $0) }
         }
@@ -253,15 +271,20 @@ struct WikiPagePane: View {
     private var header: some View {
         HStack(spacing: Brand.spacing.s) {
             Button {
-                if let previous = history.popLast() { selection = previous }
+                if let previous = history.popLast() {
+                    goingBack = true
+                    selection = previous
+                }
             } label: {
                 Image(systemName: "chevron.left")
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(history.isEmpty ? Brand.color.text3 : Brand.color.text2)
+            .foregroundStyle(Brand.color.text2)
             .disabled(history.isEmpty)
+            .opacity(history.isEmpty ? 0 : 1)   // keeps its 22 pt: the title never shifts
+            .accessibilityHidden(history.isEmpty)
             .help(L("wiki.back"))
 
             Text(shownTitle)
@@ -285,8 +308,19 @@ struct WikiPagePane: View {
         .background(Brand.color.surface)
     }
 
+    /// The meeting a summary page was written from (done), for "Pendientes y acuerdos".
+    private func meetingSource(of path: String) -> SourceRecord? {
+        guard path.contains("/wiki/meetings/") else { return nil }
+        return state.engine.sources.first {
+            $0.kind == .meeting && $0.status == .done && SourcePages.candidates(for: $0).contains(path)
+        }
+    }
+
     private func iconActions(_ path: String) -> some View {
         HStack(spacing: 2) {
+            if let source = meetingSource(of: path) {
+                iconButton("checklist", help: L("srctasks.title")) { tasksSource = source }
+            }
             if let key = WikiGrouping.threadKey(of: path) {
                 iconButton("envelope", help: L("thread.viewEmails")) { threadKey = key }
             }
@@ -302,6 +336,9 @@ struct WikiPagePane: View {
 
     private func moreMenu(_ path: String) -> some View {
         Menu {
+            if let source = meetingSource(of: path) {
+                Button { tasksSource = source } label: { Label(L("srctasks.title"), systemImage: "checklist") }
+            }
             if let key = WikiGrouping.threadKey(of: path) {
                 Button { threadKey = key } label: { Label(L("thread.viewEmails"), systemImage: "envelope") }
             }
@@ -337,8 +374,8 @@ struct WikiPagePane: View {
         .accessibilityLabel(Text(help))
     }
 
+    /// A wikilink: the selection change itself goes into the history (`onChange(of: selection)`).
     private func navigate(to path: String) {
-        if let current = selection, current != path { history.append(current) }
         selection = path
     }
 
@@ -355,11 +392,17 @@ struct WikiPagePane: View {
         NSWorkspace.shared.activateFileViewerSelecting([state.engine.vault.url(for: path)])
     }
 
-    /// "Ver en el grafo": the Grafo tab of the page's project (people and global pages: the whole brain), centered on it.
+    /// "Ver en el grafo": the Grafo tab of the page's project; people and global pages open the whole brain's graph
+    /// in Inicio (`HomeRoute.graph`, whose `GraphView` takes the focus from `pendingGraphFocus`). Never `.brain`.
     private func showInGraph(_ path: String) {
         state.pendingGraphFocus = path
         let parts = path.split(separator: "/")
-        state.selection = parts.count > 2 && parts[0] == "projects" ? .project(String(parts[1])) : .brain
+        if parts.count > 2 && parts[0] == "projects" {
+            state.selection = .project(String(parts[1]))
+        } else {
+            state.selection = .home
+            state.homeRoute = .graph
+        }
     }
 }
 

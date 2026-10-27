@@ -15,6 +15,12 @@ struct ChatMessage: Identifiable {
     var isStreaming = false
     var failure: Failure?
     var saved = false
+    /// The project an answer was asked in (nil = the whole brain): its [[links]] resolve from there and "Guardar"
+    /// files it there, even after the scope switch changes.
+    var projectSlug: String?
+
+    /// The page an answer's [[links]] resolve from.
+    var baseRelPath: String { projectSlug.map { "projects/\($0)/wiki/index.md" } ?? "index.md" }
 }
 
 @MainActor @Observable
@@ -30,7 +36,7 @@ final class ChatModel {
         guard !question.isEmpty, !isAsking else { return }
         draft = ""
         messages.append(ChatMessage(role: .user, text: question))
-        messages.append(ChatMessage(role: .assistant, text: "", question: question, isStreaming: true))
+        messages.append(ChatMessage(role: .assistant, text: "", question: question, isStreaming: true, projectSlug: projectSlug))
         let index = messages.count - 1
         isAsking = true
 
@@ -130,7 +136,7 @@ struct ChatView: View {
                     LazyVStack(alignment: .leading, spacing: Brand.spacing.l) {
                         if model.messages.isEmpty { suggestions }
                         ForEach(model.messages) { message in
-                            MessageView(message: message, baseRelPath: basePath, onOpenPage: onOpenPage,
+                            MessageView(message: message, baseRelPath: message.baseRelPath, onOpenPage: onOpenPage,
                                         onSave: { save(message) }, onReconnect: { showReconnect = true })
                                 .id(message.id)
                         }
@@ -160,12 +166,10 @@ struct ChatView: View {
         state.pendingQuestion = nil
         guard !question.isEmpty else { return }
         if model.isAsking { model.stop() }
+        // "Preguntar a 🚀 X" (⌘K, ⌥) promised this project: the scope switch must not send it to the whole brain.
+        if projectSlug != nil { model.wholeBrain = false }
         model.draft = question
         model.ask(engine: state.engine, projectSlug: effectiveScope)
-    }
-
-    private var basePath: String {
-        effectiveScope.map { "projects/\($0)/wiki/index.md" } ?? "index.md"
     }
 
     private var topBar: some View {
@@ -257,7 +261,7 @@ struct ChatView: View {
     }
 
     private func save(_ message: ChatMessage) {
-        state.engine.saveAnswer(question: message.question, answer: message.text, projectSlug: effectiveScope)
+        state.engine.saveAnswer(question: message.question, answer: message.text, projectSlug: message.projectSlug)
         if let i = model.messages.firstIndex(where: { $0.id == message.id }) { model.messages[i].saved = true }
     }
 }
@@ -351,6 +355,8 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
             case .notConnected:
                 Text(L("chat.errorNotConnected"))
                 Button(L("chat.reconnect"), action: onReconnect)
+                    .buttonStyle(.brandSecondary)
+                    .controlSize(.small)
             case .rateLimited(let reset):
                 Text(reset.map { L("chat.errorRateLimitedUntil", Fmt.time($0)) } ?? L("chat.errorRateLimited"))
             case .other:

@@ -86,7 +86,7 @@ struct OnboardingView: View {
             StepHeader(symbol: "sparkles", title: L("onb.claude.title"), message: L("onb.claude.message"))
             ClaudeConnectView().padding(.top, 24)
         case .project:
-            StepHeader(symbol: "folder.badge.plus", title: L("onb.you.title"), message: L("onb.project.message"))
+            StepHeader(symbol: "folder.badge.plus", title: L("onb.you.title"), message: L("onb.you.message"))
             VStack(alignment: .leading, spacing: 16) {
                 OwnerNameField()
                 OwnerAddressesField()
@@ -140,8 +140,9 @@ struct OnboardingView: View {
     private var primaryTitle: String {
         switch step {
         case .welcome: L("onb.start")
-        case .project: L("onb.project.create")
-        case .done: L("onb.finish")
+        // Back on this step after creating it: the project exists, so the button only continues (and saves edits).
+        case .project: createdProject == nil ? L("onb.project.create") : L("common.continue")
+        case .done: L("onb.finish.open")
         case .accounts where !state.engine.accounts.hasAccounts: L("onb.accounts.later")
         default: L("common.continue")
         }
@@ -151,7 +152,19 @@ struct OnboardingView: View {
         switch step {
         case .project:
             do {
-                createdProject = try state.createProject(name: form.trimmedName, description: form.description, emoji: form.emoji)
+                if var project = createdProject {
+                    // Atrás → Crear y continuar again must not make a second project ("…-2"): edit the first one.
+                    let description = form.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if project.name != form.trimmedName || project.emoji != form.emoji || project.description != description {
+                        project.name = form.trimmedName
+                        project.emoji = form.emoji
+                        project.description = description
+                        try state.updateProject(project)
+                        createdProject = project
+                    }
+                } else {
+                    createdProject = try state.createProject(name: form.trimmedName, description: form.description, emoji: form.emoji)
+                }
                 projectError = nil
                 go(1)
             } catch {
@@ -479,11 +492,12 @@ private struct DoneStep: View {
             }
             BrandCard(padding: 18) {
                 VStack(alignment: .leading, spacing: 16) {
-                    tip(icon: AnyView(BrandMark(size: 22)), title: L("onb.done.menuTitle"), message: L("onb.done.menuMessage"))
+                    // Menu bar (with what happens after each meeting) · ⌥⌘R · ⌘K, the "find without thinking" way in.
+                    tip(icon: AnyView(BrandMark(size: 22)), title: L("onb.done.menuTitle"), message: L("onb.done.menuAfterMessage"))
                     tip(icon: AnyView(Text(verbatim: "⌥⌘R").font(Brand.font(12, .semibold)).foregroundStyle(Brand.color.accent)),
                         title: L("onb.done.hotkeyTitle"), message: L("onb.done.hotkeyMessage"))
-                    tip(icon: AnyView(Image(systemName: "sparkles").font(Brand.font(17)).foregroundStyle(Brand.color.accent)),
-                        title: L("onb.done.afterTitle"), message: L("onb.done.afterMessage"))
+                    tip(icon: AnyView(Text(verbatim: "⌘K").font(Brand.font(13, .semibold)).foregroundStyle(Brand.color.accent)),
+                        title: L("onb.done.searchTitle"), message: L("onb.done.searchMessage"))
                 }
             }
             ModelsStatusLine()
@@ -520,12 +534,15 @@ private struct ModelsStatusLine: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Button(L("onb.models.retry")) { state.prepareModels() }.buttonStyle(.brandSecondary)
             } else {
-                BrandLoader(size: 18, text: L("onb.models.downloading", Fmt.percent(state.modelProgress?.fraction ?? 0)))
-                Text(L("onb.models.hint"))
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text3)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                // The hint tells the user they don't have to wait: readable (text2) and wrapping, never cut.
+                VStack(alignment: .leading, spacing: 2) {
+                    BrandLoader(size: 18, text: L("onb.models.downloading", Fmt.percent(state.modelProgress?.fraction ?? 0)))
+                    Text(L("onb.models.hint"))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 18 + Brand.spacing.s)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -556,7 +573,9 @@ private struct AccountsStep: View {
                             Image(systemName: "checkmark.circle").foregroundStyle(Brand.color.success)
                         }
                     }
-                    ConnectAccountControls(connector: connector, help: $help, context: .onboarding)
+                    // Once an account exists, the same single "Conectar otra cuenta ▾" as Ajustes.
+                    ConnectAccountControls(connector: connector, help: $help, context: .onboarding,
+                                           compact: !state.engine.accounts.accounts.isEmpty)
                     Label(L("readonly.promise"), systemImage: "lock.shield")
                         .font(Brand.caption)
                         .foregroundStyle(Brand.color.text2)

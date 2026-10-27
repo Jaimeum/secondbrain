@@ -12,7 +12,7 @@ enum SidebarItem: Hashable {
     case tasks
     case people
     case project(String)
-    // Deprecated aliases, kept one release (MainView maps them): `.brain` → Inicio, `.inbox` → Sin asignar,
+    // Deprecated aliases, kept one release (MainView maps them): `.brain` → Inicio, `.inbox` → Inicio › Sin asignar,
     // `.myTasks` → Pendientes, `.templates` → Ajustes › Formatos (then Inicio).
     case brain
     case inbox
@@ -22,7 +22,7 @@ enum SidebarItem: Hashable {
     /// The item the sidebar shows as selected (aliases resolved); nil for `.templates`, which opens Ajustes instead.
     var normalized: SidebarItem? {
         switch self {
-        case .brain: .home
+        case .brain, .inbox: .home
         case .myTasks: .tasks
         case .templates: nil
         default: self
@@ -138,6 +138,12 @@ final class AppState {
     var pendingQuestion: String?
     /// A screen to push inside Inicio's NavigationStack; HomeView consumes it and clears it.
     var homeRoute: HomeRoute?
+    /// Bumped by "Inicio" (sidebar row re-selected, ⌘1) while Inicio is on screen: HomeView pops back to its root.
+    var homePopToken = 0
+    /// With `pendingEventId`: open the event on its preparation ("Prepararme" from Inicio), not the plain detail.
+    var pendingEventPrepare = false
+    /// When the last whole-brain question was asked from ⌘K (Inicio offers to go back to its answer).
+    var homeChatAskedAt: Date?
     /// The ⌘K palette is on screen.
     var searchPresented = false
     /// "Nuevo proyecto" sheet (⌘N, sidebar, ⌘K).
@@ -371,7 +377,7 @@ final class AppState {
         hotKey?.unregister()
         hotKey = nil
         if config.hotkeyEnabled {
-            hotKey = GlobalHotKey { [weak self] in self?.toggleRecording() }
+            hotKey = GlobalHotKey { [weak self] in self?.recordNow(placement: .menuBar) }
         }
     }
 
@@ -548,6 +554,24 @@ final class AppState {
         Task { isRecording ? await stopRecording() : await startRecording() }
     }
 
+    /// The one "Grabar" behind every plain path (⌥⌘R, ⌘K › Grabar, the empty Inicio, RecordControl): stops a running
+    /// recording; else records the meeting on now (its title, attendees and project, like its own "Grabar"); else a
+    /// plain recording. `.sidebar` (the main window) sends a plain recording to the project on screen; `.menuBar`
+    /// (and the hot key) keeps what "Detalles" says. `meeting: false` is "o grabar otra cosa".
+    func recordNow(placement: RecordControlPlacement, meeting: Bool = true) {
+        guard !isRecorderBusy else { return }
+        if isRecording {
+            Task { await stopRecording() }
+            return
+        }
+        if meeting, let live = MeetingBanner.recordableNow(state: self, now: Date()) {
+            Task { await MeetingsModel.shared.record(live, state: self) }
+            return
+        }
+        if placement == .sidebar { recordingProjectSlug = currentProjectSlug }
+        Task { await startRecording() }
+    }
+
     // MARK: v0.3 meetings — optional calendar event + attendees (see AppState+Meetings.swift)
     func startRecording(calendarEventId: String? = nil, attendees: [String]? = nil) async {
         guard engineStarted else {
@@ -577,7 +601,11 @@ final class AppState {
             let manifest = try await recorder.stop()
             engine.recordingFinished(manifest)
             currentRecordingId = nil
+            // The next recording starts clean: no title, project or format inherited from this one (didSet only
+            // forwards these while recording).
             recordingTitle = ""
+            recordingProjectSlug = nil
+            recordingTemplateId = nil
         } catch {
             recordingError = L("record.couldNotStop")
         }

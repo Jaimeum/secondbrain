@@ -1360,3 +1360,49 @@
 "onb.you.title" = "You and your first project";
 "onb.models.downloading" = "Downloading the transcription model… %@";
 "settings.github.orgTokenDetail" = "Create a read-only fine-grained token for that organization and paste it in Settings → GitHub → Use a personal token. If the organization also approves tokens, you may have to wait for its OK.";
+
+/* v0.5 — mail fixes */
+"mail.learningSubject" = "Learning from “%@”…";
+"mail.saveNoProject.help" = "I save it to Unassigned and learn from it. Use the arrow to pick a project.";
+"mail.saveRestOfThread.help" = "I save them to %@, with the rest of the thread.";
+"email.editTo" = "Edit recipients";
+"email.joins" = "Joins “%@”";
+"email.changeThread" = "Change";
+"email.joinOther" = "Join another";
+
+/* v0.5 — tasks fixes */
+"tasks.doneToast" = "Done";
+"tasks.undo" = "Undo";
+"export.tasks.due" = "due %@";
+"export.tasks.done" = "done %@";
+"export.tasks.none" = "_No tasks._";
+
+/* v0.5 — settings fixes */
+"onb.you.message" = "What to call you and where your first meetings go.";
+"onb.finish.open" = "Open secondbrain";
+"onb.done.menuAfterMessage" = "Top right of your screen. Click it to record and pick the project; a red dot shows while you record. After each meeting I transcribe and learn on my own, and let you know when I'm done.";
+"onb.done.searchTitle" = "Find or ask anything";
+"onb.done.searchMessage" = "Press ⌘K anywhere: find a meeting, a note or a person, or ask me a question.";
+"settings.whisper.notDownloaded" = "Not downloaded";
+"claude.waitingBrowser" = "Finish signing in in your browser…";
+"claude.waitingBrowserHint" = "I'll connect by myself as soon as you approve access.";
+"owner.saveFailed" = "Couldn't save: %@";
+
+/* v0.5 — meetings fixes */
+"meetings.earlierToday" = "Earlier today";
+"meetings.openInProject" = "Open in project";
+"meetings.past.learningHelp" = "I'm still learning from this meeting. Its summary shows up here when I'm done.";
+"meetings.past.needsProjectHelp" = "Choose its project and I'll learn from it.";
+
+/* v0.5 — project fixes */
+"timeline.upcoming" = "Coming up";
+"graph.empty.seeContent" = "See content";
+
+/* v0.5 — shell fixes */
+"record.control.startedAgo" = "started %@ ago";
+"record.control.startsIn" = "starts in %@";
+"record.openPermissions" = "Open System Settings";
+"search.globalPage" = "Whole brain";
+"search.hint.askShort" = "ask";
+"search.hint.askProject" = "ask %@";
+"home.lastQuestion" = "Your last question: “%@”";

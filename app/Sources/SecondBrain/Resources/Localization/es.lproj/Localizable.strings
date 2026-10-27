@@ -1275,3 +1275,27 @@
 "home.dropToUnassigned" = "Suelta aquí para agregarlo a Sin asignar";
 "home.connectAccounts" = "Conectar cuenta…";
 "home.allDay" = "Todo el día";
+
+/* v0.5 — project */
+"project.addHelp" = "Grabar, pegar un correo, escribir una nota, agregar archivos o un enlace";
+"project.historyHelp" = "Lo que cambié en este proyecto, y cómo deshacerlo";
+"project.reposTitle" = "Repositorios";
+"project.reposSync" = "Actualizar";
+"project.reposEvery" = "Se actualiza %@";
+"project.reposManual" = "Solo se actualiza a mano";
+"content.fromCalendar" = "Viene de tu calendario";
+"content.notePlaceholder" = "Escribe aquí…";
+"content.linkTitle" = "Pegar enlace";
+"content.linkHint" = "Leeré la página y la agregaré al proyecto.";
+"content.listEmpty" = "Aún no hay nada. Graba, pega un correo o arrastra un archivo aquí.";
+"content.showLess" = "Ver menos";
+"content.learningHint" = "Estoy aprendiendo de esto. Lo verás aquí en cuanto termine.";
+"content.recordingHint" = "Grabando. Aprenderé de esta reunión cuando termine.";
+"timeline.today" = "Hoy";
+"timeline.todayHelp" = "Ir a hoy";
+"timeline.allKinds" = "Todo";
+"timeline.filterHelp" = "Mostrar solo algunos tipos";
+"activity.undoShort" = "Deshacer";
+"chat.step.thinking" = "Conectando ideas…";
+"chat.send" = "Preguntar (⌘↩)";
+"timeline.someKinds" = "%ld tipos";

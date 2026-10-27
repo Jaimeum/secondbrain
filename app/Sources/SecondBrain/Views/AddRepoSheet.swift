@@ -48,7 +48,8 @@ struct AddRepoSheet: View {
                 repoStep
             }
         }
-        .frame(width: 580, height: 580)
+        .frame(minWidth: 520, idealWidth: 580, minHeight: 420, idealHeight: 520)
+        .background(Brand.color.surface)
         .sheet(isPresented: $showOrgHelp) { GitHubOrgHelpSheet() }
     }
 
@@ -57,49 +58,51 @@ struct AddRepoSheet: View {
     private var repoStep: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(L("repos.addSheet.title")).font(.title2.weight(.semibold))
+                Text(L("repos.addSheet.title")).font(Brand.title).foregroundStyle(Brand.color.text)
                 Text(L("repos.addSheet.hint", state.projectName(projectSlug)))
-                    .foregroundStyle(.secondary)
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField(L("repos.addSheet.search"), text: $query)
-                        .textFieldStyle(.plain)
-                        .onSubmit(submitQuery)
-                    if loadingRepos || resolving { ProgressView().controlSize(.small) }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-                .padding(.top, 6)
+                searchField(L("repos.addSheet.search"), text: $query, busy: loadingRepos || resolving, onSubmit: submitQuery)
+                    .padding(.top, 6)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
-            .padding(.bottom, 12)
-            Divider()
+            .padding(.horizontal, Self.inset)
+            .padding(.top, Self.inset)
+            .padding(.bottom, Brand.spacing.m)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             List {
                 if let pasted {
                     Button {
                         resolve(owner: pasted.owner, name: pasted.name)
                     } label: {
                         Label(L("repos.addSheet.usePasted", "\(pasted.owner)/\(pasted.name)"), systemImage: "link")
+                            .font(Brand.callout)
+                            .foregroundStyle(Brand.color.accent)
                     }
                     .buttonStyle(.plain)
                     .disabled(resolving)
+                    .listRowInsets(Self.rowInsets)
                 }
                 ForEach(filteredRepos) { info in
                     RepoPickRow(info: info, alreadyFollowed: isFollowed(info)) { choose(info) }
+                        .listRowInsets(Self.rowInsets)
                 }
                 if !loadingRepos, filteredRepos.isEmpty, pasted == nil {
                     Text(myRepos.isEmpty ? L("repos.addSheet.noneYet") : L("repos.addSheet.noMatch"))
-                        .foregroundStyle(.secondary)
+                        .font(Brand.body)
+                        .foregroundStyle(Brand.color.text2)
                         .padding(.vertical, 8)
+                        .listRowInsets(Self.rowInsets)
                 }
             }
-            .listStyle(.inset)
-            Divider()
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            errorBanner
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             footer {
-                Button(L("common.cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L("common.cancel")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
             }
         }
         .task { await loadRepos(refresh: false) }
@@ -164,31 +167,32 @@ struct AddRepoSheet: View {
                             chosen = nil
                             error = nil
                         } label: {
-                            Image(systemName: "chevron.left")
+                            Image(systemName: "chevron.left").foregroundStyle(Brand.color.text2)
                         }
                         .buttonStyle(.borderless)
                         .help(L("common.back"))
                     }
-                    Text(info.fullName).font(.title2.weight(.semibold)).lineLimit(1).truncationMode(.middle)
+                    Text(info.fullName)
+                        .font(Brand.title)
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                Text(L("repos.branches.hint")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(L("repos.branches.hint"))
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
                 if branches.count > 20 {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                        TextField(L("repos.branches.search"), text: $branchQuery).textFieldStyle(.plain)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-                    .padding(.top, 4)
+                    searchField(L("repos.branches.search"), text: $branchQuery, busy: false, onSubmit: {})
+                        .padding(.top, 4)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
-            .padding(.bottom, 12)
-            Divider()
+            .padding(.horizontal, Self.inset)
+            .padding(.top, Self.inset)
+            .padding(.bottom, Brand.spacing.m)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             if loadingBranches && branches.isEmpty {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                BrandLoader(size: 24).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
                     ForEach(visibleBranches(info), id: \.self) { name in
@@ -197,26 +201,32 @@ struct AddRepoSheet: View {
                                       isGone: branchesLoaded && !branches.contains { $0.name == name },
                                       isOn: Binding(get: { selected.contains(name) },
                                                     set: { if $0 { selected.insert(name) } else { selected.remove(name) } }))
+                            .listRowInsets(Self.rowInsets)
                     }
                 }
-                .listStyle(.inset)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
-            Divider()
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             VStack(alignment: .leading, spacing: 4) {
                 Toggle(L("repos.readCode.toggle"), isOn: $readCode)
+                    .font(Brand.body)
                     .disabled(tooBig(info))
                 Text(tooBig(info) ? L("repos.readCode.tooBig") : L("repos.readCode.hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            Divider()
+            .padding(.horizontal, Self.inset)
+            .padding(.vertical, Brand.spacing.m)
+            errorBanner
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             footer {
-                Button(L("common.cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L("common.cancel")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
                 Button(followTitle) { save(info) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(selected.isEmpty)
             }
@@ -288,23 +298,58 @@ struct AddRepoSheet: View {
 
     // MARK: Shared
 
-    @ViewBuilder
-    private func footer(@ViewBuilder buttons: () -> some View) -> some View {
-        HStack(spacing: 10) {
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .font(.callout)
-                    .lineLimit(2)
-                    .help(error)
-                if orgRestricted {
-                    Button(L("github.org.howTo")) { showOrgHelp = true }.buttonStyle(.link)
+    /// One inset for header, list rows, toggle block and footer.
+    private static let inset: CGFloat = Brand.spacing.content
+    private static let rowInsets = EdgeInsets(top: 4, leading: inset, bottom: 4, trailing: inset)
+
+    private func searchField(_ prompt: String, text: Binding<String>, busy: Bool, onSubmit: @escaping () -> Void) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(Brand.color.text3)
+            TextField(prompt, text: text)
+                .textFieldStyle(.plain)
+                .font(Brand.body)
+                .onSubmit(onSubmit)
+            if busy { BrandLoader(size: 14) }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+    }
+
+    /// Errors get their own full-width line above the footer (long GitHub messages stay readable).
+    @ViewBuilder private var errorBanner: some View {
+        if let error {
+            HStack(alignment: .firstTextBaseline, spacing: Brand.spacing.s) {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(Brand.color.warning)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(error)
+                        .font(Brand.body)
+                        .foregroundStyle(Brand.color.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                    if orgRestricted {
+                        Button(L("github.org.howTo")) { showOrgHelp = true }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(Brand.color.accent)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(Brand.spacing.m)
+            .background(Brand.color.warningSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+            .padding(.horizontal, Self.inset)
+            .padding(.bottom, Brand.spacing.m)
+        }
+    }
+
+    private func footer(@ViewBuilder buttons: () -> some View) -> some View {
+        HStack(spacing: Brand.spacing.s) {
             Spacer()
             buttons()
         }
-        .padding(14)
+        .padding(.horizontal, Self.inset)
+        .padding(.vertical, Brand.spacing.m)
     }
 
     private func show(_ error: Error) {
@@ -322,22 +367,26 @@ private struct RepoPickRow: View {
         Button(action: onChoose) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: info.isPrivate ? "lock" : "book.closed")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.color.text2)
                     .frame(width: 18)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(info.fullName).fontWeight(.medium).lineLimit(1)
+                    Text(info.fullName)
+                        .font(Brand.callout)
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                     if let description = info.description, !description.isEmpty {
-                        Text(description).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                        Text(description).font(Brand.body).foregroundStyle(Brand.color.text2).lineLimit(1)
                     }
                 }
-                Spacer(minLength: 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 2) {
                     if alreadyFollowed {
-                        Chip(text: L("repos.addSheet.following"), tint: .green, symbol: "checkmark")
+                        BrandChip(text: L("repos.addSheet.following"), symbol: "checkmark", tint: Brand.color.success)
                     }
                     if let pushed = info.pushedAt {
-                        Text(Fmt.relative(pushed)).font(.caption).foregroundStyle(.secondary)
+                        Text(Fmt.relative(pushed)).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
                     }
                 }
             }
@@ -359,12 +408,20 @@ private struct BranchPickRow: View {
     var body: some View {
         Toggle(isOn: $isOn) {
             HStack(spacing: 8) {
-                Text(name).lineLimit(1).truncationMode(.middle)
-                if isDefault { Chip(text: L("repos.branches.primary"), tint: .accentColor) }
-                if isProtected { Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary).help(L("repos.branches.protected")) }
-                if isGone { Chip(text: L("repos.branch.gone"), tint: .red, symbol: "xmark") }
-                Spacer()
-                if isSuggested && !isDefault { Text(L("repos.branches.suggested")).font(.caption).foregroundStyle(.secondary) }
+                Text(name)
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if isDefault { BrandChip(text: L("repos.branches.primary"), active: true) }
+                if isProtected {
+                    Image(systemName: "lock").font(Brand.caption).foregroundStyle(Brand.color.text2).help(L("repos.branches.protected"))
+                }
+                if isGone { BrandChip(text: L("repos.branch.gone"), symbol: "xmark", tint: Brand.color.danger) }
+                Spacer(minLength: 4)
+                if isSuggested && !isDefault {
+                    Text(L("repos.branches.suggested")).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                }
             }
         }
         .toggleStyle(.checkbox)

@@ -220,6 +220,10 @@ struct WikiWebView: NSViewRepresentable {
 final class WikiWKWebView: WKWebView {
     var onAppearanceChange: (() -> Void)?
 
+    /// Files dropped on a page belong to the surrounding view (Contenido imports them, CONTRACT §15.2), so the web
+    /// view never registers as a drag destination.
+    override func registerForDraggedTypes(_ newTypes: [NSPasteboard.PasteboardType]) {}
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         onAppearanceChange?()

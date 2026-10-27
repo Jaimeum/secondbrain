@@ -134,12 +134,20 @@ extension SourceRecord {
         }
     }
 
-    /// "Reunión: 26 oct 2026, 15:30 · Agregada: hoy 10:02". When both are practically the same moment
-    /// (a live recording), only the event is shown.
-    var datesLine: String {
+    /// ONE date: when it happened ("26 oct, 15:30", "hoy 10:02"). When it was added lives in `datesHelp`
+    /// (CONTRACT §15: one date per row, "agregado" only in a tooltip).
+    var datesLine: String { Fmt.dayTime(timelineDate) }
+
+    /// "Agregado: hoy 10:02", only when it was added well after it happened (else nil).
+    var addedLine: String? {
+        guard abs(createdAt.timeIntervalSince(timelineDate)) > 30 * 60 else { return nil }
+        return "\(addedLabel): \(Fmt.dayTime(createdAt))"
+    }
+
+    /// Tooltip with both dates: "Reunión: 26 oct 2026, 15:30 · Agregada: hoy 10:02".
+    var datesHelp: String {
         let event = "\(eventLabel): \(Fmt.dayTime(timelineDate))"
-        guard abs(createdAt.timeIntervalSince(timelineDate)) > 30 * 60 else { return event }
-        return "\(event) · \(addedLabel): \(Fmt.dayTime(createdAt))"
+        return addedLine.map { "\(event) · \($0)" } ?? event
     }
 
     /// Added much later than it happened (an old recording or email added today).
@@ -151,7 +159,11 @@ extension SourceRecord {
         return ((rawPath as NSString).lastPathComponent as NSString).deletingPathExtension
     }
 
-    var emoji: String { kind.emoji }
+    /// SF Symbol of its kind (CONTRACT §15.1: never emoji as a UI icon).
+    var symbol: String { kind.symbol }
+
+    @available(*, deprecated, renamed: "symbol", message: "Emoji are not UI icons (CONTRACT §15.1); returns the SF Symbol name.")
+    var emoji: String { kind.symbol }
 }
 
 extension SourceStatus {
@@ -167,14 +179,15 @@ extension SourceStatus {
         }
     }
 
+    /// Brand tone of the status (text/icon; pills use it at low opacity or `cardAlt`).
     var color: Color {
         switch self {
-        case .recording: .red
-        case .queued: .secondary
-        case .transcribing, .ingesting: .blue
-        case .needsProject: .orange
-        case .done: .green
-        case .failed: .red
+        case .recording: Brand.color.record
+        case .queued: Brand.color.text2
+        case .transcribing, .ingesting: Brand.color.accent
+        case .needsProject: Brand.color.warning
+        case .done: Brand.color.success
+        case .failed: Brand.color.danger
         }
     }
 
@@ -193,21 +206,13 @@ extension SourceKind {
         case .document: "doc.text"
         case .note: "note.text"
         case .url: "link"
-        case .email: "envelope.fill"
+        case .email: "envelope"
         case .github: "chevron.left.forwardslash.chevron.right"   // MARK: v0.4 github
         }
     }
 
-    var emoji: String {
-        switch self {
-        case .meeting: "🎙️"
-        case .document: "📄"
-        case .note: "📝"
-        case .url: "🔗"
-        case .email: "✉️"
-        case .github: "💻"   // MARK: v0.4 github
-        }
-    }
+    @available(*, deprecated, renamed: "symbol", message: "Emoji are not UI icons (CONTRACT §15.1); returns the SF Symbol name.")
+    var emoji: String { symbol }
 
     var label: String {
         switch self {
@@ -238,18 +243,8 @@ extension TimelineKind {
         }
     }
 
-    var emoji: String {
-        switch self {
-        case .meeting: "🎙️"
-        case .email: "✉️"
-        case .document: "📄"
-        case .note: "📝"
-        case .url: "🔗"
-        case .decision: "⚖️"
-        case .milestone: "🚩"
-        case .task: "📅"   // a due date, not a done task (✅ means done in tasks.md)
-        }
-    }
+    @available(*, deprecated, renamed: "symbol", message: "Emoji are not UI icons (CONTRACT §15.1); returns the SF Symbol name.")
+    var emoji: String { symbol }
 
     var label: String {
         switch self {

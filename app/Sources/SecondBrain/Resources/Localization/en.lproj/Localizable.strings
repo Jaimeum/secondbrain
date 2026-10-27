@@ -1321,3 +1321,15 @@
 "mail.saveConversationNoProject" = "Save thread (%d) without a project";
 "mail.more" = "More actions";
 "email.editFrom" = "Correct sender";
+
+/* v0.5 — tasks */
+"when.now" = "Now";
+"when.change" = "Change";
+"preview.openInProject" = "Open in project";
+"tasks.sourceUnknown" = "Source";
+"tasks.sourceMissing" = "I couldn't find its page in the brain.";
+"tasks.fromHelp" = "Show only the tasks from one meeting or email";
+"tasks.emptyFiltered" = "Nothing here from that source";
+"tasks.openSource" = "Open the meeting or email";
+"inbox.thinkingShort" = "Thinking…";
+"inbox.pick" = "Pick the project it belongs to.";

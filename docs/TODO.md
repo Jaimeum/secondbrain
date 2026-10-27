@@ -43,6 +43,8 @@ no lo que se mueve, se arrastra o depende de AppKit. Revisar a mano con la app c
       activado (solo fade).
 - [ ] **Icono de la barra de menús al grabar:** símbolo + punto `record`; vuelve al template al detener; se ve bien con
       barra de menús clara y oscura.
+- [ ] **Reparar permiso** (0.5.3): al pasar de 0.5.2 a 0.5.3, Grabar → aviso → *Reparar permiso* → macOS pide micrófono
+      y grabación otra vez → activar → *Salir y volver a abrir* → graba. Y que 0.5.4 ya no lo pida.
 - [ ] **⌘K con teclado:** abre desde cualquier pantalla (no sobre una hoja), ↑↓ ↩ esc, ⌘↩ pregunta, ⌥ pregunta al
       proyecto actual; foco en el campo al abrir.
 - [ ] **Ajustes abre en la pestaña pedida** (Reglas…, Formatos, GitHub, Cuentas desde avisos y desde ⌘K), también si
@@ -77,4 +79,5 @@ no lo que se mueve, se arrastra o depende de AppKit. Revisar a mano con la app c
 
 - Outlook: los correos de "Elementos eliminados" no se filtran al importar un hilo.
 - El `index.md` del vault template tiene una frase en inglés (viene de v0.1).
-- Con firma ad-hoc (sin identidad "SecondBrain Dev"), el Llavero vuelve a pedir permiso tras cada actualización.
+- ~~Con firma ad-hoc, los permisos (Llavero, micrófono, grabación) se perdían tras cada actualización~~: desde 0.5.3
+  `build-app.sh --release` exige la identidad "SecondBrain Dev". No borrarla (ver CONTRACT §10).

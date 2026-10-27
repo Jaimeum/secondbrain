@@ -3,7 +3,8 @@
 #
 # Why: macOS ties Microphone / Screen Recording permissions to the app's code signature. An ad-hoc
 # signature changes on every build, so permissions would be lost each time. A stable self-signed
-# identity keeps them across rebuilds.
+# identity keeps them across rebuilds. Don't delete it: releases signed with another one (or ad-hoc) leave the
+# permissions of everyone who updates switched on but not applied (the app then offers "Reparar permiso").
 #
 # Optional:
 #   SB_KEYCHAIN_PASSWORD=<login password>  lets the script authorize codesign to use the key without

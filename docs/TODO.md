@@ -52,7 +52,23 @@ Cuando haya usuarios: Google Cloud → Google Auth Platform → **Centro de veri
 `calendar.readonly` solo pide la verificación normal; `gmail.readonly` es permiso restringido y pide además una
 auditoría de seguridad externa (CASA, de pago). Alternativa si pesa: publicar solo con calendario y dejar Gmail para después.
 
-## 3. Menores conocidos (v0.3.1)
+## 3. Probar la v0.4.0
+
+- Abrir la app y probar a mano la pestaña **Código**, Ajustes → GitHub (conectar con `gh`, token y Device Flow) y las **Reglas**.
+  Hasta ahora solo se revisaron capturas con datos demo (`SB_DEMO_GITHUB=1`).
+- Contra GitHub real (solo se probó `Jaimeum/secondbrain` con `main`): seguir dos ramas a la vez, force-push / rebase
+  (rama "reescrita"), rama borrada ("ya no existe") y cambios en PRs e issues entre dos sincronizaciones.
+  Hoy esos casos solo los cubre `sb github selftest` (sin red).
+
+## 4. GitHub: mejoras pequeñas (v0.4.0)
+
+- `sb github status` no marca los repos cuyo proyecto ya no existe.
+- "Abrir Ajustes" desde la pestaña Código abre Ajustes pero no lleva a la sección GitHub.
+- La CLI no tiene comando para cambiar las ramas seguidas (hoy: `sb github remove` + `add`, o "Elegir ramas" en la app).
+- El Device Flow pide el scope `repo`, que da escritura (GitHub no ofrece uno de solo lectura para repos privados en
+  OAuth Apps). La app solo hace GET; quien prefiera mínimo privilegio puede usar un token fine-grained de solo lectura.
+
+## 5. Menores conocidos (v0.3.1)
 
 - Outlook: los correos de "Elementos eliminados" no se filtran al importar un hilo.
 - El `index.md` del vault template tiene una frase en inglés (viene de v0.1).

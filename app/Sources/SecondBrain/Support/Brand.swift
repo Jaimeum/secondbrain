@@ -64,14 +64,21 @@ enum Brand {
     static let projectPaletteHex: [UInt32] = [0x818979, 0xA86A55, 0xA89055, 0x6E7F93, 0x8B6F86, 0x6F8A5A]
     static let projectPalette: [Color] = projectPaletteHex.map { Color(nsColor: nsColor($0)) }
 
-    /// Stable palette index for a project: FNV-1a 32-bit over the slug's UTF-8 bytes, modulo 6. (The web graph uses
-    /// the same function so a project keeps its tone everywhere.)
+    /// Stable palette index for a project: FNV-1a 32-bit over the slug's UTF-8 bytes, then the murmur3 `fmix32`
+    /// finalizer, modulo 6. Plain FNV-1a has weak low bits (`hash % 6` gave 'alianza-banco-nubia' and
+    /// 'lanzamiento-atlas' the same tone); the finalizer spreads every input bit over the result (demo slugs →
+    /// mauve, ochre, slate). The web graph receives the hex from here (`projectHex`), so the tone is the same everywhere.
     static func projectIndex(slug: String) -> Int {
         var hash: UInt32 = 2_166_136_261
         for byte in slug.utf8 {
             hash ^= UInt32(byte)
             hash = hash &* 16_777_619
         }
+        hash ^= hash >> 16
+        hash = hash &* 0x85EB_CA6B
+        hash ^= hash >> 13
+        hash = hash &* 0xC2B2_AE35
+        hash ^= hash >> 16
         return Int(hash % UInt32(projectPaletteHex.count))
     }
 

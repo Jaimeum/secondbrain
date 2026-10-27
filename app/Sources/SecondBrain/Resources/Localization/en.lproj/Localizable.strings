@@ -1257,3 +1257,21 @@
 "onb.change" = "Change…";
 "readonly.promise" = "I only read. I never send, delete or change anything.";
 "brand.name" = "secondbrain";
+
+/* v0.5 — shell */
+"record.control.in" = "in %@";
+"record.control.ago" = "%@ ago";
+"record.control.into" = "Will be saved in %@";
+"newProject.editTitle" = "Edit project";
+"newProject.save" = "Save";
+"newProject.saveError" = "I couldn't save the project's changes.";
+"menu.details" = "Details";
+"menu.titleLabel" = "Title";
+"menu.go" = "Go";
+"menu.search" = "Search or ask…";
+"search.hint.move" = "move";
+"search.hint.open" = "open";
+"search.hint.ask" = "↩ ask";
+"home.dropToUnassigned" = "Drop here to add it to Unassigned";
+"home.connectAccounts" = "Connect account…";
+"home.allDay" = "All day";

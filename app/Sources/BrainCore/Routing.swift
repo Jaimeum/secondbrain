@@ -67,9 +67,12 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
     public var rules: [RoutingRule]              // order = priority; the first one that matches wins
     public var defaultProjectSlug: String?       // nil = Sin asignar
     public var mailSyncCursors: [String: Date]   // accountId → last mail checked by auto-add
+    public var autoImportEnabled: Bool           // §14.5 global switch "Revisar el correo cada 15 min" (default on)
 
-    public init(rules: [RoutingRule] = [], defaultProjectSlug: String? = nil, mailSyncCursors: [String: Date] = [:]) {
+    public init(rules: [RoutingRule] = [], defaultProjectSlug: String? = nil, mailSyncCursors: [String: Date] = [:],
+                autoImportEnabled: Bool = true) {
         self.rules = rules; self.defaultProjectSlug = defaultProjectSlug; self.mailSyncCursors = mailSyncCursors
+        self.autoImportEnabled = autoImportEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -78,6 +81,7 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
         rules = (try c.decodeIfPresent([Lossy<RoutingRule>].self, forKey: .rules) ?? []).compactMap(\.value)
         defaultProjectSlug = try c.decodeIfPresent(String.self, forKey: .defaultProjectSlug)
         mailSyncCursors = (try? c.decodeIfPresent([String: Date].self, forKey: .mailSyncCursors)) ?? [:]
+        autoImportEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .autoImportEnabled)) ?? true
     }
 
     private struct Lossy<T: Decodable>: Decodable {
@@ -309,6 +313,11 @@ public enum RuleMatcher {
 
     public func setDefaultProject(_ slug: String?) throws {
         try mutate { $0.defaultProjectSlug = slug.flatMap { $0.isEmpty ? nil : $0 } }
+    }
+
+    /// §14.5: the global "Revisar el correo cada 15 min" switch (Ajustes → Reglas).
+    public func setAutoImportEnabled(_ on: Bool) throws {
+        try mutate { $0.autoImportEnabled = on }
     }
 
     /// §14.5: where auto-add stopped for an account (nil forgets it).

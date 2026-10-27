@@ -38,7 +38,7 @@ struct MeetingActionButton: View {
         case .recordable:
             let busyElsewhere = state.isRecording || state.isRecorderBusy
             Button {
-                let slug = model.projectSlug(for: event, state: state)
+                let slug = model.projectSlugForRecording(event, state: state)   // v0.4: a rule counts a hit
                 Task { await state.startRecording(for: event, projectSlug: slug) }
             } label: {
                 HStack(spacing: 6) {
@@ -186,43 +186,78 @@ struct InitialsCircle: View {
     }
 }
 
-/// "🚀 Acme" (change) · "¿Es de 🚀 Acme? ✓ ✗" · gray "Sin proyecto". ✓ remembers it for the series; ✗ opens the picker.
+/// "🚀 Acme" (change) · "🚀 Acme · por regla «…»" · "¿Es de 🚀 Acme? ✓ ✗" · gray "Sin proyecto". ✓ remembers it for the
+/// series; ✗ opens the picker. After a manual choice the §14.3 rule offer shows right under the chip that was used.
 struct MeetingProjectChip: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
+    var placement: MeetingChipPlacement = .card
+    /// false where the container shows `MeetingRuleOfferLine` itself (the hero's header row has no room below the chip).
+    var showsOffer = true
 
     private var model: MeetingsModel { MeetingsModel.shared }
 
     var body: some View {
-        if let slug = model.projectSlug(for: event, state: state) {
-            picker { chip(state.projectName(slug), color: .accentColor) }
-                .help(L("meetings.changeProject"))
-        } else if let suggestion = model.suggestion(for: event, state: state), let project = state.project(suggestion.projectSlug) {
-            HStack(spacing: 4) {
-                Text(L("meetings.isItProject", "\(project.emoji) \(project.name)"))
-                    .font(.caption.weight(.medium))
-                    .lineLimit(1)
-                Button {
-                    model.setProject(.project(project.slug), for: event, state: state)
-                } label: {
-                    Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.green)
-                }
-                .buttonStyle(.borderless)
-                .help(event.seriesId == nil ? L("meetings.yesProject") : L("meetings.yesProjectSeries"))
-                picker {
-                    Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.secondary)
-                }
-                .help(L("meetings.otherProject"))
+        if showsOffer {
+            VStack(alignment: .leading, spacing: 6) {
+                content
+                MeetingRuleOfferLine(event: event, placement: placement)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.accentColor.opacity(0.1), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
-            .help(reason(suggestion))
-        } else if model.choice(for: event) == .noProject {
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        let resolution = model.resolution(for: event, state: state)
+        switch resolution.origin {
+        case .manual:
+            picker { chip(state.projectName(resolution.projectSlug), color: .accentColor) }
+                .help(L("meetings.changeProject"))
+        case .rule(let rule):
+            // MARK: v0.4 routing — decided by a rule: confirmed, no question, and it says which rule.
+            let lang = state.config.uiLanguage
+            withSubtitle(L("rules.meetings.byRule", RoutingStore.conditionSummary(rule, language: lang))) {
+                if let slug = resolution.projectSlug {
+                    picker { chip(state.projectName(slug), color: .accentColor) }
+                } else {
+                    picker { chip(L("meetings.noProject"), color: .secondary, chevron: true) }
+                }
+            }
+            .help(L("rules.meetings.byRuleHelp", state.engine.routing.displayName(for: rule, projects: state.projects, language: lang)))
+        case .defaultProject:
+            withSubtitle(L("rules.meetings.byDefault")) {
+                picker { chip(state.projectName(resolution.projectSlug), color: .accentColor) }
+            }
+            .help(L("rules.meetings.byDefaultHelp"))
+        case .suggestion(let suggestion):
+            if let project = state.project(suggestion.projectSlug) {
+                HStack(spacing: 4) {
+                    Text(L("meetings.isItProject", "\(project.emoji) \(project.name)"))
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                    Button {
+                        model.setProject(.project(project.slug), for: event, state: state, offerAt: placement)
+                    } label: {
+                        Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.green)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(event.seriesId == nil ? L("meetings.yesProject") : L("meetings.yesProjectSeries"))
+                    picker {
+                        Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                    }
+                    .help(L("meetings.otherProject"))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.accentColor.opacity(0.1), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+                .help(reason(suggestion))
+            }
+        case .manualNone:
             picker { chip(L("meetings.noProject"), color: .secondary, chevron: true) }
                 .help(L("meetings.noProjectHelp"))
-        } else {
+        case .none:
             // Nothing chosen yet: it must read as something to click, not as a tag.
             picker {
                 HStack(spacing: 3) {
@@ -241,6 +276,16 @@ struct MeetingProjectChip: View {
         }
     }
 
+    /// "🚀 Acme  por regla «…»" on one line when it fits, else the reason under the chip.
+    private func withSubtitle(_ text: String, @ViewBuilder chip: () -> some View) -> some View {
+        let label = Text(text).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        let c = chip()
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) { c; label.fixedSize() }
+            VStack(alignment: .leading, spacing: 3) { c; label.truncationMode(.tail) }
+        }
+    }
+
     /// The project menu with a custom label (a borderless menu would drop the chip's background).
     private func picker(@ViewBuilder label: () -> some View) -> some View {
         Menu { items } label: { label() }
@@ -252,7 +297,9 @@ struct MeetingProjectChip: View {
 
     @ViewBuilder private var items: some View {
         ForEach(state.projects) { project in
-            Button("\(project.emoji) \(project.name)") { model.setProject(.project(project.slug), for: event, state: state) }
+            Button("\(project.emoji) \(project.name)") {
+                model.setProject(.project(project.slug), for: event, state: state, offerAt: placement)
+            }
         }
         Divider()
         Button(L("meetings.noProject")) { model.setProject(.noProject, for: event, state: state) }
@@ -305,7 +352,9 @@ struct MeetingCard: View {
                     Text(L("meetings.allDay")).font(.caption.weight(.semibold)).multilineTextAlignment(.trailing)
                 } else {
                     Text(Fmt.time(event.start)).font(.callout.weight(.semibold)).monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.75)
                     Text(Fmt.time(event.end)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.75)
                 }
             }
             .frame(width: 58, alignment: .trailing)

@@ -41,6 +41,7 @@ struct MailView: View {
         .navigationTitle(L("mail.title"))
         .navigationSubtitle(L("mail.subtitle"))
         .toolbar {
+            ToolbarItem { RulesToolbarButton(mail: model.messages) }   // MARK: v0.4 rules
             ToolbarItem {
                 Button { state.requestEmail() } label: { Label(L("mail.paste"), systemImage: "doc.on.clipboard") }
                     .help(L("mail.paste"))

@@ -205,24 +205,44 @@ final class MeetingsModel {
         return links?.choice(for: event)
     }
 
-    /// The project the recording goes to: the remembered choice when that project still exists.
+    /// The project of an event and why (CONTRACT §14.2): the user's choice > a routing rule > the default project >
+    /// the suggestion. Reads the rules (observable), so chips follow rule edits.
+    func resolution(for event: CalendarEvent, state: AppState) -> MeetingProjectResolution {
+        let choice = choice(for: event)
+        let routing = state.engine.routing
+        return MeetingProjectResolution.resolve(
+            choice: choice, rule: routing.match(routingSubject(event)), defaultProject: routing.settings.defaultProjectSlug,
+            projectExists: { state.project($0) != nil },
+            suggestion: {
+                MeetingProjectSuggester(people: people, projects: state.projects, ownerEmails: myEmails).suggestProject(for: event)
+            })
+    }
+
+    func routingSubject(_ event: CalendarEvent) -> RoutingSubject {
+        .meeting(event, ownerEmails: myEmails.sorted())
+    }
+
+    /// The project the recording goes to: the remembered choice, else a rule, else the default project.
     func projectSlug(for event: CalendarEvent, state: AppState) -> String? {
-        guard let slug = choice(for: event)?.projectSlug, state.project(slug) != nil else { return nil }
-        return slug
+        resolution(for: event, state: state).recordingProject
     }
 
-    /// "¿Es de 🚀 Acme?" — only while nothing was chosen for the event (or its series).
+    /// `projectSlug(for:)` when a recording actually starts: a rule that decides counts a hit ("n veces").
+    func projectSlugForRecording(_ event: CalendarEvent, state: AppState) -> String? {
+        let r = resolution(for: event, state: state)
+        if r.rule != nil { _ = state.engine.routing.route(routingSubject(event)) }
+        return r.recordingProject
+    }
+
+    /// "¿Es de 🚀 Acme?" — only while nothing decided the event (no choice, no rule, no default project).
     func suggestion(for event: CalendarEvent, state: AppState) -> MeetingSuggestion? {
-        switch choice(for: event) {
-        case .noProject: return nil
-        case .project(let slug) where state.project(slug) != nil: return nil
-        default: break   // nothing chosen, or the chosen project is gone
-        }
-        let suggester = MeetingProjectSuggester(people: people, projects: state.projects, ownerEmails: myEmails)
-        return suggester.suggestProject(for: event)
+        if case .suggestion(let s) = resolution(for: event, state: state).origin { return s }
+        return nil
     }
 
-    func setProject(_ choice: MeetingProjectChoice?, for event: CalendarEvent, state: AppState) {
+    /// `offerAt`: where the user made the choice (a chip), to offer a rule right there (§14.3); nil offers nothing.
+    func setProject(_ choice: MeetingProjectChoice?, for event: CalendarEvent, state: AppState, offerAt placement: MeetingChipPlacement? = nil) {
+        let previous = resolution(for: event, state: state)
         if links == nil { links = MeetingLinks(fileURL: state.engine.paths.meetings) }
         do {
             try links?.set(choice, for: event)
@@ -233,5 +253,68 @@ final class MeetingsModel {
         linksRevision += 1
         // Recording this meeting right now: the recording follows the new choice.
         if event.matches(state.recordingEventId) { state.recordingProjectSlug = choice?.projectSlug }
+        // MARK: v0.4 routing — §14.3: one quiet "always?" line after a manual choice that didn't come from a rule.
+        if let placement, let slug = choice?.projectSlug {
+            let rule = RuleOffer.forMeeting(event, projectSlug: slug, previous: previous, ownerEmails: myEmails.sorted(),
+                                            existing: state.engine.routing.rules, language: state.config.uiLanguage)
+            ruleOffer = rule.map { MeetingRuleOffer(eventId: event.id, placement: placement, rule: $0) }
+        } else if ruleOffer?.eventId == event.id {
+            ruleOffer = nil
+        }
     }
+
+    // MARK: Rule offer (§14.3)
+
+    /// The offer on screen (at most one): "¿Las reuniones que organiza ana@acme.com a 🚀 Acme? · Sí, siempre · Solo esta vez".
+    var ruleOffer: MeetingRuleOffer?
+    @ObservationIgnored private var offerDismissal: Task<Void, Never>?
+
+    /// "Sí, siempre": creates the rule and shows "Regla creada · Deshacer" for a few seconds.
+    func acceptRuleOffer(state: AppState) {
+        guard var offer = ruleOffer, offer.createdRuleId == nil else { return }
+        do {
+            try state.engine.routing.add(offer.rule)
+            offer.createdRuleId = offer.rule.id
+            ruleOffer = offer
+            error = nil
+            dismissOffer(after: 6, id: offer.id)
+        } catch {
+            self.error = FriendlyError.message(error)
+            ruleOffer = nil
+        }
+    }
+
+    /// "Deshacer" after "Regla creada".
+    func undoRuleOffer(state: AppState) {
+        guard let id = ruleOffer?.createdRuleId else { return }
+        try? state.engine.routing.remove(id: id)
+        ruleOffer = nil
+    }
+
+    /// "Solo esta vez".
+    func dismissRuleOffer() { ruleOffer = nil }
+
+    private func dismissOffer(after seconds: Double, id: UUID) {
+        offerDismissal?.cancel()
+        offerDismissal = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled, let self, self.ruleOffer?.id == id else { return }
+            self.ruleOffer = nil
+        }
+    }
+}
+
+/// Where a project chip is shown: the rule offer appears under the chip the user clicked, nowhere else.
+enum MeetingChipPlacement: Hashable {
+    case card, hero, detail, prep
+}
+
+/// §14.3 offer for one event.
+struct MeetingRuleOffer: Equatable {
+    let id = UUID()
+    let eventId: String
+    let placement: MeetingChipPlacement
+    let rule: RoutingRule
+    /// Set once "Sí, siempre" created it ("Regla creada · Deshacer").
+    var createdRuleId: String?
 }

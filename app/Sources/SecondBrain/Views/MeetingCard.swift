@@ -2,19 +2,19 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-// Building blocks of Reuniones (CONTRACT §12.7): the one primary action per event, attendee initials, the project chip,
-// the agenda row and a sheet to read a people page in place.
+// Building blocks of Reuniones (CONTRACT §12.7, §15): the one primary action per event, attendee initials, the project
+// chip, the agenda row, the row of a recorded meeting and a sheet to read a people page in place.
 
-/// The single action of an event, which changes with time: Prepararme → Grabar (pulsing red) → Detener →
-/// Aprendiendo… → Ver resumen ✓.
+/// The single action of an event, which changes with time: Prepararme → Grabar → Detener → Aprendiendo… →
+/// Ver resumen. Labels follow the environment's `labelStyle`, so a container can fall back to `.iconOnly`.
 struct MeetingActionButton: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
     var large = false
-    /// false inside "Prepararme" itself: before the meeting there is then nothing to show.
+    /// false inside "Prepararme" itself and in agenda rows: before the meeting there is then nothing to show.
     var showsPrepare = true
     var onPrepare: () -> Void
-    /// A page outside any project (Inbox transcript, people page) to show in place.
+    /// A page outside any project (Sin asignar transcript, people page) to show in place.
     var onShowPage: (String) -> Void = { _ in }
 
     private var model: MeetingsModel { MeetingsModel.shared }
@@ -34,26 +34,23 @@ struct MeetingActionButton: View {
             Button(action: onPrepare) {
                 Label(L("meetings.prepare"), systemImage: "sparkles")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.brandSecondary)
+            .help(L("meetings.prepare"))
         case .recordable:
             let busyElsewhere = state.isRecording || state.isRecorderBusy
             Button {
                 Task { await model.record(event, state: state) }
             } label: {
-                HStack(spacing: 6) {
-                    PulsingDot(active: !busyElsewhere)
-                    Text(L("meetings.record"))
-                }
+                Label { Text(L("meetings.record")) } icon: { PulsingDot(active: !busyElsewhere) }
             }
-            .buttonStyle(RecordPillStyle(large: large))
+            .buttonStyle(.brandRecord)
             .disabled(busyElsewhere)
             .help(busyElsewhere ? L("meetings.alreadyRecording") : L("meetings.recordHelp"))
         case .recording:
             Button {
                 Task { await state.stopRecording() }
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "stop.fill")
+                Label {
                     if let since = state.recordingSince {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             Text(L("record.stopWithTime", Fmt.duration(context.date.timeIntervalSince(since)))).monospacedDigit()
@@ -61,92 +58,110 @@ struct MeetingActionButton: View {
                     } else {
                         Text(L("meetings.stop"))
                     }
+                } icon: {
+                    Image(systemName: "stop.fill")
                 }
             }
-            .buttonStyle(.bordered)
-            .tint(.red)
+            .buttonStyle(.brandRecord)
             .disabled(state.isRecorderBusy)
+            .help(L("meetings.stop"))
         case .learning:
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.mini)
-                Text(L("meetings.learning")).font(.callout).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            BrandLoader(size: 14, text: L("meetings.learning"))
+                .padding(.vertical, 4)
         case .done:
             Button {
                 guard let source = state.engine.meetingSource(for: event) else { return }
                 Task { if let path = await state.openMeetingSummary(source) { onShowPage(path) } }
             } label: {
-                Label(L("meetings.viewSummary"), systemImage: "checkmark.circle.fill")
+                Label(L("meetings.viewSummary"), systemImage: "checkmark.circle")
             }
-            .buttonStyle(.bordered)
-            .tint(.green)
+            .buttonStyle(.brandSecondary)
+            .help(L("meetings.viewSummary"))
         case .failed:
             Button {
                 if let source = state.engine.meetingSource(for: event) { state.engine.retry(sourceId: source.id) }
             } label: {
                 Label(L("meetings.retry"), systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.bordered)
-            .tint(.orange)
+            .buttonStyle(.brandSecondary)
             .help(L("meetings.failedHelp"))
         case .over:
-            Text(L("meetings.over")).font(.callout).foregroundStyle(.tertiary)
+            Text(L("meetings.over"))
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text3)
+                .lineLimit(1)
         }
     }
 }
 
-/// Solid red "Grabar", red even when the window isn't key (a prominent button turns gray there).
-struct RecordPillStyle: ButtonStyle {
+/// "Unirme" (only for safe join links); same metrics as the action next to it.
+struct MeetingJoinButton: View {
+    let event: CalendarEvent
     var large = false
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: large ? 14 : 13, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, large ? 16 : 12)
-            .padding(.vertical, large ? 7 : 4)
-            .background(Color.red.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.4),
-                        in: RoundedRectangle(cornerRadius: large ? 8 : 6))
-            .contentShape(RoundedRectangle(cornerRadius: large ? 8 : 6))
-    }
-}
-
-/// A softly pulsing dot for "Grabar".
-struct PulsingDot: View {
-    var active = true
-    @ViewState private var on = false
 
     var body: some View {
-        Circle()
-            .fill(Color.white)
-            .frame(width: 8, height: 8)
-            .opacity(active && on ? 0.35 : 1)
-            .scaleEffect(active && on ? 0.8 : 1)
-            .animation(active ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default, value: on)
-            .onAppear { on = true }
+        if let join = event.joinURL, JoinLink.isSafe(join) {
+            Button { NSWorkspace.shared.open(join) } label: {
+                Label(L("meetings.join"), systemImage: "video")
+            }
+            .buttonStyle(.brandSecondary)
+            .controlSize(large ? .large : .regular)
+            .help(L("meetings.join"))
+        }
     }
 }
 
-/// Up to 4 initials + "+n". Hover shows the names.
+/// "Grabar" outside the brand button style's call sites (the sidebar banner): the brand `record` button.
+struct RecordPillStyle: ButtonStyle {
+    var large = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        BrandRecordButtonStyle().makeBody(configuration: configuration)
+            .controlSize(large ? .large : .regular)
+    }
+}
+
+/// The white dot inside "Grabar" (same white as the record button label): beats in opacity only (0.35 → 1, 1 s), never in scale or position (§15.1).
+/// Static with Reduce Motion or when `active` is false.
+struct PulsingDot: View {
+    var active = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if active && !reduceMotion {
+                TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                    let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
+                    Circle().fill(Color.white).opacity(0.675 + 0.325 * cos(phase * 2 * .pi))
+                }
+            } else {
+                Circle().fill(Color.white)
+            }
+        }
+        .frame(width: 7, height: 7)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Up to 3 initials + "+n". Hover shows the names. `ring` = the background the circles sit on.
 struct AttendeeInitials: View {
     let attendees: [EmailAddress]
     var size: CGFloat = 22
-    var maxShown = 4
+    var maxShown = 3
+    var ring: Color = Brand.color.card
 
     var body: some View {
         if !attendees.isEmpty {
-            HStack(spacing: -5) {
+            HStack(spacing: -size * 0.18) {
                 ForEach(Array(attendees.prefix(maxShown).enumerated()), id: \.offset) { _, a in
-                    InitialsCircle(address: a, size: size)
+                    InitialsCircle(address: a, size: size, ring: ring)
                 }
                 if attendees.count > maxShown {
                     Text("+\(attendees.count - maxShown)")
-                        .font(.system(size: size * 0.42, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 9)
+                        .font(Brand.font(max(10, size * 0.42), .medium))
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .padding(.leading, size * 0.3)
                 }
             }
             .help(attendees.map(\.display).joined(separator: ", "))
@@ -154,17 +169,21 @@ struct AttendeeInitials: View {
     }
 }
 
+/// A person's initials on the brand avatar tokens (`cardAlt` + `text2`; no per-person colors).
 struct InitialsCircle: View {
     let address: EmailAddress
     var size: CGFloat = 22
+    var ring: Color = Brand.color.card
 
     var body: some View {
         Text(Self.initials(address))
-            .font(.system(size: size * 0.4, weight: .semibold))
-            .foregroundStyle(.white)
+            .font(Brand.avatar.font(size))
+            .foregroundStyle(Brand.avatar.initials)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
             .frame(width: size, height: size)
             .background(Self.color(for: address.email ?? address.display), in: Circle())
-            .overlay(Circle().strokeBorder(Color(nsColor: .windowBackgroundColor), lineWidth: 1.5))
+            .overlay(Circle().strokeBorder(ring, lineWidth: 1.5))
     }
 
     static func initials(_ a: EmailAddress) -> String {
@@ -177,24 +196,23 @@ struct InitialsCircle: View {
         return (a.email?.first).map { String($0).uppercased() } ?? "?"
     }
 
-    /// Stable color per person (not `hashValue`, which changes on every launch).
-    static func color(for key: String) -> Color {
-        let palette: [Color] = [.blue, .purple, .pink, .orange, .teal, .indigo, .green, .brown, .cyan, .mint]
-        let hash = key.lowercased().unicodeScalars.reduce(UInt32(5381)) { ($0 &* 33) &+ $1.value }
-        return palette[Int(hash % UInt32(palette.count))].opacity(0.85)
-    }
+    /// Avatar background. One brand token for everyone (§15.1); kept as a function for existing callers.
+    static func color(for key: String) -> Color { Brand.avatar.background }
 }
 
-/// "🚀 Acme" (change) · "🚀 Acme · por regla «…»" · "¿Es de 🚀 Acme? ✓ ✗" · gray "Sin proyecto". ✓ remembers it for the
-/// series; ✗ opens the picker. After a manual choice the §14.3 rule offer shows right under the chip that was used.
+/// "🚀 Acme ▾" (change) · "🚀 Acme · por regla «…»" · "¿Es de 🚀 Acme? ✓ ✗" · "Sin asignar ▾" · "Elegir proyecto ▾".
+/// ✓ remembers it for the series; ✗ opens the picker. After a manual choice the §14.3 rule offer shows right under the
+/// chip that was used. Used in the hero, the detail and Prepararme (agenda rows show a read-only chip instead).
 struct MeetingProjectChip: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
     var placement: MeetingChipPlacement = .card
-    /// false where the container shows `MeetingRuleOfferLine` itself (the hero's header row has no room below the chip).
+    /// false where the container shows `MeetingRuleOfferLine` itself on its own row.
     var showsOffer = true
 
     private var model: MeetingsModel { MeetingsModel.shared }
+    /// Longest chip label before it truncates (a flexible frame still hugs short names under `fixedSize`).
+    private let maxLabelWidth: CGFloat = 200
 
     var body: some View {
         if showsOffer {
@@ -211,76 +229,66 @@ struct MeetingProjectChip: View {
         let resolution = model.resolution(for: event, state: state)
         switch resolution.origin {
         case .manual:
-            picker { chip(state.projectName(resolution.projectSlug), color: .accentColor) }
+            picker { chip(state.projectName(resolution.projectSlug), slug: resolution.projectSlug) }
                 .help(L("meetings.changeProject"))
         case .rule(let rule):
             // MARK: v0.4 routing — decided by a rule: confirmed, no question, and it says which rule.
             withSubtitle(L("rules.meetings.byRule", ruleLabel(rule))) {
                 if let slug = resolution.projectSlug {
-                    picker { chip(state.projectName(slug), color: .accentColor) }
+                    picker { chip(state.projectName(slug), slug: slug) }
                 } else {
-                    picker { chip(L("meetings.noProject"), color: .secondary, chevron: true) }
+                    picker { chip(L("meetings.noProject"), slug: nil) }
                 }
             }
             .help(L("rules.meetings.byRuleHelp", ruleLabel(rule)))
         case .defaultProject:
             withSubtitle(L("rules.meetings.byDefault")) {
-                picker { chip(state.projectName(resolution.projectSlug), color: .accentColor) }
+                picker { chip(state.projectName(resolution.projectSlug), slug: resolution.projectSlug) }
             }
             .help(L("rules.meetings.byDefaultHelp"))
         case .suggestion(let suggestion):
             if let project = state.project(suggestion.projectSlug) {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Text(L("meetings.isItProject", "\(project.emoji) \(project.name)"))
-                        .font(.caption.weight(.medium))
                         .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: maxLabelWidth, alignment: .leading)
+                        .foregroundStyle(Brand.color.text)
                     Button {
                         model.setProject(.project(project.slug), for: event, state: state, offerAt: placement)
                     } label: {
-                        Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.green)
+                        Image(systemName: "checkmark").foregroundStyle(Brand.color.accent)
                     }
                     .buttonStyle(.borderless)
                     .help(event.seriesId == nil ? L("meetings.yesProject") : L("meetings.yesProjectSeries"))
                     picker {
-                        Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                        Image(systemName: "xmark").foregroundStyle(Brand.color.text2)
                     }
                     .help(L("meetings.otherProject"))
                 }
+                .font(Brand.font(11, .medium))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(Color.accentColor.opacity(0.1), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+                .background(Capsule().fill(Brand.color.accentSoft))
                 .help(reason(suggestion))
             }
         case .manualNone:
-            picker { chip(L("meetings.noProject"), color: .secondary, chevron: true) }
+            picker { chip(L("meetings.noProject"), slug: nil) }
                 .help(L("meetings.noProjectHelp"))
         case .none:
-            // Nothing chosen yet: it must read as something to click, not as a tag.
-            picker {
-                HStack(spacing: 3) {
-                    Text(L("meetings.chooseProject"))
-                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
-                }
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
-                .foregroundStyle(Color.accentColor)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.accentColor.opacity(0.08), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
-            }
-            .help(L("meetings.noProjectHelp"))
+            // Nothing chosen yet: an active chip with a chevron, so it reads as something to click.
+            picker { chip(L("meetings.chooseProject"), slug: nil, active: true) }
+                .help(L("meetings.noProjectHelp"))
         }
     }
 
     /// "🚀 Acme  por regla «…»" on one line when it fits, else the reason under the chip.
     private func withSubtitle(_ text: String, @ViewBuilder chip: () -> some View) -> some View {
-        let label = Text(text).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        let label = Text(text).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1).truncationMode(.tail)
         let c = chip()
         return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) { c; label.fixedSize() }
-            VStack(alignment: .leading, spacing: 3) { c; label.truncationMode(.tail) }
+            HStack(spacing: 6) { c; label }
+            VStack(alignment: .leading, spacing: 3) { c; label }
         }
     }
 
@@ -303,17 +311,22 @@ struct MeetingProjectChip: View {
         Button(L("meetings.noProject")) { model.setProject(.noProject, for: event, state: state) }
     }
 
-    private func chip(_ text: String, color: Color, chevron: Bool = false) -> some View {
-        HStack(spacing: 3) {
+    private func chip(_ text: String, slug: String?, active: Bool = false) -> some View {
+        HStack(spacing: 4) {
             Text(text)
-            if chevron { Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)) }
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: maxLabelWidth, alignment: .leading)
+            Image(systemName: "chevron.down")
+                .imageScale(.small)
+                .foregroundStyle(active ? Brand.color.accent : Brand.color.text3)
         }
-            .font(.caption.weight(.medium))
-            .lineLimit(1)
-            .foregroundStyle(color == .secondary ? Color.secondary : Color.primary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(color.opacity(color == .secondary ? 0.1 : 0.14), in: Capsule())
+        .font(Brand.font(11, .medium))
+        .foregroundStyle(active ? Brand.color.accent : (slug == nil ? Brand.color.text2 : Brand.color.text))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(active ? Brand.color.accentSoft : Brand.color.cardAlt))
+        .contentShape(Capsule())
     }
 
     private func reason(_ s: MeetingSuggestion) -> String {
@@ -324,7 +337,26 @@ struct MeetingProjectChip: View {
     }
 }
 
-/// One meeting in the agenda: time, title, who, project, and its one action.
+/// Where a meeting happens: a video provider (Teams, Zoom, Meet…) or a place.
+enum MeetingPlace {
+    private static let providers = ["teams", "zoom", "meet", "webex", "whereby", "skype", "http://", "https://"]
+
+    static func isVideo(_ place: String) -> Bool {
+        let lower = place.lowercased()
+        return providers.contains { lower.contains($0) }
+    }
+
+    static func symbol(_ place: String) -> String { isVideo(place) ? "video" : "mappin.and.ellipse" }
+
+    /// The location worth a line: nil when empty, or when it only names the provider that "Unirme" already opens.
+    static func visible(_ event: CalendarEvent) -> String? {
+        guard let place = event.location?.trimmingCharacters(in: .whitespacesAndNewlines), !place.isEmpty else { return nil }
+        if isVideo(place), let join = event.joinURL, JoinLink.isSafe(join) { return nil }
+        return place
+    }
+}
+
+/// One meeting in the agenda: time, title, who, project (if decided) and its action when it has one right now.
 struct MeetingCard: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
@@ -333,6 +365,7 @@ struct MeetingCard: View {
     var onPrepare: () -> Void
     var onShowPage: (String) -> Void
 
+    @ViewState private var hovering = false
     private var model: MeetingsModel { MeetingsModel.shared }
 
     var body: some View {
@@ -344,62 +377,180 @@ struct MeetingCard: View {
     private func row(now: Date) -> some View {
         let live = event.isInProgress(at: now)
         let past = !live && event.end < now
-        return HStack(alignment: .top, spacing: 12) {
+        let phase = model.phase(of: event, state: state, now: now)
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+        return HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .trailing, spacing: 2) {
                 if event.isAllDay {
-                    Text(L("meetings.allDay")).font(.caption.weight(.semibold)).multilineTextAlignment(.trailing)
+                    Text(L("meetings.allDay"))
+                        .font(Brand.font(11, .medium))
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2)
                 } else {
-                    Text(Fmt.time(event.start)).font(.callout.weight(.semibold)).monospacedDigit()
-                        .lineLimit(1).minimumScaleFactor(0.75)
-                    Text(Fmt.time(event.end)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                        .lineLimit(1).minimumScaleFactor(0.75)
+                    Text(Fmt.time(event.start))
+                        .font(Brand.callout)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Text(Fmt.time(event.end))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
             }
-            .frame(width: 58, alignment: .trailing)
-            .foregroundStyle(past ? .secondary : .primary)
+            .frame(width: 56, alignment: .trailing)
+            .foregroundStyle(past ? Brand.color.text2 : Brand.color.text)
 
             RoundedRectangle(cornerRadius: 1.5)
-                .fill(live ? Color.red : (past ? Color.secondary.opacity(0.3) : Color.accentColor.opacity(0.6)))
+                .fill(live ? Brand.color.record : (past ? Brand.color.line : Brand.color.sage))
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if phase == .recording { BrandRecordingDot(size: 7) }
                     Text(event.title)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(past ? .secondary : .primary)
+                        .font(Brand.font(13, .medium))
+                        .foregroundStyle(past ? Brand.color.text2 : Brand.color.text)
                         .lineLimit(2)
-                    if live {
-                        Text(L("meetings.inProgress"))
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Color.red, in: Capsule())
-                    }
                 }
-                HStack(spacing: 10) {
-                    AttendeeInitials(attendees: model.others(in: event), size: 22)
-                    if let place = event.location, !place.isEmpty {
-                        Label(place, systemImage: event.joinURL != nil ? "video" : "mappin.and.ellipse")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                meta(live: live)
+                // Only a decided project, read-only (it changes in the detail); why it was decided goes to the tooltip.
+                let resolution = model.resolution(for: event, state: state)
+                if let slug = resolution.recordingProject {
+                    BrandChip(text: state.projectName(slug))
+                        .help(projectReason(resolution))
                 }
-                MeetingProjectChip(event: event)
+                if phase != .upcoming && phase != .over {
+                    MeetingActionButton(event: event, showsPrepare: false, onPrepare: onPrepare, onShowPage: onShowPage)
+                }
+                MeetingRuleOfferLine(event: event, placement: .card)   // v0.4 rules
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            MeetingActionButton(event: event, onPrepare: onPrepare, onShowPage: onShowPage)
-                .fixedSize()
         }
         .padding(10)
-        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
-        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .background(shape.fill(isSelected ? Brand.color.accentSoft : (hovering ? Brand.color.cardAlt.opacity(0.5) : .clear)))
+        .contentShape(shape)
         .onTapGesture(perform: onSelect)
+        .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private func projectReason(_ r: MeetingProjectResolution) -> String {
+        switch r.origin {
+        case .rule(let rule): L("rules.meetings.byRule", ruleLabel(rule))
+        case .defaultProject: L("rules.meetings.byDefault")
+        default: state.projectName(r.recordingProject)
+        }
+    }
+
+    /// "En curso" · initials · place, on one line that truncates.
+    @ViewBuilder private func meta(live: Bool) -> some View {
+        let others = model.others(in: event)
+        let place = MeetingPlace.visible(event)
+        let video = event.joinURL.map(JoinLink.isSafe) ?? false
+        if live || !others.isEmpty || place != nil || video {
+            HStack(spacing: 8) {
+                if live {
+                    Text(L("meetings.inProgress"))
+                        .font(Brand.font(11, .medium))
+                        .foregroundStyle(Brand.color.record)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
+                AttendeeInitials(attendees: others, size: 20, ring: Brand.color.surface)
+                if let place {
+                    Label(place, systemImage: MeetingPlace.symbol(place))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                } else if video {
+                    Image(systemName: "video")
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text3)
+                        .help(event.location ?? L("meetings.join"))
+                }
+            }
+        }
     }
 }
 
-/// A people (or other non-project) page, read without leaving Reuniones.
+/// A recorded meeting in "Anteriores": title, when, project, its state while processing and "Ver resumen".
+struct PastMeetingRow: View {
+    @Environment(AppState.self) private var state
+    let source: SourceRecord
+    var onOpenSummary: () -> Void
+
+    @ViewState private var hovering = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "waveform")
+                .font(Brand.font(13))
+                .foregroundStyle(Brand.color.text2)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Brand.color.cardAlt))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(source.title)
+                    .font(Brand.font(13, .medium))
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(2)
+                Text(when)
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    BrandChip(text: state.projectName(source.projectSlug), symbol: source.projectSlug == nil ? "tray" : nil)
+                    if source.status.isInProgress || source.status == .needsProject {
+                        StatusPill(status: source.status, progress: source.progress)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            action
+                .layoutPriority(1)   // a short verb: measured first, the title wraps instead
+        }
+        .padding(10)
+        .background(shape.fill(hovering ? Brand.color.cardAlt.opacity(0.5) : .clear))
+        .contentShape(shape)
+        .onTapGesture { if source.status == .done { onOpenSummary() } }
+        .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
+    }
+
+    /// "10:30 · 45 min" (the list groups rows by day).
+    private var when: String {
+        var parts = [Fmt.time(source.timelineDate)]
+        if let seconds = source.durationSeconds, seconds > 0 { parts.append(MeetingTimes.duration(seconds)) }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder private var action: some View {
+        switch source.status {
+        case .done:
+            Button(action: onOpenSummary) {
+                Label(L("meetings.seeSummary"), systemImage: "doc.text")
+            }
+            .buttonStyle(.brandSecondary)
+            .help(L("meetings.seeSummary"))
+        case .failed:
+            Button { state.engine.retry(sourceId: source.id) } label: {
+                Label(L("meetings.retry"), systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.brandSecondary)
+            .help(source.error ?? L("meetings.failedHelp"))
+        default:
+            EmptyView()
+        }
+    }
+}
+
+/// A people (or other non-project) page, read without leaving Reuniones. Sized per §15.3.
 struct VaultPageSheet: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
@@ -408,18 +559,26 @@ struct VaultPageSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text(state.engine.vault.title(of: current ?? path)).font(.headline).lineLimit(1)
-                Spacer()
-                Button(L("common.close")) { dismiss() }.keyboardShortcut(.cancelAction)
+            HStack(spacing: 12) {
+                Text(state.engine.vault.title(of: current ?? path))
+                    .font(Brand.section)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 8)
+                Button(L("common.close")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
             }
-            .padding(12)
-            Divider()
+            .padding(.horizontal, Brand.spacing.l)
+            .padding(.vertical, Brand.spacing.m)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             WikiWebView(vault: state.engine.vault, path: current ?? path) { next in
                 if !state.openProjectPage(next) { current = next } else { dismiss() }
             }
         }
-        .frame(width: 680, height: 600)
+        .background(Brand.color.surface)
+        .frame(minWidth: 560, idealWidth: 680, maxWidth: .infinity, minHeight: 420, idealHeight: 520, maxHeight: .infinity)
     }
 }
 

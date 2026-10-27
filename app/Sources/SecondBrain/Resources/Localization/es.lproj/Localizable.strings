@@ -1257,3 +1257,14 @@
 "onb.change" = "Cambiar…";
 "readonly.promise" = "Solo leo. Nunca envío, borro ni cambio nada.";
 "brand.name" = "secondbrain";
+
+/* v0.5 — meetings */
+"meetings.role.organizer" = "Organiza";
+"meetings.role.you" = "Tú";
+"meetings.restOfToday" = "Resto del día";
+"meetings.nothingToday" = "Hoy no tienes reuniones";
+"meetings.seeUpcoming" = "Ver próximas";
+"meetings.past.empty.title" = "Aún no hay reuniones grabadas";
+"meetings.past.empty.message" = "Cuando grabes una reunión, aquí encontrarás su resumen.";
+"prep.eyebrow" = "Preparación";
+"prep.briefing" = "Lo que preparé";

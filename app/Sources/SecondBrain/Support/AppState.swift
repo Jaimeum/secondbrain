@@ -148,6 +148,7 @@ final class AppState {
         reloadTemplates()
         refreshTasks()
         MeetingsModel.shared.start(state: self)   // MARK: v0.3 meetings — agenda for Reuniones and the banners
+        GitHubModel.shared.start(state: self)   // MARK: v0.4 github — keeps the followed repos up to date (§13.4)
         for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
             engine.recordingFinished(manifest)
         }

@@ -118,7 +118,8 @@ struct TrustSheet: View {
     }
 }
 
-private struct TrustLine: View {
+// MARK: v0.4 github — also the GitHub connect sheet's three promises
+struct TrustLine: View {
     let symbol: String
     let tint: Color
     let title: String

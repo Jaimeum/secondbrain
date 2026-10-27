@@ -160,7 +160,8 @@ private struct SectionTitle: View {
     }
 }
 
-private struct NumberedSteps: View {
+// MARK: v0.4 github — also GitHubOrgHelpSheet
+struct NumberedSteps: View {
     let steps: [String]
 
     var body: some View {

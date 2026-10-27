@@ -2,13 +2,14 @@ import BrainCore
 import SwiftUI
 
 enum ProjectTab: Hashable {
-    case wiki, graph, sources, tasks, timeline, ask, activity
+    case wiki, graph, sources, code, tasks, timeline, ask, activity   // MARK: v0.4 github — code
 
     var title: String {
         switch self {
         case .wiki: L("tab.wiki")
         case .graph: L("tab.graph")
         case .sources: L("tab.sources")
+        case .code: L("tab.code")   // MARK: v0.4 github
         case .tasks: L("tab.tasks")
         case .timeline: L("tab.timeline")
         case .ask: L("tab.ask")
@@ -21,6 +22,7 @@ enum ProjectTab: Hashable {
         case .wiki: "book"
         case .graph: "point.3.connected.trianglepath.dotted"
         case .sources: "tray.full"
+        case .code: "chevron.left.forwardslash.chevron.right"   // MARK: v0.4 github
         case .tasks: "checklist"
         case .timeline: "calendar.day.timeline.left"
         case .ask: "bubble.left.and.text.bubble.right"
@@ -41,7 +43,7 @@ struct ProjectView: View {
 
     var body: some View {
         content
-            .tabBar(TabPicker(tabs: [.wiki, .graph, .sources, .tasks, .timeline, .ask, .activity], selection: $tab))
+            .tabBar(TabPicker(tabs: [.wiki, .graph, .sources, .code, .tasks, .timeline, .ask, .activity], selection: $tab))
             .navigationTitle("\(project.emoji) \(project.name)")
             .navigationSubtitle(project.description)
             .toolbar {
@@ -117,6 +119,8 @@ struct ProjectView: View {
             GraphView(scope: .project(project.slug), focus: graphFocus, onOpen: openPage)
         case .sources:
             SourcesView(projectSlug: project.slug, onOpen: openPage)
+        case .code:   // MARK: v0.4 github
+            ReposView(projectSlug: project.slug)
         case .tasks:
             ProjectTasksView(project: project, onOpen: openPage)
         case .timeline:
@@ -158,7 +162,7 @@ struct BrainView: View {
                         openPage(path)
                     }
                 }
-            case .sources, .tasks: EmptyView()
+            case .sources, .tasks, .code: EmptyView()
             }
         }
         .tabBar(TabPicker(tabs: [.wiki, .graph, .timeline, .ask, .activity], selection: $tab))

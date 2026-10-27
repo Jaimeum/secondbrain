@@ -251,7 +251,8 @@ struct MeetingPrepView: View {
         prep.clear()
         let slug = projectSlug
         prep.draft = MeetingPrep.prepPrompt(event: event, language: state.config.uiLanguage,
-                                            projectName: state.project(slug).map(\.name))
+                                            projectName: state.project(slug).map(\.name),
+                                            repos: slug.map { state.engine.github.repos(project: $0).map(\.fullName) } ?? [])   // MARK: v0.4 github
         prep.ask(engine: state.engine, projectSlug: slug)
     }
 
@@ -327,8 +328,8 @@ enum MeetingPrepCache {
     }
 }
 
-/// Left-aligned rows that wrap (attendee chips).
-private struct FlowLayout: Layout {
+/// Left-aligned rows that wrap (attendee chips; v0.4 github: branch chips in ReposView).
+struct FlowLayout: Layout {
     var spacing: CGFloat = 6
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

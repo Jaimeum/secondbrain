@@ -73,6 +73,19 @@ enum DebugSnapshots {
                 symbol: "calendar", title: L("meetings.empty.title"), message: L("meetings.empty.message"), context: .meetings))))
             shots.append(("blocked-notregistered", CGSize(width: 460, height: 520), AnyView(AccountBlockedView(
                 provider: .google, reason: .notRegistered, context: .mail, onUseMacCalendar: {}, onClose: {}))))
+            // MARK: v0.4 github (CONTRACT §13.6); run with SB_DEMO_GITHUB=1 for an account and two followed repos.
+            let repoSlug = state.engine.github.repos.first?.projectSlug ?? slug
+            shots.append(("repos", CGSize(width: 900, height: 600), AnyView(ReposView(projectSlug: repoSlug))))
+            shots.append(("repos-empty", CGSize(width: 900, height: 460), AnyView(ReposView(projectSlug: "-"))))
+            shots.append(("add-repo", CGSize(width: 580, height: 580), AnyView(AddRepoSheet(projectSlug: repoSlug))))
+            shots.append(("add-repo-branches", CGSize(width: 580, height: 580),
+                          AnyView(AddRepoSheet(projectSlug: repoSlug, initialRepo: GitHubDemo.myRepos[2]))))
+            shots.append(("settings-github", CGSize(width: 560, height: 520), AnyView(Form { GitHubSection() }.formStyle(.grouped))))
+            shots.append(("github-trust", CGSize(width: 460, height: 470), AnyView(GitHubConnectSheet())))
+            shots.append(("github-code", CGSize(width: 460, height: 400), AnyView(GitHubConnectSheet(preview: .code(GitHubDeviceCode(
+                deviceCode: "demo", userCode: "ABCD-1234", verificationURI: URL(string: "https://github.com/login/device")!,
+                expiresAt: Date().addingTimeInterval(900), interval: 5))))))
+            shots.append(("github-org", CGSize(width: 560, height: 520), AnyView(GitHubOrgHelpSheet())))
             // Integration: the main screens with their tab bars (Wiki · Grafo · …) and the sidebar footer banner.
             shots.append(("sidebar", CGSize(width: 260, height: 720), AnyView(SidebarView(showNewProject: .constant(false)))))
             if let project {

@@ -102,7 +102,8 @@ fi
 # OAuth app registration (CONTRACT §12.3): the ids live OUTSIDE the repo, in ~/.config/secondbrain/ (or SB_OAUTH_DIR):
 #   google-client.json      the "client_secret_….json" downloaded from Google Cloud (Desktop app client), as is
 #   microsoft-client-id.txt the Application (client) ID of the Entra app registration, one line
-#   oauth.json              optional: {"microsoftClientId":…,"googleClientId":…,"googleClientSecret":…} (wins)
+#   github-client-id.txt    the Client ID of the GitHub OAuth App (Device Flow enabled), one line → "githubClientId"
+#   oauth.json              optional: {"microsoftClientId":…,"googleClientId":…,"googleClientSecret":…,"githubClientId":…} (wins)
 # They are merged into Contents/Resources/oauth-defaults.json. Values are never printed.
 OAUTH_DIR="${SB_OAUTH_DIR:-$HOME/.config/secondbrain}"
 if [[ -d "$OAUTH_DIR" ]]; then
@@ -122,6 +123,11 @@ m = os.path.join(src, "microsoft-client-id.txt")
 if os.path.isfile(m):
     v = open(m).read().strip()
     if v: out["microsoftClientId"] = v
+# MARK: v0.4 github
+gh = os.path.join(src, "github-client-id.txt")
+if os.path.isfile(gh):
+    v = open(gh).read().strip()
+    if v: out["githubClientId"] = v
 o = os.path.join(src, "oauth.json")
 if os.path.isfile(o):
     for k, v in json.load(open(o)).items():
@@ -130,7 +136,8 @@ if out:
     json.dump(out, open(dst, "w"))
     os.chmod(dst, 0o644)
 print("Google " + ("ok" if out.get("googleClientId") and out.get("googleClientSecret") else "–")
-      + " · Microsoft " + ("ok" if out.get("microsoftClientId") else "–"))
+      + " · Microsoft " + ("ok" if out.get("microsoftClientId") else "–")
+      + " · GitHub " + ("ok" if out.get("githubClientId") else "–"))
 PY
 )"
     echo "   $OAUTH_SUMMARY"

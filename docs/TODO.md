@@ -1,5 +1,26 @@
 # Pendientes
 
+## 0. Registrar SecondBrain en GitHub (OAuth App con Device Flow)
+
+Sin esto el botón "Conectar GitHub" por código de dispositivo no funciona; **"Usar mi sesión de GitHub CLI" y pegar un token siguen funcionando**.
+
+1. https://github.com/settings/developers → **OAuth Apps** → **New OAuth App**.
+2. Application name `SecondBrain`, Homepage URL `https://github.com/Jaimeum/secondbrain`, Authorization callback URL `http://127.0.0.1`.
+3. **Register application**.
+4. Marcar **Enable Device Flow** → **Update application**.
+5. Copiar el **Client ID** (no hace falta el client secret).
+
+Dónde va (no se mete en el código):
+
+```bash
+echo "<Client ID>" > ~/.config/secondbrain/github-client-id.txt
+scripts/release.sh <versión>      # build-app.sh lo inyecta en oauth-defaults.json como githubClientId
+```
+
+Para probar sin compilar: `SB_GITHUB_CLIENT_ID=<id>`.
+
+Nota para organizaciones: si la organización tiene la **Third-party access policy** (restricción de OAuth Apps), un owner debe aprobar SecondBrain en Settings → Third-party Access → OAuth app policy. Si usa SAML SSO, hay que **Authorize** el token/la app para esa organización.
+
 ## 1. Registrar SecondBrain en Microsoft (para "Conectar Microsoft 365")
 
 Hoy el botón muestra "SecondBrain aún no está registrada en Microsoft 365" porque falta este trámite (10 min, gratis):

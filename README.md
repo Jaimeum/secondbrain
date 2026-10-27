@@ -78,6 +78,20 @@ En **Ajustes → Cuentas** (o desde las secciones *Correo* y *Reuniones*) pulsa 
   - *Microsoft:* Entra → *Registros de aplicaciones → Nuevo registro* → cuentas en cualquier directorio y personales → plataforma *Aplicaciones móviles y de escritorio* con URI `http://localhost` → *Autenticación → Permitir flujos de cliente público: Sí* → *Permisos de API*: `User.Read`, `Mail.Read`, `Calendars.Read`, `offline_access` → copia el *Id. de aplicación (cliente)*.
   - *Google:* Google Cloud → *Pantalla de consentimiento OAuth* (interna si es Workspace; externa + usuarios de prueba si no) con los permisos de Gmail y Calendar de solo lectura → *Credenciales → Crear ID de cliente OAuth → Aplicación de escritorio* → copia el ID y el secreto de cliente.
 
+## Conectar tus repositorios de GitHub
+
+En **Ajustes → Cuentas** pulsa **Conectar GitHub** (código de dispositivo en tu navegador, **Usar mi sesión de GitHub CLI** o pegar un token). Después, en cada proyecto agrega los repositorios que quieras: **varios por proyecto**, y de cada uno **solo las ramas que elijas** (por ejemplo `main` y `development`). Lo demás del repo se ignora.
+
+- **Actualización automática:** SecondBrain revisa tus ramas cada cierto tiempo (por defecto cada 60 minutos; lo cambias en Ajustes). Es incremental: si nada cambió, no hace nada. Si alguien reescribe una rama (force-push, rebase) o la borra, lo detecta y lo anota.
+- **Qué aprende:** commits de cada rama, pull requests, issues, releases, y las diferencias entre ramas (qué está en `development` y todavía no en `main`). El código de las ramas elegidas se guarda en tu Mac para poder responder preguntas sobre él.
+- **Privacidad:** acceso de **solo lectura** (nunca hace push, comentarios ni cambios). El código se queda en tu Mac; a Claude solo llega el texto que necesita para responder, a través de tu cuenta.
+- **Preguntas que cruzan código con correos y reuniones:**
+  - "¿Lo que pidió Ana en el correo ya está en development?"
+  - "Prepárame la llamada de alcance con lo que cambió esta semana."
+  - "¿Qué PRs siguen abiertos y qué dijo el cliente sobre ellos?"
+- **Terminal:** `sb github status`, `sb github login --token|--gh|--device`, `sb github logout`, `sb github add`, `sb github remove`, `sb github sync [--project] [--repo] [--if-due]`.
+- **Organizaciones que restringen apps:** si tu organización exige aprobación, pídele a un admin aprobar SecondBrain (Third-party access policy) o autoriza el token con SAML SSO.
+
 ## Apariencia
 
 **Ajustes → General → Apariencia**: *Sistema*, *Claro* u *Oscuro* (también en el menú *Ver → Apariencia*). Cambia al instante.

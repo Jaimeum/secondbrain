@@ -87,8 +87,7 @@ mantiene un wiki por proyecto con todo lo que se habló. El audio nunca sale de 
 único que se envía es el texto que Claude lee con tu propia cuenta.
 
 ### Novedades
-- **GitHub por proyecto:** cada proyecto sigue varios repositorios y solo las ramas que elijas (ej. *main* y *development*). Se actualiza solo (cada 15 min, hora, 6 h, día o a mano), detecta historial reescrito y ramas borradas, y responde preguntas que cruzan el código con tus correos y reuniones (pestaña *Código*, Ajustes → GitHub).
-- **Reglas:** cada correo y reunión a su proyecto, por remitente, dominio, asunto, asistentes o título (Ajustes → Reglas, o *Reglas…* en Correo y Reuniones).
+- **Mantenimiento:** cambio interno de compilación (el registro OAuth se lee de una carpeta privada del repo). Sin cambios visibles; incluye todo lo de 0.4.0 (GitHub por proyecto y Reglas).
 
 ### Instalar
 1. Descarga **SecondBrain-$VERSION.dmg** (abajo, en *Assets*), ábrelo y arrastra **SecondBrain** a la
@@ -113,8 +112,7 @@ Records your meetings (computer audio + your mic), transcribes them **on your Ma
 per-project wiki of everything discussed. Audio never leaves your computer.
 
 ### What's new
-- **GitHub per project:** each project follows several repositories and only the branches you choose (e.g. *main* and *development*). It keeps itself up to date (every 15 min, hour, 6 h, day or manually), detects rewritten history and deleted branches, and answers questions that cross the code with your emails and meetings (*Code* tab, Settings → GitHub).
-- **Rules:** each email and meeting goes to its project, by sender, domain, subject, attendees or title (Settings → Rules, or *Rules…* in Mail and Meetings).
+- **Maintenance:** internal build change (the OAuth registration is read from a private, git-ignored folder in the repo). No visible changes; includes everything from 0.4.0 (GitHub per project and Rules).
 
 ### Install
 1. Download **SecondBrain-$VERSION.dmg** (under *Assets*), open it and drag **SecondBrain** to

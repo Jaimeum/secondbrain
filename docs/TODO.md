@@ -13,7 +13,7 @@ Sin esto el botón "Conectar GitHub" por código de dispositivo no funciona; **"
 Dónde va (no se mete en el código):
 
 ```bash
-echo "<Client ID>" > ~/.config/secondbrain/github-client-id.txt
+echo "<Client ID>" > secrets/github-client-id.txt   # carpeta ignorada por git
 scripts/release.sh <versión>      # build-app.sh lo inyecta en oauth-defaults.json como githubClientId
 ```
 
@@ -35,7 +35,7 @@ Hoy el botón muestra "SecondBrain aún no está registrada en Microsoft 365" po
 Dónde va (no se mete en el código):
 
 ```bash
-echo "<Id. de aplicación (cliente)>" > ~/.config/secondbrain/microsoft-client-id.txt
+echo "<Id. de aplicación (cliente)>" > secrets/microsoft-client-id.txt   # carpeta ignorada por git
 scripts/release.sh 0.3.2      # build-app.sh lo inyecta en SecondBrain.app/Contents/Resources/oauth-defaults.json
 ```
 
@@ -45,7 +45,7 @@ Opcional después: verificación de editor (Partner Center) para que menos organ
 
 ## 2. Google: salir del modo "En pruebas"
 
-El registro ya está hecho (archivo en `~/.config/secondbrain/google-client.json`, incluido desde 0.3.1). Mientras la app esté
+El registro ya está hecho (archivo en `secrets/google-client.json` del repo, ignorado por git; incluido desde 0.3.1). Mientras la app esté
 "En pruebas", solo entran los correos agregados como usuarios de prueba (máx. 100) y Google muestra "app no verificada".
 
 Cuando haya usuarios: Google Cloud → Google Auth Platform → **Centro de verificación** → enviar a verificación.

@@ -8,3 +8,6 @@ app/.swiftpm/
 build/
 dist/
 .claude/
+
+# OAuth client secrets for builds (never commit)
+/secrets/

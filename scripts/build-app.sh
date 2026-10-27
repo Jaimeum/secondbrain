@@ -99,13 +99,16 @@ if [[ ! -f "$ICON_CACHE" || "$SCRIPTS/make-icon.swift" -nt "$ICON_CACHE" ]]; the
 fi
 [[ -f "$ICON_CACHE" ]] && cp "$ICON_CACHE" "$APP/Contents/Resources/AppIcon.icns"
 
-# OAuth app registration (CONTRACT §12.3): the ids live OUTSIDE the repo, in ~/.config/secondbrain/ (or SB_OAUTH_DIR):
+# OAuth app registration (CONTRACT §12.3): the ids are never committed. They live in <repo>/secrets/ (git-ignored),
+# else in ~/.config/secondbrain/ (SB_OAUTH_DIR overrides both):
 #   google-client.json      the "client_secret_….json" downloaded from Google Cloud (Desktop app client), as is
 #   microsoft-client-id.txt the Application (client) ID of the Entra app registration, one line
 #   github-client-id.txt    the Client ID of the GitHub OAuth App (Device Flow enabled), one line → "githubClientId"
 #   oauth.json              optional: {"microsoftClientId":…,"googleClientId":…,"googleClientSecret":…,"githubClientId":…} (wins)
 # They are merged into Contents/Resources/oauth-defaults.json. Values are never printed.
-OAUTH_DIR="${SB_OAUTH_DIR:-$HOME/.config/secondbrain}"
+if [[ -n "${SB_OAUTH_DIR:-}" ]]; then OAUTH_DIR="$SB_OAUTH_DIR"
+elif [[ -d "$ROOT/secrets" ]]; then OAUTH_DIR="$ROOT/secrets"
+else OAUTH_DIR="$HOME/.config/secondbrain"; fi
 if [[ -d "$OAUTH_DIR" ]]; then
     step "Registro OAuth (desde $OAUTH_DIR)"
     OAUTH_SUMMARY="$(python3 -I - "$OAUTH_DIR" "$APP/Contents/Resources/oauth-defaults.json" <<'PY'

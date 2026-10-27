@@ -161,7 +161,7 @@ public struct OAuthAppRegistration: Codable, Equatable, Sendable {
 
 /// Client ids of SecondBrain's own app registrations (Azure "Accounts in any directory + personal", Google "Desktop
 /// app"). They are NOT in the source: `scripts/build-app.sh` copies them into the app bundle as
-/// `Contents/Resources/oauth-defaults.json` from `~/.config/secondbrain/` at build time, so the repo never holds the
+/// `Contents/Resources/oauth-defaults.json` from the git-ignored `secrets/` (or `~/.config/secondbrain/`) at build time, so git never holds the
 /// Google desktop "secret". Without that file (plain `swift build`, the `sb` CLI) they are empty and sign-in shows the
 /// "not registered" help. Override for tests/dev: env `SB_OAUTH_DEFAULTS=<path to such a json>`.
 public enum OAuthDefaults {

@@ -834,6 +834,8 @@
       perProject.set(n.project, c + 1);
       prio.set(n.id, Math.max(prio.get(n.id) || 0, 20 + n.links / 1000));
     }
+    // In a project view every node with 3+ links asks for a label (the overlap check still keeps them apart).
+    if (S.colorBy === 'kind') for (const n of ranked) if (n.links >= 3 && !prio.has(n.id)) prio.set(n.id, 6 + n.links / 1000);
     if (t.k >= 1.8) vis.forEach((n) => { if (!prio.has(n.id)) prio.set(n.id, 5 + n.links / 1000); });
     const bump = (id, p) => { if (S.byId.has(id)) prio.set(id, Math.max(prio.get(id) || 0, p)); };
     if (S.focus) { bump(S.focus, 90); for (const id of S.adj.get(S.focus)) if (S.focusSet.has(id)) bump(id, 40 + (S.byId.get(id).links / 1000)); }

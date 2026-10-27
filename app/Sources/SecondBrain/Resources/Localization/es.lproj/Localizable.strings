@@ -660,7 +660,8 @@
 "graph.open" = "Abrir página";
 "graph.openOverview" = "Abrir resumen";
 "graph.today" = "Hoy";
-"graph.hint" = "Clic en un nodo para explorar · ▶ para ver cómo creció";
+"graph.hint.all" = "Cada color es un proyecto · gris = personas · cuadrados = resúmenes · clic para explorar · ▶ para ver cómo creció";
+"graph.hint.project" = "Pasa el cursor para ver el nombre · clic para explorar · los chips filtran por tipo · ▶ para ver cómo creció";
 "graph.close" = "Cerrar";
 "graph.connected" = "Conectado con";
 "graph.matches" = "%ld coincidencias";
@@ -719,8 +720,8 @@
 "accounts.trust.title" = "Conectar %@";
 "accounts.trust.read" = "Solo leo tu correo y calendario";
 "accounts.trust.readDetail" = "Nunca envío, borro ni cambio nada.";
-"accounts.trust.local" = "Todo se queda en esta Mac";
-"accounts.trust.localDetail" = "Lo que agregues al cerebro se guarda aquí; nada pasa por servidores nuestros.";
+"accounts.trust.local" = "Tu correo se queda en esta Mac";
+"accounts.trust.localDetail" = "No pasa por servidores nuestros. Solo lo que tú agregues al cerebro lo lee Claude para escribir el wiki, con tu cuenta.";
 "accounts.trust.disconnect" = "Desconecta cuando quieras";
 "accounts.trust.disconnectDetail" = "Ajustes → Cuentas → Desconectar, y esta Mac olvida el acceso.";
 "accounts.trust.browserHint" = "Se abrirá tu navegador para iniciar sesión en %@. SecondBrain nunca ve tu contraseña.";
@@ -738,7 +739,7 @@
 "accounts.blocked.paste" = "Mientras tanto: pega un correo";
 "accounts.blocked.pasteDetail" = "Copia un correo o un hilo y agrégalo al cerebro igual.";
 "accounts.notRegistered.title" = "SecondBrain aún no está registrada en %@";
-"accounts.notRegistered.message" = "Quien administre la app pone los IDs en Ajustes → Cuentas → Avanzado.";
+"accounts.notRegistered.message" = "Esta copia de SecondBrain todavía no puede conectarse a %1$@: le faltan las credenciales que %1$@ da a cada app. Si alguien te instaló SecondBrain, pídele que las ponga en Ajustes → Cuentas → Avanzado. Mientras tanto puedes usar el calendario de la Mac o pegar correos.";
 "accounts.notRegistered.howDetail" = "Cómo registrarla tú mismo, si eres técnico.";
 "onb.accounts.title" = "Conecta tu correo y calendario (opcional)";
 "onb.accounts.message" = "Así tus correos y reuniones llegan solos, sin copiar y pegar. También puedes hacerlo después en Ajustes.";
@@ -753,7 +754,7 @@
 "orghelp.copy" = "Copiar mensaje";
 "orghelp.copied" = "Copiado";
 "orghelp.copyConsentLink" = "Copiar enlace de consentimiento";
-"orghelp.notRegistered" = "SecondBrain aún no está registrada en %@. Quien administre la app pone los IDs en Ajustes → Cuentas → Avanzado. Si eres técnico, sigue los pasos de (C) con tu propio registro.";
+"orghelp.notRegistered" = "Esta copia de SecondBrain todavía no puede conectarse a %1$@: le faltan las credenciales que %1$@ da a cada app. Si alguien te instaló SecondBrain, pídele que las ponga en Ajustes → Cuentas → Avanzado. Mientras tanto puedes usar el calendario de la Mac o pegar correos. Si eres técnico, sigue los pasos de «Soy técnico: usar mi propio registro» más abajo.";
 "orghelp.own.paste" = "Luego pega los IDs en Ajustes → Cuentas → Avanzado y vuelve a pulsar Conectar.";
 "orghelp.ms.forYou.hint" = "Copia y envía este mensaje a tu administrador de TI:";
 "orghelp.g.forYou.hint" = "Copia y envía este mensaje a tu administrador de Google Workspace:";

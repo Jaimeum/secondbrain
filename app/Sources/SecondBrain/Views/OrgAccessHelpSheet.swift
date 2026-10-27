@@ -4,7 +4,8 @@ import SwiftUI
 
 /// "¿Cómo lo habilito?" (CONTRACT §12.3, §12.7): tabs Microsoft / Google with (A) a message ready to send the admin
 /// (Copiar · Pedírselo a TI), (B) the admin's exact steps and (C) folded "Soy técnico: usar mi propio registro".
-/// Without a client id, (A) says the app isn't registered yet and (C) opens by default. `provider == nil` opens on
+/// Without a client id, (A) says the app isn't registered yet, (B) is skipped and the technical section takes its letter
+/// and opens by default. `provider == nil` opens on
 /// Microsoft.
 struct OrgAccessHelpSheet: View {
     @Environment(AppState.self) private var state
@@ -132,7 +133,7 @@ struct OrgAccessHelpSheet: View {
             }
             .padding(.top, 10)
         } label: {
-            SectionTitle(letter: "C", title: L("orghelp.technical"))
+            SectionTitle(letter: clientId == nil ? "B" : "C", title: L("orghelp.technical"))
         }
     }
 

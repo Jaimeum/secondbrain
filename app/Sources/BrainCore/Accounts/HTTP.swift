@@ -188,6 +188,9 @@ public enum AccountErrorMapper {
         let combined = "\(code) \(detail)"
         // Microsoft "the user declined to consent" (AADSTS65004) is a plain cancel, not an organization block.
         if combined.contains("AADSTS65004") { return .cancelled }
+        // Google sends a bare `error=access_denied` (no description) when the user presses Cancel on the consent
+        // screen; organization blocks come back as org_internal / admin_policy_enforced (or carry a description).
+        if provider == .google, code.caseInsensitiveCompare("access_denied") == .orderedSame, detail.isEmpty { return .cancelled }
         if consentMarkers.contains(where: { combined.range(of: $0, options: .caseInsensitive) != nil }) {
             return .consentRequired(provider, detail: detail.isEmpty ? code : detail)
         }

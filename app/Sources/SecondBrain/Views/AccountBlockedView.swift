@@ -33,7 +33,7 @@ struct AccountBlockedView: View {
                     Text(reason == .consent ? L("accounts.blocked.title") : L("accounts.notRegistered.title", provider.displayName))
                         .font(.title3.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(reason == .consent ? L("accounts.blocked.message", provider.displayName) : L("accounts.notRegistered.message"))
+                    Text(reason == .consent ? L("accounts.blocked.message", provider.displayName) : L("accounts.notRegistered.message", provider.displayName))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

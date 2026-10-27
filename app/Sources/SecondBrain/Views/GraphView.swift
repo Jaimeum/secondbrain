@@ -77,7 +77,7 @@ struct GraphView: View {
             "kinds": singular, "kindsPlural": plural,
             "open": L("graph.open"), "openOverview": L("graph.openOverview"),
             "links": L("graph.links"), "showAll": L("graph.showAll"), "fit": L("graph.fit"), "search": L("graph.search"),
-            "play": L("graph.play"), "today": L("graph.today"), "hint": L("graph.hint"), "close": L("graph.close"),
+            "play": L("graph.play"), "today": L("graph.today"), "hint": L(projectSlug == nil ? "graph.hint.all" : "graph.hint.project"), "close": L("graph.close"),
             "connected": L("graph.connected"), "matches": L("graph.matches"), "noMatches": L("graph.noMatches"),
             "overview": L("graph.overviewLabel"),
         ]

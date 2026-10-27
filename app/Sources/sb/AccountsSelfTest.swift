@@ -219,7 +219,9 @@ private final class FakeBrowser: @unchecked Sendable {
     t.eq((try? OAuthClient.validateCallback(["code": "c1", "state": "mine"], expectedState: "mine", provider: .google)) ?? "-",
          "c1", "matching state → code")
     t.eq(errorKind { _ = try OAuthClient.validateCallback(["error": "access_denied", "state": "mine"], expectedState: "mine", provider: .google) },
-         "consentRequired", "callback error=access_denied → consentRequired")
+         "cancelled", "Google callback error=access_denied (user pressed Cancel) → cancelled")
+    t.eq(errorKind { _ = try OAuthClient.validateCallback(["error": "access_denied", "state": "mine"], expectedState: "mine", provider: .microsoft) },
+         "consentRequired", "Microsoft callback error=access_denied → consentRequired")
     t.eq(errorKind { _ = try OAuthClient.validateCallback(["error": "access_denied", "error_description": "AADSTS65004: User declined to consent",
                                                            "state": "mine"], expectedState: "mine", provider: .microsoft) },
          "cancelled", "AADSTS65004 (user declined) → cancelled")
@@ -260,7 +262,10 @@ private final class FakeBrowser: @unchecked Sendable {
     t.eq(kind("invalid_request", "AADSTS650052: The app needs access to a service"), "consentRequired", "AADSTS650052")
     t.eq(kind("unauthorized_client", "AADSTS7000112: Application is disabled."), "consentRequired", "AADSTS7000112")
     t.eq(kind("consent_required", nil), "consentRequired", "consent_required")
-    t.eq(kind("access_denied", nil, .google), "consentRequired", "Google access_denied")
+    t.eq(kind("access_denied", nil, .google), "cancelled", "Google bare access_denied = user cancel")
+    t.eq(kind("access_denied", "", .google), "cancelled", "Google access_denied, empty description = user cancel")
+    t.eq(kind("access_denied", "admin_policy_enforced", .google), "consentRequired", "Google access_denied with org detail")
+    t.eq(kind("access_denied", nil), "consentRequired", "Microsoft bare access_denied stays a block")
     t.eq(kind("org_internal", "This client is restricted to users within its organization.", .google), "consentRequired", "org_internal")
     t.eq(kind("admin_policy_enforced", nil, .google), "consentRequired", "admin_policy_enforced")
     t.eq(kind("disallowed_useragent", nil, .google), "consentRequired", "disallowed_useragent")
@@ -280,6 +285,8 @@ private final class FakeBrowser: @unchecked Sendable {
     t.eq(http(503, ""), "network", "503 → network")
     t.eq(http(403, #"{"error":{"code":403,"message":"Request had insufficient authentication scopes.","status":"PERMISSION_DENIED","errors":[{"reason":"insufficientPermissions"}]}}"#, .google),
          "failed", "Google 403 scopes → failed")
+    t.eq(http(403, #"{"error":{"code":403,"message":"Access denied by admin policy.","status":"PERMISSION_DENIED","errors":[{"reason":"access_denied"}]}}"#, .google),
+         "consentRequired", "Google 403 access_denied reason → consentRequired (not cancel)")
     t.eq(http(400, #"{"error":"admin_policy_enforced","error_description":"Blocked by admin"}"#, .google), "consentRequired", "Google 400 admin policy")
 }
 

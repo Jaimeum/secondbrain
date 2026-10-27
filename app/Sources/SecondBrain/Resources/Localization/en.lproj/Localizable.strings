@@ -40,7 +40,7 @@
 "record.stopWithTime" = "Stop %@";
 "record.hotkeyHint" = "You can also press ⌥⌘R from any app";
 "record.finishSetupFirst" = "Finish setting up secondbrain before recording.";
-"record.needsPermission" = "I need permission to hear your computer's audio. Turn it on in System Settings → Privacy → Screen & System Audio Recording.";
+"record.needsPermission" = "I need permission to hear your Mac's audio.";
 "record.couldNotStart" = "I couldn't start recording. Please try again.";
 "record.couldNotStop" = "I couldn't stop the recording cleanly. Everything recorded so far is safe.";
 "record.warnMic" = "I can't hear your microphone; I'm still recording your computer's audio.";
@@ -1410,3 +1410,8 @@
 /* v0.5 — finish */
 "meetings.past.myTasks" = "My tasks (%ld)";
 "meetings.past.myTasksHelp" = "Your tasks from this meeting that are still open";
+
+/* v0.5.3 — recording permission */
+"record.repairPermission" = "Fix permission";
+"record.repairPermissionHelp" = "Use this if secondbrain already shows as on in System Settings but still can't record: the permission belongs to an earlier version. I'll clear it so macOS asks you again; allow it and reopen secondbrain.";
+"record.repairFailed" = "I couldn't fix the permission. In System Settings → Screen & System Audio Recording, remove secondbrain with “−” and open it again.";

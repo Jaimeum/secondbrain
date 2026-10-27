@@ -415,7 +415,8 @@ Usa `SB_CONFIG` para no tocar la config real en tests.
 `make-dev-cert.sh` (crea identidad self-signed "SecondBrain Dev" en el login keychain si no existe;
 idempotente), `build-app.sh [--release]` (swift build -c release, ensambla `build/SecondBrain.app`,
 Info.plist, icono simple generado (iconutil, opcional), copia bundles de recursos, firma con
-"SecondBrain Dev" si existe o ad-hoc `-`, entitlements no-sandbox; `--release` además genera
+"SecondBrain Dev" si existe o ad-hoc `-` (`--release` falla sin la identidad, salvo `SB_SIGN_IDENTITY=-`),
+entitlements no-sandbox; `--release` además genera
 `dist/SecondBrain-<ver>.zip` (ditto) y `dist/SecondBrain-<ver>.dmg` (hdiutil, con alias a /Applications)),
 `release.sh <version>` (gh repo create si no existe, push, gh release create con zip+dmg).
 Versión en `VERSION` (raíz), inicial `0.1.0`.
@@ -608,7 +609,10 @@ Nunca tocar páginas del wiki existentes salvo crear las nuevas que falten.
   Ajustes, macOS suele exigir reabrir la app antes de que `permissions().screenAudio` sea true → el paso
   de permisos del onboarding debería ofrecer "Reabrir SecondBrain".
 - [A] Firma: `scripts/make-dev-cert.sh` crea "SecondBrain Dev" (self-signed, sin confiar; codesign la usa
-  sin diálogos, verificado) para que los permisos TCC sobrevivan a cada build. `build-app.sh` firma sin
+  sin diálogos, verificado) para que los permisos TCC sobrevivan a cada build. No borrarla: con otra identidad (o ad-hoc,
+  como 0.4.1–0.5.2) el interruptor de Ajustes sigue activado pero no aplica y macOS no vuelve a preguntar; el aviso
+  de permiso bajo Grabar ofrece "Reparar permiso" (`Recorder.repairPermissions()`: `tccutil reset` de ScreenCapture
+  y, si no funciona, Microphone del propio bundle id, sin admin, y vuelve a pedirlos). `build-app.sh` firma sin
   hardened runtime por defecto (`SB_HARDENED=1` lo activa); overrides `SB_SIGN_IDENTITY=-`, `SB_SCRATCH`,
   `SB_SKIP_BUILD=1`, flag `--debug`. Los bundles de recursos van en `Contents/Resources/` (el accessor
   generado busca primero en `Bundle.main.resourceURL`; verificado con un ejecutable dentro de la .app).

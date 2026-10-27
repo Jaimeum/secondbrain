@@ -40,7 +40,7 @@
 "record.stopWithTime" = "Detener %@";
 "record.hotkeyHint" = "También puedes usar ⌥⌘R desde cualquier app";
 "record.finishSetupFirst" = "Termina de configurar secondbrain antes de grabar.";
-"record.needsPermission" = "Necesito permiso para escuchar el audio de tu computadora. Ábrelo en Ajustes del Sistema → Privacidad → Grabación de pantalla y audio del sistema.";
+"record.needsPermission" = "Necesito permiso para oír el audio de tu Mac.";
 "record.couldNotStart" = "No pude empezar a grabar. Inténtalo otra vez.";
 "record.couldNotStop" = "No pude detener la grabación correctamente. Lo grabado hasta ahora está a salvo.";
 "record.warnMic" = "No puedo oír tu micrófono; sigo grabando solo el audio de la computadora.";
@@ -1410,3 +1410,8 @@
 /* v0.5 — finish */
 "meetings.past.myTasks" = "Mis pendientes (%ld)";
 "meetings.past.myTasksHelp" = "Tareas tuyas de esta reunión que siguen abiertas";
+
+/* v0.5.3 — recording permission */
+"record.repairPermission" = "Reparar permiso";
+"record.repairPermissionHelp" = "Úsalo si secondbrain ya aparece activado en Ajustes del Sistema y aun así no graba: el permiso quedó de una versión anterior. Lo borro para que macOS te lo vuelva a pedir; acéptalo y vuelve a abrir secondbrain.";
+"record.repairFailed" = "No pude reparar el permiso. En Ajustes del Sistema → Grabación de pantalla y audio del sistema, quita secondbrain con «−» y vuelve a abrirlo.";

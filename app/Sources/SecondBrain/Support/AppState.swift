@@ -616,6 +616,15 @@ final class AppState {
         }
     }
 
+    /// "Reparar permiso" under the permission error: macOS forgets the app's recording permissions and asks again
+    /// (Recorder.repairPermissions). The system dialogs take over from here; macOS itself offers to reopen the app.
+    func repairRecordingPermission() {
+        recordingError = nil
+        Task {
+            if !(await Recorder.repairPermissions()) { recordingError = L("record.repairFailed") }
+        }
+    }
+
     func stopRecording() async {
         do {
             let manifest = try await recorder.stop()

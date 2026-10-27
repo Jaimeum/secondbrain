@@ -5,7 +5,7 @@
 #   scripts/build-app.sh --release   … plus dist/SecondBrain-<ver>.zip and dist/SecondBrain-<ver>.dmg
 #   scripts/build-app.sh --debug     debug build (faster) → build/SecondBrain.app
 #
-# Env overrides: SB_SIGN_IDENTITY ("-" forces ad-hoc), SB_SCRATCH (SwiftPM --scratch-path),
+# Env overrides: SB_SIGN_IDENTITY ("-" forces ad-hoc; only then does --release sign ad-hoc), SB_SCRATCH (SwiftPM --scratch-path),
 # SB_HARDENED=1 (sign with the hardened runtime), SB_SKIP_BUILD=1 (reuse the last build products).
 set -euo pipefail
 trap 'echo >&2; echo "ERROR: build-app.sh falló en la línea $LINENO (ver arriba) / build failed at line $LINENO" >&2' ERR
@@ -41,6 +41,15 @@ SWIFT_ARGS=(-c "$CONFIG" --package-path "$PKG")
 
 if [[ $PACKAGE == 1 && ( "$CONFIG" != release || "${SB_SKIP_BUILD:-0}" == 1 ) ]]; then
     echo "ERROR: --release siempre compila en modo release (sin --debug ni SB_SKIP_BUILD)" >&2; exit 64
+fi
+# A release signed ad-hoc has a different signature on every build: macOS keeps the Microphone / Screen Recording
+# switches on for whoever updates, but stops applying them (0.4.1–0.5.2 shipped like that). Checked before compiling.
+if [[ $PACKAGE == 1 && -z "${SB_SIGN_IDENTITY:-}" ]] \
+    && ! security find-identity -p codesigning 2>/dev/null | grep -q "\"$DEV_IDENTITY\""; then
+    echo "ERROR: falta la identidad de firma \"$DEV_IDENTITY\"; corre scripts/make-dev-cert.sh. Una release firmada" >&2
+    echo "   ad-hoc deja sin efecto los permisos de micrófono y grabación de quien actualiza. Para hacerla de todos" >&2
+    echo "   modos: SB_SIGN_IDENTITY=- scripts/build-app.sh --release" >&2
+    exit 1
 fi
 if [[ "${SB_SKIP_BUILD:-0}" != 1 ]]; then
     step "Compilando $APP_NAME $VERSION ($CONFIG)"
@@ -188,7 +197,11 @@ fi
 SIGN_ARGS=(--force --sign "$IDENTITY" --entitlements "$SCRIPTS/SecondBrain.entitlements" --timestamp=none)
 [[ "${SB_HARDENED:-0}" == 1 ]] && SIGN_ARGS+=(--options runtime)
 if ! with_timeout 60 codesign "${SIGN_ARGS[@]}" "$APP"; then
-    if [[ "$IDENTITY" != "-" ]]; then
+    if [[ "$IDENTITY" != "-" && $PACKAGE == 1 ]]; then
+        echo "ERROR: no se pudo firmar con \"$IDENTITY\" (¿diálogo del llavero? elige «Permitir siempre» y vuelve a" >&2
+        echo "   correrlo). La release no se firma ad-hoc." >&2
+        exit 1
+    elif [[ "$IDENTITY" != "-" ]]; then
         echo "   No se pudo firmar con \"$IDENTITY\" (¿diálogo del llavero?) → firma ad-hoc." >&2
         IDENTITY="-"
         SIGN_ARGS=(--force --sign - --entitlements "$SCRIPTS/SecondBrain.entitlements" --timestamp=none)

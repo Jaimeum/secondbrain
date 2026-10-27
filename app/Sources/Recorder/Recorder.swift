@@ -148,6 +148,34 @@ public enum RecorderWarning: Equatable, Sendable {
         }
     }
 
+    /// "Reparar permiso": for a switch that is on in System Settings while recording still finds no permission. macOS
+    /// ties each permission to the signature of the build that got it; when the signature changes (every ad-hoc build up
+    /// to 0.5.2) the switch stays on but no longer applies, and macOS doesn't ask again either. Clears this app's own
+    /// Screen & System Audio Recording entry (and the Microphone one, unless it works) with `tccutil`, which needs no
+    /// admin rights, then asks again so the list shows this build. False if the reset failed.
+    public static func repairPermissions() async -> Bool {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return false }
+        let micWorks = AVAudioApplication.shared.recordPermission == .granted
+        guard await resetPermission("ScreenCapture", bundleID: bundleID) else { return false }
+        if !micWorks, await resetPermission("Microphone", bundleID: bundleID) {
+            _ = await AVAudioApplication.requestRecordPermission()
+        }
+        _ = await requestScreenCapture()
+        return true
+    }
+
+    private nonisolated static func resetPermission(_ service: String, bundleID: String) async -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", service, bundleID]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        return await withCheckedContinuation { cont in
+            process.terminationHandler = { cont.resume(returning: $0.terminationStatus == 0) }
+            do { try process.run() } catch { cont.resume(returning: false) }
+        }
+    }
+
     public static func openPrivacySettings(_ pane: PrivacyPane) {
         let anchor = switch pane {
         case .screenRecording: "Privacy_ScreenCapture"

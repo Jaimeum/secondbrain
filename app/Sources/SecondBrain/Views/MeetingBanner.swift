@@ -283,22 +283,23 @@ struct RecordControl: View {
         .help(L("meetings.openAgenda"))
     }
 
-    /// Two lines at most (the whole text in the tooltip), a × to dismiss it, and the way to the permission it needs.
+    /// Two lines at most (the whole text in the tooltip), a × to dismiss it, and the way to the permission it needs:
+    /// "Reparar permiso" first, since a switch that is already on in System Settings may belong to an earlier build.
     private func errorNotice(_ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: "exclamationmark.circle")
             VStack(alignment: .leading, spacing: 2) {
                 Text(text).lineLimit(2).help(text)
                 if text == L("record.needsPermission") {
-                    Button(L("record.openPermissions")) {
+                    noticeAction(L("record.repairPermission")) { state.repairRecordingPermission() }
+                        .help(L("record.repairPermissionHelp"))
+                }
+                if text == L("record.needsPermission") || text == L("record.repairFailed") {
+                    noticeAction(L("record.openPermissions")) {
                         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
                             NSWorkspace.shared.open(url)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .font(Brand.font(11, .medium))
-                    .foregroundStyle(Brand.color.accent)
-                    .lineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -311,6 +312,14 @@ struct RecordControl: View {
         }
         .font(Brand.caption)
         .foregroundStyle(Brand.color.danger)
+    }
+
+    private func noticeAction(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.plain)
+            .font(Brand.font(11, .medium))
+            .foregroundStyle(Brand.color.accent)
+            .lineLimit(1)
     }
 
     // MARK: Actions

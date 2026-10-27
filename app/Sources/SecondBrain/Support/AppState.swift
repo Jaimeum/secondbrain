@@ -152,6 +152,9 @@ final class AppState {
     var noteRequest: NoteRequest?
     /// The whole-brain conversation of Inicio ("Preguntar" from ⌘K without a project).
     let homeChat = ChatModel()
+    /// Each project's "Preguntar" conversation, kept while the app runs: leaving a project and coming back (or asking
+    /// it from ⌘K) continues the same conversation. Created on first use; dropped when the vault changes.
+    @ObservationIgnored private(set) var projectChats: [String: ChatModel] = [:]
     /// v0.3: bumped when connected accounts change (connect / disconnect), so Correo and Reuniones reload.
     var accountsRevision = 0
     @ObservationIgnored private var overdueReload: Task<Void, Never>?
@@ -310,7 +313,7 @@ final class AppState {
             // The recorder writes sessions under the data folder for the life of the app: restart for this one.
             restartNeeded = true
         } else if next.vaultPath != old.vaultPath || modelChanged {
-            switchEngine(to: next, modelChanged: modelChanged)
+            switchEngine(to: next, modelChanged: modelChanged, vaultChanged: next.vaultPath != old.vaultPath)
         } else {
             try? engine.updateConfig(next)
         }
@@ -318,7 +321,7 @@ final class AppState {
 
     /// Moves the running engine to another vault (or transcription model) without a restart: it stops taking
     /// jobs, lets the current one finish (the UI says "Terminando la tarea actual…"), then reopens everything.
-    private func switchEngine(to next: AppConfig, modelChanged: Bool) {
+    private func switchEngine(to next: AppConfig, modelChanged: Bool, vaultChanged: Bool) {
         var newTranscriber: WhisperTranscriber?
         if modelChanged {
             modelTask?.cancel()
@@ -346,17 +349,26 @@ final class AppState {
             guard self.config.vaultPath == next.vaultPath, self.config.whisperModel == next.whisperModel else { return }
             self.isSwitchingVault = false
             self.vaultSwitch = nil
-            self.didSwitchVault()
+            self.didSwitchVault(vaultChanged: vaultChanged)
             if modelChanged { self.prepareModels() }
         }
     }
 
-    private func didSwitchVault() {
+    private func didSwitchVault(vaultChanged: Bool) {
         reloadProjectsNow()
         reloadTemplates()
         refreshTasks()
         if case .project(let slug) = selection, project(slug) == nil { selection = .home }
         if let slug = recordingProjectSlug, project(slug) == nil { recordingProjectSlug = nil }
+        // Conversations were about the other vault's pages: start fresh (an answer still streaming is stopped).
+        // A transcription-model change alone keeps them.
+        if vaultChanged {
+            for chat in projectChats.values { chat.stop() }
+            projectChats.removeAll()
+            homeChat.clear()
+            homeChatAskedAt = nil
+            homeRoute = nil
+        }
         vaultGeneration += 1
         bumpHistory()
     }
@@ -444,6 +456,14 @@ final class AppState {
         projects = Self.sorted(projects.map { $0.slug == project.slug ? project : $0 })
         reloadProjects()
         vaultRevision += 1
+    }
+
+    /// The project's persistent conversation (see `projectChats`).
+    func projectChat(for slug: String) -> ChatModel {
+        if let chat = projectChats[slug] { return chat }
+        let chat = ChatModel()
+        projectChats[slug] = chat
+        return chat
     }
 
     func project(_ slug: String?) -> Project? {

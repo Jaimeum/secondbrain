@@ -66,8 +66,9 @@ extension ButtonStyle where Self == BrandRecordButtonStyle {
 
 // MARK: Chip
 
-/// Neutral capsule chip (`cardAlt`, `text2`, one line, truncates). `active` = `accentSoft` + `accent` (selected
-/// filter). `tint` colors the symbol only (e.g. a project's tone).
+/// Neutral capsule chip (`cardAlt`; label in `text`, symbol in `text2`; one line, truncates). `active` = `accentSoft` +
+/// `accent` (selected filter). `tint` colors the symbol only (e.g. a project's tone). The label is `text`, not `text2`:
+/// 11 pt medium is small text, and only `text` keeps it well over 4.5:1 on `cardAlt` in both themes.
 struct BrandChip: View {
     let text: String
     var symbol: String? = nil
@@ -84,7 +85,7 @@ struct BrandChip: View {
             Text(text)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .foregroundStyle(active ? Brand.color.accent : Brand.color.text2)
+                .foregroundStyle(active ? Brand.color.accent : Brand.color.text)
         }
         .font(Brand.font(11, .medium))
         .padding(.horizontal, 8)

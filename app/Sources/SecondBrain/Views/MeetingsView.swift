@@ -58,7 +58,6 @@ struct MeetingsView: View {
         .background(Brand.color.surface)
         .navigationTitle(L("meetings.title"))
         .toolbar {
-            // Rules live in Ajustes › Reglas, ⌘K and the in-context offer (§15.2: what is set up once lives in Ajustes).
             ToolbarItem(placement: .primaryAction) {
                 Button { model.refresh(state: state) } label: {
                     Label(L("meetings.refresh"), systemImage: "arrow.clockwise")
@@ -66,6 +65,8 @@ struct MeetingsView: View {
                 .help(L("meetings.refresh"))
                 .disabled(!hasAccounts)
             }
+            // §14.4 + §15.2: "Reglas…" in the ⋯ menu, the same place as in Correo (also in Ajustes › Reglas and ⌘K).
+            ToolbarItem(placement: .primaryAction) { ToolbarMoreMenu() }
         }
         .task(id: state.accountsRevision) {
             // Fresh on every visit; the loop keeps it fresh every 15 minutes after that.
@@ -76,7 +77,7 @@ struct MeetingsView: View {
             try? await Task.sleep(for: .milliseconds(400))
             if !Task.isCancelled { showsLoader = model.isLoading }
         }
-        .task(id: "\(segment == .past)|\(state.vaultRevision)|\(state.engineStarted)") {
+        .task(id: "\(segment == .past)|\(state.vaultRevision)|\(state.tasksRevision)|\(state.engineStarted)") {
             if segment == .past { model.loadPast(state: state) }
         }
         .onChange(of: state.vaultRevision) { model.reloadPeople(state: state) }

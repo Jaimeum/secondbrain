@@ -20,8 +20,9 @@ enum Brand {
         let line = Brand.dynamic(light: 0xDAD3C9, dark: 0xFFFFFF, darkAlpha: 0.10)
         /// Primary text (ink / ivory).
         let text = Brand.dynamic(light: 0x232B25, dark: 0xF5F0E8)
-        /// Secondary text (AA on bg and surface).
-        let text2 = Brand.dynamic(light: 0x6F766D, dark: 0xAEB5A4)
+        /// Secondary text: AA everywhere it sits (light #5F665D: 5.2:1 on bg, 5.5:1 on surface, 4.5:1 on cardAlt; the
+        /// same value as `--text2` in wiki.css / graph.css).
+        let text2 = Brand.dynamic(light: 0x5F665D, dark: 0xAEB5A4)
         /// Placeholders, non-essential metadata.
         let text3 = Brand.dynamic(light: 0xAEB5A4, dark: 0x818979)
         /// Primary action, selection, links, active icons (olive / mid). Text on it: `onAccent`.

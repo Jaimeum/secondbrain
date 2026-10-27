@@ -16,9 +16,21 @@ están en `docs/CONTRACT.md` §15. Este archivo explica dónde vive cada cosa en
 | Movimiento | `05_motion/secondbrain_motion_spec_ES.md` + storyboard | `LaunchOverlay` (A), `BrandLoader` (B), `.brandPulse()` (C); D queda pendiente |
 | Mockups de UI | guía pág. 10–11 | referencia de Inicio (búsqueda, Recientes, Conexiones) |
 
+Valores que el código ajustó respecto del kit (documentados en `docs/CONTRACT.md` §15.1):
+
+| token | claro | oscuro | por qué |
+|---|---|---|---|
+| `text2` | `#5F665D` | `#AEB5A4` | el `#6F766D` original daba ~4.1:1 sobre `bg`; `#5F665D` da ≥ 4.5:1 sobre `bg`, `surface` y `cardAlt` (AA) |
+| `onRecord` | `#FFFFFF` | `#202721` | texto y punto sobre `record` (Grabar / Detener); en oscuro el blanco sobre `#D27A66` daba ~3.1:1. Nunca `onAccent` sobre `record` |
+
 Reglas rápidas:
 1. Ningún color fuera de `Brand` (Swift) o de las variables `:root` (CSS). Nada de `.red`, `.blue`, `accentColor`, hex sueltos.
 2. Ningún emoji como ícono de interfaz; SF Symbols en peso regular. El emoji del proyecto es dato del usuario.
 3. Un solo rojo, apagado (`Brand.color.record`), y solo para grabar/en curso.
 4. Movimiento calmado: fades y ease-out de 160–240 ms; respetar *Reducir movimiento*.
 5. Antes de cambiar la marca, actualiza este kit y `docs/CONTRACT.md` §15; luego el código.
+6. Para verificar que una pantalla cumple la marca, regenera las capturas y revísalas en claro y oscuro:
+   `SB_SNAPSHOT_DIR=<carpeta> SecondBrain` (una PNG por vista, luego sale) y con `SB_SNAPSHOT_WINDOW=1` la ventana
+   completa (`window-<vista>-<1100|min>-<light|dark>.png`; `min` = 920×620). `SB_SNAPSHOT_ONLY=<prefijo>` limita las
+   vistas; `SB_DEMO_ACCOUNTS=1` y `SB_DEMO_GITHUB=1` llenan con datos de ejemplo. Ejecuta el binario de
+   `swift build` (`app/.build/debug/SecondBrain`) con una `config.json` de prueba (`SB_CONFIG=<ruta>`), nunca la tuya.

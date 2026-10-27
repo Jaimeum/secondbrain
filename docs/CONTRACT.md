@@ -1521,13 +1521,14 @@ hex sueltos o `rgba` fuera de `Brand`/los `:root` de CSS. Los valores claro / os
 | `cardAlt` | arena `#E9E0D4` | `#2A322A` | chips, pills, fondos de resaltado suaves |
 | `line` | `#DAD3C9` | `rgba(255,255,255,0.10)` | divisores, bordes 1 px |
 | `text` | tinta `#232B25` | marfil `#F5F0E8` | texto principal |
-| `text2` | `#6F766D` | mid `#AEB5A4` | texto secundario (WCAG AA sobre bg y surface) |
+| `text2` | `#5F665D` | mid `#AEB5A4` | texto secundario (WCAG AA sobre bg, surface y cardAlt; antes `#6F766D`, no llegaba a 4.5:1 sobre bg) |
 | `text3` | mid `#AEB5A4` | salvia `#818979` | placeholders, metadatos no esenciales |
 | `accent` | olivo `#475243` | mid `#AEB5A4` | acción primaria, selección, links, íconos activos; texto sobre él: `onAccent` |
 | `onAccent` | marfil `#F5F0E8` | tinta `#232B25` | texto sobre `accent` |
 | `accentSoft` | olivo 10 % | mid 14 % | fondo de fila seleccionada, chip activo, callout |
 | `sage` | `#818979` | `#818979` | gradientes, decoración, avatar |
 | `record` | `#B4533E` | `#D27A66` | grabar / detener / en curso (rojo **apagado**, único rojo de la app) |
+| `onRecord` | blanco `#FFFFFF` | tinta `#202721` | texto y punto sobre `record` (blanco sobre `#D27A66` da ~3.1:1) |
 | `warning` | `#9A7B2E` | `#D2B15C` | avisos, vencido hoy, reconectar |
 | `danger` | `#A3473A` | `#D27A66` | errores, eliminar (texto o icono, nunca fondos saturados) |
 | `success` | olivo `#475243` | mid `#AEB5A4` | listo, ✓ (mismo que accent: éxito = calma) |
@@ -1575,13 +1576,14 @@ funden en una con un conmutador. Lo que se configura una vez vive en Ajustes.
 **Barra lateral** (`SidebarItem`): `home` (Inicio, ⌘1, selección por defecto) · `meetings` (Reuniones, ⌘2) · `mail`
 (Correo, ⌘3) · `tasks` (Pendientes, ⌘4; antes `myTasks` "Mis pendientes") · `people` (Personas, ⌘5) · sección
 **Proyectos** (`project(slug)`, `+ Nuevo proyecto`). Desaparecen `brain`, `inbox`, `templates` como ítems (los `case`
-se conservan un release como alias: `.brain`→`.home`, `.inbox`→`.home`, `.templates`→ abre Ajustes › Formatos;
+se conservan un release como alias: `.brain`→`.home`, `.inbox`→`.home` + `homeRoute = .inbox` (Inicio › Sin asignar), `.templates`→ abre Ajustes › Formatos;
 `AppState.selection` los normaliza al asignarse). Cabecera del sidebar: símbolo 20 pt + wordmark, y debajo un botón
 de búsqueda "Buscar o preguntar… ⌘K" (`safeAreaInset(.top)`). Fila de proyecto: menú contextual *Editar proyecto…*
 (nombre, emoji, descripción → `ProjectManager.update`) · *Agregar correo…*. Se elimina el `contextMenu` de la lista.
 Pie del sidebar (≤ 96 pt): **un solo control de grabación** (`RecordControl`): con reunión en curso/próxima
 (§12.7) es una tarjeta `record`-soft con "● Grabar «Kickoff…» · empezó hace 3 min" y un link pequeño "o grabar otra
-cosa"; sin reunión, un botón primario "Grabar"; grabando, "Detener 12:04" en `record`. Debajo, una línea de estado
+cosa"; sin reunión, un botón primario "Grabar"; grabando, "Detener 12:04" en `record`. El texto y el punto de todo botón
+sobre fondo `record` (Grabar, Detener) usan `onRecord` (claro: blanco; oscuro: tinta), nunca `onAccent`. Debajo, una línea de estado
 (`QueueStatusLine`) con `BrandLoader` y el texto **"Procesando 2…"** / "Transcribiendo… 42 %" (nunca "pendientes",
 que es la palabra de las tareas). El spinner por proyecto en la fila se mantiene (`BrandLoader` 12 pt).
 `navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)`.
@@ -1626,7 +1628,8 @@ semana"). "Anteriores" = fuentes `.meeting` con `status == .done` (y en proceso)
 proyecto y "Ver resumen" (`engine.pagePath(for:)`); funciona sin calendario. El héroe "SIGUIENTE" solo si la reunión
 es hoy o mañana. El panel de detalle pierde su botón de grabar cuando el evento seleccionado es el héroe (un solo
 "Grabar" visible además del pie del sidebar). Por debajo de 700 pt de detalle, lista y detalle pasan a una columna
-(push). Cambiar de segmento limpia la selección si el evento no está en la lista.
+(push). Cambiar de segmento limpia la selección si el evento no está en la lista. *Reglas…* vive en el menú ⋯ de la
+barra de herramientas (se quita el botón "Reglas…" de la barra; corrige §14.4).
 
 **Correo**: lista + lector como hoy. Cabecera de la lista = selector de cuenta (solo si hay > 1) + búsqueda; se
 elimina el filtro "Conocidos / Todos" y la leyenda "Recibidos · últimos 30 días" (va al subtítulo de ventana). Un solo
@@ -1634,11 +1637,12 @@ mensaje flotante a la vez: el toast "Aprendiendo del correo… · Deshacer" (6 s
 **después**, dentro de la barra de acción del lector, no flotando. Botón inteligente: "Guardar en 🚀 Kickoff ▾"
 (`mail.addTo` cambia de "Agregar a" a "Guardar en"; con 📥 fuera: "Guardar sin proyecto ▾"). Tras guardar: chip
 "✓ Guardado · Ver en el proyecto" como botón visible. Los errores de "Cargar más" se muestran en la lista. Anchos
-mínimos: lista 260, lector 320; el botón de acción nunca `fixedSize`.
+mínimos: lista 260, lector 320; el botón de acción nunca `fixedSize`. *Reglas…* vive en el menú ⋯ de la barra de
+herramientas, como en Reuniones (sin botón propio en la barra).
 
 **Pendientes** (sidebar) y pestaña Pendientes del proyecto = **una vista** `TasksView(scope:)` (`.all` / `.project`):
-secciones Míos · De otros · Sin dueño · Hechos como segmentos cortos; filtro de origen como menú ("Origen ▾") y
-Exportar en la barra de herramientas; con `.all`, chip de proyecto en cada fila. Chips de origen muestran el **título**
+secciones Míos · De otros · Sin dueño · Hechos como segmentos cortos. Barra de herramientas: los segmentos a la
+izquierda; el filtro de origen (menú "Origen ▾") y Exportar a la derecha; con `.all`, chip de proyecto en cada fila. Chips de origen muestran el **título**
 de la reunión/correo (resuelto vía `vault.title(of:)` / `resolveWikilinksAsync`), nunca el slug; si no se resuelve,
 "Reunión · 26 oct". Clic en la fila abre la fuente (hoja de vista previa `VaultPageSheet`, sin perder la lista). Los
 chips viven en un `FlowLayout` que envuelve.
@@ -1657,7 +1661,8 @@ por defecto ▸ · Repositorios… (hoja con `ReposView`, §13.6 por dentro) · 
 destino de drop. Cabecera de página: título + botones icon-only con `.help` (grafo, exportar, Finder) que se
 pliegan en ⋯ por debajo de 560 pt. Los filtros de tipo de la línea de tiempo son chips neutros (activo = `accentSoft`),
 con "Hoy" para volver; el anclaje de scroll apunta al encabezado del mes (ya no se esconde la primera fila). La pestaña
-"Código" desaparece (§13.6 queda vigente para el contenido de `ReposView` y `AddRepoSheet`). `navigationSubtitle`
+"Código" desaparece, reemplazada por la hoja **Repositorios…** del menú ⋯ (§13.6 queda vigente, sin cambios, para el
+contenido de `ReposView` y `AddRepoSheet`). `navigationSubtitle`
 solo muestra una línea corta o nada.
 
 **Ajustes** = `TabView`: General · Cuentas · GitHub · Reglas · Formatos · Avanzado (almacenamiento, transcripción,

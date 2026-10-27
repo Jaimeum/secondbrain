@@ -224,20 +224,44 @@ final class MeetingsModel {
 
     /// Meeting entries of the vault timeline (all projects), read off the main actor; nil until the first read.
     private(set) var timelineMeetings: [TimelineEntry]?
+    /// My open tasks per citation key (lowercased meeting page / raw file name, as `tasks.md` cites them): the
+    /// "Mis pendientes (n)" chip of Anteriores. Read with the timeline, from the same one parse of every `tasks.md`.
+    private(set) var myOpenTasksByKey: [String: Int] = [:]
     @ObservationIgnored private var pastTask: Task<Void, Never>?
-    @ObservationIgnored private var pastKey: Int?
+    @ObservationIgnored private var pastKey: String?
 
-    /// Reads the timeline once per vault revision (the Anteriores segment calls it on appear and on vault changes).
+    /// Reads the timeline and the tasks once per vault / tasks revision (the Anteriores segment calls it on appear and
+    /// on vault or task changes).
     func loadPast(state: AppState) {
-        guard state.engineStarted, pastKey != state.vaultRevision || timelineMeetings == nil else { return }
-        pastKey = state.vaultRevision
+        let key = "\(state.vaultRevision)|\(state.tasksRevision)"
+        guard state.engineStarted, pastKey != key || timelineMeetings == nil else { return }
+        pastKey = key
         pastTask?.cancel()
         let engine = state.engine
         pastTask = Task { [weak self] in
-            let entries = await engine.timeline(projectSlug: nil).filter { $0.kind == .meeting }
+            async let timeline = engine.timeline(projectSlug: nil)
+            async let tasks = engine.tasks(projectSlug: nil)
+            let entries = await timeline.filter { $0.kind == .meeting }
+            var counts: [String: Int] = [:]
+            for task in await tasks where task.isMine && !task.done {
+                for k in Set(task.sourceKeys.map { $0.lowercased() }) { counts[k, default: 0] += 1 }
+            }
             guard let self, !Task.isCancelled else { return }
             if entries != self.timelineMeetings { self.timelineMeetings = entries }
+            if counts != self.myOpenTasksByKey { self.myOpenTasksByKey = counts }
         }
+    }
+
+    /// "Mis pendientes (n)" of an Anteriores row: my open tasks citing its meeting (0 = no chip). A meeting page is
+    /// named after its raw file (`wiki/meetings/<raw key>.md`), so one key covers both.
+    func myOpenTaskCount(_ item: PastMeetingItem) -> Int {
+        let path: String?
+        switch item {
+        case .source(let s, _): path = s.rawPath
+        case .page(let e): path = e.pagePath
+        }
+        guard let path else { return 0 }
+        return myOpenTasksByKey[((path as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()] ?? 0
     }
 
     /// "Anteriores" (§15.2): the meetings the brain learned, newest first. Recordings come live from the sources (their

@@ -551,6 +551,11 @@ struct PastMeetingRow: View {
                 }
                 HStack(spacing: 6) {
                     BrandChip(text: state.projectName(projectSlug), symbol: projectSlug == nil ? "tray" : nil)
+                    let mine = MeetingsModel.shared.myOpenTaskCount(item)
+                    if mine > 0 {
+                        BrandChip(text: L("meetings.past.myTasks", mine), symbol: "checklist")
+                            .help(L("meetings.past.myTasksHelp"))
+                    }
                     if let source, source.status.isInProgress || source.status == .needsProject {
                         StatusPill(status: source.status, progress: source.progress)
                     }

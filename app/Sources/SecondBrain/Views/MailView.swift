@@ -44,11 +44,12 @@ struct MailView: View {
         .navigationTitle(L("mail.title"))
         .navigationSubtitle(model.query.isEmpty ? L("mail.subtitle") : L("mail.results", model.query))
         .toolbar {
-            ToolbarItem { RulesToolbarButton(mail: model.messages) }   // MARK: v0.4 rules
             ToolbarItem {
                 Button { state.requestEmail() } label: { Label(L("mail.paste"), systemImage: "doc.on.clipboard") }
                     .help(L("mail.paste"))
             }
+            // §14.4 + §15.2: "Reglas…" lives in the ⋯ menu (same place in Correo and Reuniones), not as a bar button.
+            ToolbarItem { ToolbarMoreMenu(mail: model.messages) }
         }
         .task(id: hasMailAccounts) {
             guard hasMailAccounts else { return }
@@ -107,6 +108,29 @@ struct MailView: View {
             MailListPane(model: model) { narrowShowsDetail = true }
                 .transition(.opacity)
         }
+    }
+}
+
+// MARK: - Toolbar ⋯
+
+/// The ⋯ menu of the Correo and Reuniones toolbars (§14.4 updated by §15.2): "Reglas…" opens the rules sheet in place.
+/// `mail` feeds the sheet's "Probar" with the messages already loaded (Reuniones passes none).
+struct ToolbarMoreMenu: View {
+    var mail: [MailMessageSummary] = []
+    @ViewState private var showsRules = false
+
+    var body: some View {
+        Menu {
+            Button { showsRules = true } label: {
+                Label(L("rules.button"), systemImage: "arrow.triangle.branch")
+            }
+            .help(L("rules.buttonHelp"))
+        } label: {
+            Label(L("project.more"), systemImage: "ellipsis.circle")
+        }
+        .menuIndicator(.hidden)
+        .help(L("project.more"))
+        .sheet(isPresented: $showsRules) { RulesSheet(mail: mail) }
     }
 }
 

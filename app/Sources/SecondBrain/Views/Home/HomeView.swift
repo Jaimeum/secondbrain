@@ -24,6 +24,14 @@ struct HomeView: View {
     @ViewState private var timelineLoaded = false
     /// A page cited by an answer, shown over Inicio so the answer stays where it was.
     @ViewState private var citedPage: VaultPageItem?
+    /// A task's meeting or email, read over Inicio (Pendientes para hoy never leaves Inicio).
+    @ViewState private var taskPreview: PagePreviewItem?
+    /// The task just checked in Pendientes para hoy: "Hecho · Deshacer" for `undoSeconds`.
+    @ViewState private var undoTask: TaskItem?
+    /// Bumped on every check, so a newer one restarts the countdown.
+    @ViewState private var undoGeneration = 0
+
+    static let undoSeconds = 6
 
     static let maxWidth: CGFloat = 880
     /// Below this content width the grids collapse to one column.
@@ -57,12 +65,16 @@ struct HomeView: View {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    /// My open tasks (as loaded; a box ticked here stays until the next reload).
+    /// My open tasks (the count of "Ver todos").
     private var myOpen: [TaskItem] { tasks.tasks.filter { $0.isMine && !$0.done } }
+
+    /// My tasks as listed: a box just ticked stays in place, struck through, for a few seconds (TaskListModel's
+    /// sticky state), so a mis-click is seen and can be undone right there.
+    private var myListed: [TaskItem] { tasks.tasks.filter { $0.isMine && !tasks.listedDone($0) } }
 
     /// Overdue, today or tomorrow.
     private var dueSoon: [TaskItem] {
-        myOpen.filter { task in task.due.map { Fmt.daysFromToday($0) <= 1 } ?? false }
+        myListed.filter { task in task.due.map { Fmt.daysFromToday($0) <= 1 } ?? false }
             .sorted(by: TaskSort.byDue)
     }
 
@@ -110,7 +122,7 @@ struct HomeView: View {
                     emptyState
                 } else {
                     if !toSort.isEmpty { toSortSection.transition(.opacity) }
-                    if tasks.loaded, !myOpen.isEmpty { tasksSection.transition(.opacity) }
+                    if tasks.loaded, !myListed.isEmpty { tasksSection.transition(.opacity) }
                     if !recents.isEmpty { recentSection.transition(.opacity) }
                     connectionsSection
                 }
@@ -144,15 +156,26 @@ struct HomeView: View {
         } isTargeted: { dropTargeted = $0 }
         .overlay { if dropTargeted { dropOverlay } }
         .safeAreaInset(edge: .bottom) {
-            if ruleOffer.current != nil {
-                RuleOfferBar(offer: ruleOffer)
-                    .frame(maxWidth: Self.maxWidth)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-                    .transition(.opacity)
+            VStack(spacing: 8) {
+                if let task = undoTask { undoLine(task).transition(.opacity) }
+                if ruleOffer.current != nil {
+                    RuleOfferBar(offer: ruleOffer)
+                        .frame(maxWidth: Self.maxWidth)
+                        .padding(.horizontal, 16)
+                        .transition(.opacity)
+                }
             }
+            .padding(.bottom, undoTask != nil || ruleOffer.current != nil ? 12 : 0)
         }
         .animation(Brand.motion.animation(fast: true), value: ruleOffer.current)
+        .animation(Brand.motion.animation(fast: true), value: undoTask?.id)
+        .sheet(item: $taskPreview) { PagePreviewSheet(path: $0.path) }
+        .task(id: undoGeneration) {
+            guard undoTask != nil else { return }
+            try? await Task.sleep(for: .seconds(Self.undoSeconds))
+            guard !Task.isCancelled else { return }
+            undoTask = nil
+        }
         .task {
             if !MeetingsModel.shared.isRunning, state.engineStarted { MeetingsModel.shared.start(state: state) }
         }
@@ -275,8 +298,8 @@ struct HomeView: View {
                         ForEach(Array(soon.prefix(5).enumerated()), id: \.element.id) { offset, task in
                             if offset > 0 { HomeDivider() }
                             TaskRow(task: task, done: tasks.isDone(task), showOwner: false, showProject: true,
-                                    onToggle: { tasks.toggle(task, state: state) },
-                                    onOpen: { state.open(path: $0) })
+                                    onToggle: { toggle(task) },
+                                    onOpen: { taskPreview = PagePreviewItem(path: $0) })
                                 .frame(minHeight: 36)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 4)
@@ -285,6 +308,29 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    /// "Hecho · Deshacer" (the same line as Pendientes), over the bottom of Inicio.
+    private func undoLine(_ task: TaskItem) -> some View {
+        HStack(spacing: Brand.spacing.s) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.color.success)
+            Text(L("tasks.doneToast"))
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(1)
+            Text(verbatim: "·").foregroundStyle(Brand.color.text2)
+            Button(L("tasks.undo")) { undo(task) }
+                .buttonStyle(.plain)
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.accent)
+                .fixedSize()
+        }
+        .padding(.horizontal, Brand.spacing.m)
+        .padding(.vertical, 8)
+        .background(Capsule().fill(Brand.color.card))
+        .overlay(Capsule().strokeBorder(Brand.color.line))
+        .shadow(color: Brand.color.shadow, radius: 12, y: 4)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: Recientes
@@ -433,6 +479,34 @@ struct HomeView: View {
     }
 
     // MARK: Actions
+
+    /// A checkbox in Pendientes para hoy: checking shows "Hecho · Deshacer" for 6 s; unchecking hides it.
+    private func toggle(_ task: TaskItem) {
+        let wasDone = tasks.isDone(task)
+        withAnimation(Brand.motion.fast) { tasks.toggle(task, state: state) }
+        if let failure = tasks.error {
+            tasks.error = nil
+            error = failure
+            return
+        }
+        if !wasDone {
+            undoTask = task
+            undoGeneration += 1
+        } else if undoTask?.id == task.id {
+            undoTask = nil
+        }
+    }
+
+    /// "Deshacer": the same toggle, back to open.
+    private func undo(_ task: TaskItem) {
+        undoTask = nil
+        guard tasks.isDone(task) else { return }
+        withAnimation(Brand.motion.fast) { tasks.toggle(task, state: state) }
+        if let failure = tasks.error {
+            tasks.error = nil
+            error = failure
+        }
+    }
 
     private func loadTimeline() async {
         guard state.engineStarted else { return }

@@ -1406,3 +1406,7 @@
 "search.hint.askShort" = "preguntar";
 "search.hint.askProject" = "preguntar a %@";
 "home.lastQuestion" = "Tu última pregunta: «%@»";
+
+/* v0.5 — finish */
+"meetings.past.myTasks" = "Mis pendientes (%ld)";
+"meetings.past.myTasksHelp" = "Tareas tuyas de esta reunión que siguen abiertas";

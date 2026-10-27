@@ -32,7 +32,6 @@ struct ProjectView: View {
     @ViewState private var tab: ProjectTab
     @ViewState private var page: String?
     @ViewState private var graphFocus: String?
-    @ViewState private var chat = ChatModel()
     @ViewState private var sheet: ProjectSheet?
     @ViewState private var error: String?
 
@@ -97,7 +96,8 @@ struct ProjectView: View {
         case .tasks:
             ProjectTasksView(project: project, onOpen: openPage)
         case .ask:
-            ChatView(model: chat, projectSlug: project.slug, onOpenPage: openPage)
+            // Owned by AppState, so the conversation survives leaving the project and coming back.
+            ChatView(model: state.projectChat(for: project.slug), projectSlug: project.slug, onOpenPage: openPage)
         case .graph:
             GraphView(scope: .project(project.slug), focus: graphFocus, onOpen: openPage)
         }

@@ -2,27 +2,32 @@ import BrainCore
 import Foundation
 import Observation
 
-/// "Hoy · Esta semana · Próximas" (CONTRACT §12.5).
+/// "Hoy · Próximas · Anteriores" (CONTRACT §15.2). Hoy = today's events; Próximas = from tomorrow to the horizon,
+/// grouped by day; Anteriores = recorded meetings (sources), which need no calendar.
 enum MeetingSegment: Hashable, CaseIterable {
-    case today, week, upcoming
+    case today, upcoming, past
+
+    /// v0.3 name of the week view, kept so older call sites compile: it is `upcoming` now.
+    static let week = MeetingSegment.upcoming
 
     var title: String {
         switch self {
         case .today: L("meetings.today")
-        case .week: L("meetings.week")
         case .upcoming: L("meetings.upcoming")
+        case .past: L("meetings.segment.past")
         }
     }
 
+    /// Whether a calendar event is listed in this segment (`past` lists sources, never calendar events).
     func contains(_ event: CalendarEvent, now: Date, calendar: Calendar = .current) -> Bool {
         let today = calendar.startOfDay(for: now)
-        let days = switch self {
-        case .today: 1
-        case .week: 7
-        case .upcoming: MeetingsModel.horizonDays + 1
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
+              let limit = calendar.date(byAdding: .day, value: MeetingsModel.horizonDays + 1, to: today) else { return false }
+        switch self {
+        case .today: return event.start < tomorrow && event.end > today
+        case .upcoming: return event.start >= tomorrow && event.start < limit
+        case .past: return false
         }
-        guard let limit = calendar.date(byAdding: .day, value: days, to: today) else { return false }
-        return event.start < limit && event.end > today
     }
 }
 
@@ -164,10 +169,12 @@ final class MeetingsModel {
     func days(in segment: MeetingSegment, now: Date) -> [(day: Date, events: [CalendarEvent])] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: now)
+        // Próximas starts tomorrow; events that began before the first listed day go under it.
+        let first = segment == .upcoming ? (cal.date(byAdding: .day, value: 1, to: today) ?? today) : today
         var order: [Date] = []
         var groups: [Date: [CalendarEvent]] = [:]
         for event in events(in: segment, now: now) {
-            let day = max(cal.startOfDay(for: event.start), today)
+            let day = max(cal.startOfDay(for: event.start), first)
             if groups[day] == nil { order.append(day) }
             groups[day, default: []].append(event)
         }
@@ -179,11 +186,26 @@ final class MeetingsModel {
         return events.first { $0.matches(id) }
     }
 
-    /// "Ahora" (in its record window) or else "Siguiente".
+    /// "Ahora" (in its record window) or else "Siguiente", the latter only when it is today or tomorrow (§15.2).
     func hero(now: Date) -> (event: CalendarEvent, isNow: Bool)? {
         if let live = MeetingAgenda.current(in: events, now: now) { return (live, true) }
-        if let next = MeetingAgenda.next(in: events, now: now) { return (next, false) }
+        if let next = MeetingAgenda.next(in: events, now: now), (0...1).contains(Self.dayOffset(of: next.start, from: now)) {
+            return (next, false)
+        }
         return nil
+    }
+
+    /// Calendar days from `now`'s day to `date`'s day (0 = same day).
+    static func dayOffset(of date: Date, from now: Date, calendar: Calendar = .current) -> Int {
+        calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day ?? 0
+    }
+
+    /// "Anteriores": recorded meetings, done or still being processed (failed ones too, to retry), newest first.
+    /// Works without any calendar.
+    func pastMeetings(state: AppState) -> [SourceRecord] {
+        state.engine.sources
+            .filter { $0.kind == .meeting && $0.status != .recording }
+            .sorted { $0.timelineDate > $1.timelineDate }
     }
 
     func phase(of event: CalendarEvent, state: AppState, now: Date) -> MeetingPhase {

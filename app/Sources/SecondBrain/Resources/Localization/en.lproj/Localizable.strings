@@ -1299,3 +1299,14 @@
 "chat.step.thinking" = "Connecting ideas…";
 "chat.send" = "Ask (⌘↩)";
 "timeline.someKinds" = "%ld kinds";
+
+/* v0.5 — meetings */
+"meetings.role.organizer" = "Organizer";
+"meetings.role.you" = "You";
+"meetings.restOfToday" = "Rest of today";
+"meetings.nothingToday" = "No meetings today";
+"meetings.seeUpcoming" = "See upcoming";
+"meetings.past.empty.title" = "No recorded meetings yet";
+"meetings.past.empty.message" = "When you record a meeting, its summary shows up here.";
+"prep.eyebrow" = "Prep";
+"prep.briefing" = "What I prepared";

@@ -1,47 +1,22 @@
 # Pendientes
 
-## 0. Registrar SecondBrain en GitHub (OAuth App con Device Flow)
+## 0. ~~Registrar SecondBrain en GitHub (OAuth App con Device Flow)~~ ✅ Hecho (2026-10-27)
 
-Sin esto el botón "Conectar GitHub" por código de dispositivo no funciona; **"Usar mi sesión de GitHub CLI" y pegar un token siguen funcionando**.
-
-1. https://github.com/settings/developers → **OAuth Apps** → **New OAuth App**.
-2. Application name `SecondBrain`, Homepage URL `https://github.com/Jaimeum/secondbrain`, Authorization callback URL `http://127.0.0.1`.
-3. **Register application**.
-4. Marcar **Enable Device Flow** → **Update application**.
-5. Copiar el **Client ID** (no hace falta el client secret).
-
-Dónde va (no se mete en el código):
-
-```bash
-echo "<Client ID>" > secrets/github-client-id.txt   # carpeta ignorada por git
-scripts/release.sh <versión>      # build-app.sh lo inyecta en oauth-defaults.json como githubClientId
-```
-
-Para probar sin compilar: `SB_GITHUB_CLIENT_ID=<id>`.
+OAuth App `SecondBrain` creada con Device Flow activado. Client ID en `secrets/github-client-id.txt` (ignorado por git);
+`build-app.sh` lo inyecta en `oauth-defaults.json` como `githubClientId`. Para probar sin compilar: `SB_GITHUB_CLIENT_ID=<id>`.
 
 Nota para organizaciones: si la organización tiene la **Third-party access policy** (restricción de OAuth Apps), un owner debe aprobar SecondBrain en Settings → Third-party Access → OAuth app policy. Si usa SAML SSO, hay que **Authorize** el token/la app para esa organización.
 
-## 1. Registrar SecondBrain en Microsoft (para "Conectar Microsoft 365")
+## 1. ~~Registrar SecondBrain en Microsoft (para "Conectar Microsoft 365")~~ ✅ Hecho (2026-10-27)
 
-Hoy el botón muestra "SecondBrain aún no está registrada en Microsoft 365" porque falta este trámite (10 min, gratis):
+App `SecondBrain` registrada en Entra (directorio personal "Default Directory"; una cuenta personal de Microsoft no puede
+registrar apps sin directorio). Multiinquilino + cuentas personales, redirect `http://localhost` (cliente público), "Allow
+public client flows" activado, permisos **Delegated** de Graph: `User.Read`, `Mail.Read`, `Calendars.Read`, `offline_access`
+(ningún permiso de tipo Application). Client ID en `secrets/microsoft-client-id.txt` (ignorado por git); `build-app.sh` lo
+inyecta como `microsoftClientId`. Para probar sin compilar: `SB_MS_CLIENT_ID=<id>`.
 
-1. https://entra.microsoft.com → Identidad → Aplicaciones → **Registros de aplicaciones** → **Nuevo registro**.
-2. Nombre `SecondBrain`. Tipos de cuenta: **"Cuentas en cualquier directorio organizativo (multiinquilino) y cuentas personales de Microsoft"**.
-3. URI de redirección: plataforma **"Aplicaciones móviles y de escritorio"**, valor `http://localhost`. Registrar.
-4. **Autenticación** → Configuración avanzada → "Permitir flujos de cliente público": **Sí** → Guardar.
-5. **Permisos de API** → Agregar → Microsoft Graph → Permisos delegados: `User.Read`, `Mail.Read`, `Calendars.Read`, `offline_access`.
-6. **Información general** → copiar el **Id. de aplicación (cliente)**.
-
-Dónde va (no se mete en el código):
-
-```bash
-echo "<Id. de aplicación (cliente)>" > secrets/microsoft-client-id.txt   # carpeta ignorada por git
-scripts/release.sh 0.3.2      # build-app.sh lo inyecta en SecondBrain.app/Contents/Resources/oauth-defaults.json
-```
-
-Para probar sin publicar: Ajustes → Cuentas → Avanzado, o `SB_MS_CLIENT_ID=<id>` al lanzar la app.
-
-Opcional después: verificación de editor (Partner Center) para que menos organizaciones bloqueen la app por defecto.
+- [ ] Probar "Conectar Microsoft 365" en vivo (cuenta personal y de trabajo) con la app compilada.
+- Opcional: verificación de editor (Partner Center) para que menos organizaciones bloqueen la app por defecto.
 
 ## 2. Google: salir del modo "En pruebas"
 

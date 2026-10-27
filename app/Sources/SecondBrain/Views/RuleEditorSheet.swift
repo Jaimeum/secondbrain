@@ -47,30 +47,38 @@ struct RuleEditorSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(isNew ? L("rules.editor.newTitle") : L("rules.editor.editTitle")).font(.title3.weight(.semibold))
-                        Text(L("rules.editor.subtitle")).font(.callout).foregroundStyle(.secondary)
+                        Text(isNew ? L("rules.editor.newTitle") : L("rules.editor.editTitle"))
+                            .font(Brand.title)
+                            .foregroundStyle(Brand.color.text)
+                        Text(L("rules.editor.subtitle")).foregroundStyle(Brand.color.text2)
                     }
                     sentence
                     options
                     tester
                 }
-                .padding(20)
+                .padding(Brand.spacing.contentWide)
             }
-            Divider()
-            HStack {
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            HStack(spacing: 8) {
                 if let error {
-                    Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange).lineLimit(2)
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.danger)
+                        .lineLimit(2)
                 }
                 Spacer()
                 Button(L("common.cancel")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
                     .keyboardShortcut(.cancelAction)
                 Button(L("rules.editor.save")) { save() }
+                    .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(showIssues && !isValid)
             }
             .padding(12)
         }
-        .frame(width: 620, height: 600)
+        .frame(minWidth: 580, idealWidth: 620, minHeight: 440, idealHeight: 520)
+        .background(Brand.color.surface)
         .onAppear {
             if draft.conditions.isEmpty { draft.conditions = [RuleCondition(field: .senderEmail, op: .is, value: "")] }
             if testOnAppear { runTest() } else if isNew { focused = 0 }
@@ -86,8 +94,12 @@ struct RuleEditorSheet: View {
 
     // MARK: Sentence
 
+    /// Width of the "Cuando" / "y" / "mandar a" column; the value field and hints line up after it.
+    private static let labelWidth: CGFloat = 76
+    private static let indent: CGFloat = labelWidth + 8
+
     private var sentence: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             ForEach(Array(draft.conditions.indices), id: \.self) { i in
                 conditionRow(i)
             }
@@ -97,11 +109,12 @@ struct RuleEditorSheet: View {
             } label: {
                 Label(L("rules.editor.and"), systemImage: "plus")
             }
-            .buttonStyle(.link)
-            .padding(.leading, 100)
+            .buttonStyle(.settingsLink)
+            .padding(.leading, Self.indent)
             HStack(spacing: 8) {
                 Text(L("rules.editor.sendTo"))
-                    .frame(width: 92, alignment: .trailing)
+                    .foregroundStyle(Brand.color.text2)
+                    .frame(width: Self.labelWidth, alignment: .trailing)
                 Picker("", selection: projectBinding) {
                     ForEach(state.projects) { p in Text("\(p.emoji) \(p.name)").tag(p.slug) }
                     if !state.projects.isEmpty { Divider() }
@@ -109,21 +122,25 @@ struct RuleEditorSheet: View {
                     if let slug = draft.projectSlug, state.project(slug) == nil { Text(slug).tag(slug) }
                 }
                 .labelsHidden()
-                .fixedSize()
-                Spacer()
+                .frame(maxWidth: 280, alignment: .leading)
+                Spacer(minLength: 0)
             }
         }
         .padding(14)
-        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
     }
 
+    /// «Cuando [campo ▾] [operador ▾]» on one line, the value on its own full-width line under it (so an address
+    /// like carlos.ruiz@contoso.com always fits), then the hint.
     private func conditionRow(_ i: Int) -> some View {
         let c = draft.conditions.indices.contains(i) ? draft.conditions[i] : RuleCondition(field: .subject, op: .contains, value: "")
         let issue = RuleValidation.issue(c)
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(i == 0 ? L("rules.editor.when") : L("rules.editor.andAlso"))
-                    .frame(width: 92, alignment: .trailing)
+                    .foregroundStyle(Brand.color.text2)
+                    .frame(width: Self.labelWidth, alignment: .trailing)
                 Picker("", selection: fieldBinding(i)) {
                     Section(L("rules.editor.section.mail")) {
                         ForEach([RuleField.senderEmail, .senderDomain, .senderName, .recipient, .subject], id: \.self) {
@@ -140,36 +157,39 @@ struct RuleEditorSheet: View {
                     }
                 }
                 .labelsHidden()
-                .fixedSize()
+                .frame(maxWidth: 230, alignment: .leading)
                 Picker("", selection: opBinding(i)) {
                     ForEach(RuleOperator.allCases, id: \.self) { Text(Self.opLabel($0)).tag($0) }
                 }
                 .labelsHidden()
-                .fixedSize()
-                TextField(Self.placeholder(c.field, c.op), text: valueBinding(i))
-                    .textFieldStyle(.roundedBorder)
-                    .focused($focused, equals: i)
-                    .onSubmit { save() }
+                .frame(maxWidth: 140, alignment: .leading)
+                Spacer(minLength: 0)
                 if draft.conditions.count > 1 {
                     Button {
                         draft.conditions.remove(at: i)
                     } label: {
-                        Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                        Image(systemName: "minus.circle").foregroundStyle(Brand.color.text2)
                     }
                     .buttonStyle(.borderless)
                     .help(L("rules.editor.removeCondition"))
                 }
             }
+            TextField(Self.placeholder(c.field, c.op), text: valueBinding(i))
+                .textFieldStyle(.roundedBorder)
+                .focused($focused, equals: i)
+                .onSubmit { save() }
+                .padding(.leading, Self.indent)
             Group {
                 if showIssues, let issue {
                     Text(issue == .empty ? L("rules.editor.issue.empty") : L("rules.editor.issue.spaces"))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Brand.color.warning)
                 } else {
-                    Text(Self.fieldHint(c.field)).foregroundStyle(.secondary)
+                    Text(Self.fieldHint(c.field)).foregroundStyle(Brand.color.text2)
                 }
             }
-            .font(.caption)
-            .padding(.leading, 100)
+            .font(Brand.caption)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, Self.indent)
         }
     }
 
@@ -178,22 +198,22 @@ struct RuleEditorSheet: View {
     private var options: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(L("rules.editor.name")).font(.callout.weight(.medium))
+                Text(L("rules.editor.name")).font(Brand.callout).foregroundStyle(Brand.color.text)
                 TextField(generatedName, text: $draft.name)
                     .textFieldStyle(.roundedBorder)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Toggle(L("rules.editor.autoAdd"), isOn: $draft.autoAddMail)
                 Text(L("rules.editor.autoAddHint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 20)
             }
             if duplicatesExisting {
                 Label(L("rules.editor.duplicate"), systemImage: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
             }
         }
     }
@@ -204,32 +224,37 @@ struct RuleEditorSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Button { runTest() } label: {
-                    Label(L("rules.editor.test"), systemImage: "play.circle")
+                    Label(L("rules.editor.test"), systemImage: "play")
                 }
+                .buttonStyle(.brandSecondary)
                 .disabled(!isValid || testing)
-                if testing { ProgressView().controlSize(.small) }
-                if let test { Text(Self.summary(test)).font(.callout.weight(.medium)) }
-                else if !testing { Text(L("rules.editor.testHint")).font(.caption).foregroundStyle(.secondary) }
+                if testing { BrandLoader(size: 16) }
+                if let test {
+                    Text(Self.summary(test)).font(Brand.callout).foregroundStyle(Brand.color.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if !testing {
+                    Text(L("rules.editor.testHint")).font(Brand.caption).foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if let test, !(test.mails.isEmpty && test.events.isEmpty) {
                 VStack(alignment: .leading, spacing: 5) {
                     ForEach(examples(test), id: \.id) { line in
                         HStack(spacing: 8) {
-                            Image(systemName: line.symbol).foregroundStyle(.secondary).frame(width: 16)
-                            Text(line.title).lineLimit(1)
-                            Text(line.detail).foregroundStyle(.secondary).lineLimit(1)
+                            Image(systemName: line.symbol).foregroundStyle(Brand.color.text3).frame(width: 16)
+                            Text(line.title).foregroundStyle(Brand.color.text).lineLimit(1)
+                            Text(line.detail).foregroundStyle(Brand.color.text2).lineLimit(1)
                             Spacer(minLength: 0)
                         }
-                        .font(.callout)
                     }
                     let more = test.mails.count + test.events.count - 5
                     if more > 0 {
-                        Text(L("rules.editor.testMore", more)).font(.caption).foregroundStyle(.secondary).padding(.leading, 24)
+                        Text(L("rules.editor.testMore", more)).font(Brand.caption).foregroundStyle(Brand.color.text2).padding(.leading, 24)
                     }
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
             }
         }
     }

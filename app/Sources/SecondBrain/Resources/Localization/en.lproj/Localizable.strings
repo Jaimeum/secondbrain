@@ -1333,3 +1333,30 @@
 "tasks.openSource" = "Open the meeting or email";
 "inbox.thinkingShort" = "Thinking…";
 "inbox.pick" = "Pick the project it belongs to.";
+
+/* v0.5 — settings */
+"settings.group.look" = "Language and appearance";
+"settings.group.you" = "You";
+"settings.group.recording" = "Recording";
+"settings.group.mailCalendar" = "Mail and calendar";
+"settings.group.models" = "Claude models";
+"settings.group.git" = "Git";
+"settings.group.oauth" = "Your own app registration (technical)";
+"settings.claude.connected" = "Connected";
+"settings.addAccount" = "Connect another account";
+"settings.disconnect.confirm" = "Disconnect %@?";
+"settings.disconnect.message" = "This Mac forgets the access. What's already in your brain stays.";
+"settings.ownerEmails.extraPlaceholder" = "Other addresses of yours, separated by commas";
+"settings.ownerEmails.hint" = "So I know which emails you sent. Your connected accounts already count.";
+"settings.github.orphanProject" = "Was in “%@”";
+"settings.github.tokenTitle" = "Use a personal token";
+"github.code.copyOpen" = "Copy and open GitHub";
+"github.failed.useToken" = "Paste a personal token";
+"accounts.notRegistered.plain" = "Connecting %@ isn't available in this version yet. Meanwhile you can keep going without it.";
+"accounts.notRegistered.technical" = "I'm technical: how to enable it";
+"orghelp.notRegistered.plain" = "%@ can't be connected from this version yet. Meanwhile, use the Mac calendar or paste your emails.";
+"claude.trouble" = "Trouble connecting?";
+"claude.details" = "Show details";
+"onb.you.title" = "You and your first project";
+"onb.models.downloading" = "Downloading the transcription model… %@";
+"settings.github.orgTokenDetail" = "Create a read-only fine-grained token for that organization and paste it in Settings → GitHub → Use a personal token. If the organization also approves tokens, you may have to wait for its OK.";

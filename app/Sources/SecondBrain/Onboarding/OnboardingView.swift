@@ -3,12 +3,17 @@ import BrainCore
 import Recorder
 import SwiftUI
 
+/// Six steps (CONTRACT §15.2): Bienvenida (consent + where the brain is saved) → Permisos → Claude → Tú y tu primer
+/// proyecto → Cuentas (optional) → Listo. The transcription model downloads in the background from the moment the
+/// welcome is accepted; its status shows on Listo (and in the sidebar footer afterwards).
 enum OnboardingStep: Int, CaseIterable {
-    case welcome, vault, permissions, claude, models, project, accounts, done   // v0.3: accounts (optional)
+    case welcome, permissions, claude, project, accounts, done
 
     /// The step survives a relaunch (macOS often needs one after granting Screen Recording), keyed by the
-    /// config file so an isolated `SB_CONFIG` doesn't resume someone else's setup.
-    private static var key: String { "onboarding.step|" + AppConfig.configURL.path }
+    /// config file so an isolated `SB_CONFIG` doesn't resume someone else's setup. ("step5": the v0.5 numbering; an
+    /// older saved step restarts at the welcome.)
+    private static var key: String { "onboarding.step5|" + AppConfig.configURL.path }
+    private static var legacyKey: String { "onboarding.step|" + AppConfig.configURL.path }
 
     static var saved: OnboardingStep {
         OnboardingStep(rawValue: UserDefaults.standard.integer(forKey: key)) ?? .welcome
@@ -18,6 +23,7 @@ enum OnboardingStep: Int, CaseIterable {
 
     static func clearSaved() {
         UserDefaults.standard.removeObject(forKey: key)
+        UserDefaults.standard.removeObject(forKey: legacyKey)
         UserDefaults.standard.removeObject(forKey: askedScreenKey)
     }
 
@@ -31,6 +37,7 @@ enum OnboardingStep: Int, CaseIterable {
 
 struct OnboardingView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewState private var step: OnboardingStep = .saved
     // Resuming past the welcome step means consent was already given before the relaunch.
     @ViewState private var consent = OnboardingStep.saved != .welcome
@@ -51,68 +58,83 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     content
                         .frame(maxWidth: 600, alignment: .leading)
-                        .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
-                                                removal: .opacity))
+                        .transition(.opacity)
                         .id(step)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 48)
-                .padding(.top, 56)
+                .padding(.top, 36)
                 .padding(.bottom, 24)
             }
             footer
         }
-        .background(.background)
-        .animation(.easeInOut(duration: 0.25), value: step)
+        .background(Brand.color.surface)
+        .animation(Brand.motion.animation(reduceMotion: reduceMotion), value: step)
         .onAppear {
             // Resumed after a relaunch on a step that needs the engine (projects, owner name).
             if step.rawValue >= OnboardingStep.project.rawValue { state.startEngine() }
+            if step != .welcome { Self.prepareModelsInBackground(state) }
         }
         .onChange(of: step) { step.save() }
     }
 
     @ViewBuilder private var content: some View {
         switch step {
-        case .welcome: WelcomeStep(consent: $consent)
-        case .vault: VaultStep()
+        case .welcome: WelcomeStep()
         case .permissions: PermissionsStep()
         case .claude:
             StepHeader(symbol: "sparkles", title: L("onb.claude.title"), message: L("onb.claude.message"))
             ClaudeConnectView().padding(.top, 24)
-        case .models: ModelsStep()
         case .project:
-            StepHeader(symbol: "folder.badge.plus", title: L("onb.project.title"), message: L("onb.project.message"))
-            OwnerNameField().padding(.top, 24)
-            OwnerEmailsField().padding(.top, 8)
-            ProjectFormFields(form: $form).padding(.top, 16)
-            if let projectError { Text(projectError).foregroundStyle(.red).padding(.top, 8) }
+            StepHeader(symbol: "folder.badge.plus", title: L("onb.you.title"), message: L("onb.project.message"))
+            VStack(alignment: .leading, spacing: 16) {
+                OwnerNameField()
+                OwnerAddressesField()
+                Rectangle().fill(Brand.color.line).frame(height: 1).padding(.vertical, 4)
+                ProjectFormFields(form: $form)
+                if let projectError { Text(projectError).foregroundStyle(Brand.color.danger) }
+            }
+            .padding(.top, 24)
         case .accounts: AccountsStep()
         case .done: DoneStep()
         }
     }
 
+    /// Pinned under the scroll view: on the welcome the consent card sits here, so it is never below the fold.
     private var footer: some View {
-        HStack {
-            if step != .welcome && step != .done {
-                Button(L("common.back")) { go(-1) }
+        VStack(spacing: 0) {
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            if step == .welcome {
+                ConsentCard(consent: $consent)
+                    .frame(maxWidth: 600)
+                    .padding(.horizontal, 48)
+                    .padding(.top, 14)
+            }
+            HStack(spacing: 8) {
+                if step != .welcome && step != .done {
+                    Button(L("common.back")) { go(-1) }
+                        .buttonStyle(.brandSecondary)
+                        .controlSize(.large)
+                        .disabled(state.isSwitchingVault)
+                }
+                Spacer()
+                if step == .project {
+                    Button(L("onb.skip")) { go(1) }
+                        .buttonStyle(.brandSecondary)
+                        .controlSize(.large)
+                }
+                Button(primaryTitle, action: primaryAction)
+                    .buttonStyle(.brandPrimary)
                     .controlSize(.large)
-                    .disabled(state.isSwitchingVault)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(step == .welcome && !consent || step == .project && !form.isValid || state.isSwitchingVault)
             }
-            Spacer()
-            if step == .project {
-                Button(L("onb.skip")) { go(1) }.controlSize(.large)
-            }
-            Button(primaryTitle, action: primaryAction)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .keyboardShortcut(.defaultAction)
-                .disabled(step == .welcome && !consent || step == .project && !form.isValid || state.isSwitchingVault)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 16)
+            // Centered on the window whatever buttons are on each side (the last step has no "Atrás").
+            .overlay { ProgressDots(count: OnboardingStep.allCases.count, current: step.rawValue).allowsHitTesting(false) }
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 18)
-        // Centered on the window whatever buttons are on each side (the last step has no "Atrás").
-        .overlay { ProgressDots(count: OnboardingStep.allCases.count, current: step.rawValue).allowsHitTesting(false) }
-        .background(.bar)
+        .background(Brand.color.bg)
     }
 
     private var primaryTitle: String {
@@ -120,7 +142,6 @@ struct OnboardingView: View {
         case .welcome: L("onb.start")
         case .project: L("onb.project.create")
         case .done: L("onb.finish")
-        case .models where !state.modelsReady: L("onb.models.continueBackground")
         case .accounts where !state.engine.accounts.hasAccounts: L("onb.accounts.later")
         default: L("common.continue")
         }
@@ -150,25 +171,36 @@ struct OnboardingView: View {
 
     private func go(_ delta: Int) {
         guard let next = OnboardingStep(rawValue: step.rawValue + delta) else { return }
-        // The vault location is settled once we leave that step; projects need a started engine.
+        // Leaving the welcome: the brain's folder is settled and the model download can start (in the background).
+        if step == .welcome && delta > 0 { Self.prepareModelsInBackground(state) }
+        // Projects and the owner fields need a started engine.
         if next == .project { state.startEngine() }
         step = next
+    }
+
+    /// The same engine call as before (`AppState.prepareModels`, idempotent); never in development snapshots.
+    static func prepareModelsInBackground(_ state: AppState) {
+        guard DebugSnapshots.directory == nil else { return }
+        state.prepareModels()
     }
 }
 
 struct ProgressDots: View {
     let count: Int
     let current: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 8) {
             ForEach(0..<count, id: \.self) { i in
                 Capsule()
-                    .fill(i == current ? Color.accentColor : Color.primary.opacity(i < current ? 0.35 : 0.12))
+                    .fill(i == current ? Brand.color.accent : (i < current ? Brand.color.sage : Brand.color.line))
                     .frame(width: i == current ? 22 : 8, height: 8)
             }
         }
-        .animation(.spring(duration: 0.3), value: current)
+        .animation(Brand.motion.animation(fast: true, reduceMotion: reduceMotion), value: current)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: "\(current + 1) / \(count)"))
     }
 }
 
@@ -178,16 +210,17 @@ struct StepHeader: View {
     let message: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(Color.accentColor)
+                .font(Brand.font(30))
+                .foregroundStyle(Brand.color.accent)
             Text(title)
-                .font(.system(size: 30, weight: .bold))
+                .font(Brand.font(26, .semibold))
+                .foregroundStyle(Brand.color.text)
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                .font(Brand.font(15))
+                .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -197,36 +230,88 @@ struct StepHeader: View {
 
 private struct WelcomeStep: View {
     @Environment(AppState.self) private var state
-    @Binding var consent: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack {
-                StepHeader(symbol: "brain.head.profile", title: L("onb.welcome.title"), message: L("onb.welcome.message"))
-                Spacer()
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    BrandMark(size: 44)
+                    BrandWordmark(size: 24)
+                }
+                Text(L("onb.welcome.title"))
+                    .font(Brand.font(26, .semibold))
+                    .foregroundStyle(Brand.color.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(L("onb.welcome.message"))
+                    .font(Brand.font(15))
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             LanguageSwitch()
             if state.menuLanguageNeedsRestart { MenuLanguageNotice() }
 
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 Feature(symbol: "waveform", text: L("onb.welcome.feature1"))
                 Feature(symbol: "lock.shield", text: L("onb.welcome.feature2"))
                 Feature(symbol: "book", text: L("onb.welcome.feature3"))
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Label(L("onb.consent.title"), systemImage: "hand.raised.fill")
-                    .font(.headline)
-                    .foregroundStyle(.orange)
+            VaultLine()
+        }
+    }
+}
+
+/// "Se guarda en ~/Documents/SecondBrain · Cambiar…" (the former vault step, now one line).
+private struct VaultLine: View {
+    @Environment(AppState.self) private var state
+
+    private var path: String {
+        state.config.vaultURL.path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "folder").foregroundStyle(Brand.color.text2)
+                Text(L("onb.saveIn", path))
+                    .foregroundStyle(Brand.color.text2)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(verbatim: "·").foregroundStyle(Brand.color.text3)
+                Button(L("onb.change")) { VaultPicker.choose(state: state) }
+                    .buttonStyle(.settingsLink)
+                    .disabled(state.isSwitchingVault)
+            }
+            .help(L("onb.vault.hint"))
+            if state.isSwitchingVault { VaultSwitchingNotice() }
+        }
+    }
+}
+
+/// Recording consent: the checkbox enables "Empezar". Lives in the pinned footer of the welcome.
+private struct ConsentCard: View {
+    @Binding var consent: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "hand.raised")
+                .font(Brand.font(15, .medium))
+                .foregroundStyle(Brand.color.warning)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L("onb.consent.title")).font(Brand.callout).foregroundStyle(Brand.color.text)
                 Text(L("onb.consent.message"))
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
                 Toggle(L("onb.consent.accept"), isOn: $consent)
                     .toggleStyle(.checkbox)
-                    .padding(.top, 4)
+                    .padding(.top, 2)
             }
-            .padding(16)
-            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            Spacer(minLength: 0)
         }
+        .padding(12)
+        .background(Brand.color.warningSoft, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
     }
 }
 
@@ -235,8 +320,8 @@ private struct LanguageSwitch: View {
 
     var body: some View {
         Picker("", selection: Binding(get: { state.config.uiLanguage }, set: { lang in state.update { $0.uiLanguage = lang } })) {
-            Text("Español").tag("es")
-            Text("English").tag("en")
+            Text(verbatim: "Español").tag("es")
+            Text(verbatim: "English").tag("en")
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -249,40 +334,12 @@ private struct Feature: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
-                .font(.title2)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 32)
-            Text(text).font(.body).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-private struct VaultStep: View {
-    @Environment(AppState.self) private var state
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            StepHeader(symbol: "externaldrive", title: L("onb.vault.title"), message: L("onb.vault.message"))
-            HStack(spacing: 14) {
-                Image(systemName: "folder.fill").font(.system(size: 30)).foregroundStyle(.blue)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(state.config.vaultURL.lastPathComponent).font(.headline)
-                    Text(state.config.vaultURL.deletingLastPathComponent().path
-                        .replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button(L("onb.vault.change")) { VaultPicker.choose(state: state) }
-                    .controlSize(.large)
-                    .disabled(state.isSwitchingVault)
-            }
-            .padding(16)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-            if state.isSwitchingVault { VaultSwitchingNotice() }
-            Text(L("onb.vault.hint")).font(.callout).foregroundStyle(.secondary)
+                .font(Brand.font(17))
+                .foregroundStyle(Brand.color.accent)
+                .frame(width: 28)
+            Text(text).foregroundStyle(Brand.color.text).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -316,9 +373,9 @@ private struct PermissionsStep: View {
     @ViewState private var askedMic = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 20) {
             StepHeader(symbol: "lock.open", title: L("onb.perm.title"), message: L("onb.perm.message"))
-            PermissionCard(symbol: "speaker.wave.2.fill", title: L("onb.perm.screenTitle"), message: L("onb.perm.screenMessage"),
+            PermissionCard(symbol: "speaker.wave.2", title: L("onb.perm.screenTitle"), message: L("onb.perm.screenMessage"),
                            granted: permissions.screenAudio, asked: askedScreen,
                            request: {
                                askedScreen = true
@@ -326,7 +383,7 @@ private struct PermissionsStep: View {
                                Task { _ = await Recorder.requestScreenCapture(); await refresh() }
                            },
                            openSettings: { Recorder.openPrivacySettings(.screenRecording) })
-            PermissionCard(symbol: "mic.fill", title: L("onb.perm.micTitle"), message: L("onb.perm.micMessage"),
+            PermissionCard(symbol: "mic", title: L("onb.perm.micTitle"), message: L("onb.perm.micMessage"),
                            granted: permissions.microphone, asked: askedMic,
                            request: {
                                askedMic = true
@@ -337,15 +394,16 @@ private struct PermissionsStep: View {
                 // macOS usually applies Screen Recording only to a fresh process. The step is saved, so the
                 // relaunched app comes back right here.
                 HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "arrow.clockwise.circle.fill").font(.title2).foregroundStyle(Color.accentColor)
-                    Text(L("onb.perm.restartHint")).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    Image(systemName: "arrow.clockwise").font(Brand.font(17)).foregroundStyle(Brand.color.accent)
+                    Text(L("onb.perm.restartHint"))
+                        .foregroundStyle(Brand.color.text)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     Button(L("onb.perm.reopen")) { AppState.shared.relaunch() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .buttonStyle(.brandPrimary)
                 }
                 .padding(14)
-                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
             }
         }
         .task {
@@ -373,69 +431,31 @@ private struct PermissionCard: View {
     var openSettings: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: symbol)
-                .font(.system(size: 22))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(granted ? Color.green : Color.accentColor, in: RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
-                Text(message).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 12)
-            if granted {
-                Label(L("onb.perm.granted"), systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.headline)
-            } else if asked {
-                Button(L("onb.perm.openSettings"), action: openSettings).controlSize(.large)
-            } else {
-                Button(L("onb.perm.allow"), action: request)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-            }
-        }
-        .padding(16)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-        .animation(.default, value: granted)
-    }
-}
-
-private struct ModelsStep: View {
-    @Environment(AppState.self) private var state
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            StepHeader(symbol: "cpu", title: L("onb.models.title"), message: L("onb.models.message"))
-            VStack(alignment: .leading, spacing: 10) {
-                if state.modelsReady {
-                    Label(L("onb.models.ready"), systemImage: "checkmark.circle.fill")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.green)
-                } else if let error = state.modelError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Button(L("onb.models.retry")) { state.prepareModels() }
+        BrandCard(padding: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: symbol)
+                    .font(Brand.font(18, .medium))
+                    .foregroundStyle(granted ? Brand.color.onAccent : Brand.color.accent)
+                    .frame(width: 40, height: 40)
+                    .background(granted ? Brand.color.accent : Brand.color.accentSoft,
+                                in: RoundedRectangle(cornerRadius: Brand.radius.control + 2, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(Brand.callout).foregroundStyle(Brand.color.text)
+                    Text(message).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if granted {
+                    Label(L("onb.perm.granted"), systemImage: "checkmark.circle")
+                        .font(Brand.callout)
+                        .foregroundStyle(Brand.color.success)
+                } else if asked {
+                    Button(L("onb.perm.openSettings"), action: openSettings).buttonStyle(.brandSecondary)
                 } else {
-                    ProgressView(value: state.modelProgress?.fraction ?? 0)
-                        .controlSize(.large)
-                    HStack {
-                        Text(state.modelProgress?.message ?? L("onb.models.starting"))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(Fmt.percent(state.modelProgress?.fraction ?? 0))
-                            .font(.callout.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
+                    Button(L("onb.perm.allow"), action: request).buttonStyle(.brandPrimary)
                 }
             }
-            .padding(16)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-            Text(L("onb.models.hint")).font(.callout).foregroundStyle(.secondary)
         }
-        .onAppear { state.prepareModels() }
+        .animation(Brand.motion.fast, value: granted)
     }
 }
 
@@ -443,42 +463,71 @@ private struct DoneStep: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            StepHeader(symbol: "checkmark.seal.fill", title: L("onb.done.title"), message: L("onb.done.message"))
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 14) {
-                    Image(systemName: "brain")
-                        .font(.title2)
-                        .frame(width: 44, height: 44)
-                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(L("onb.done.menuTitle")).font(.headline)
-                        Text(L("onb.done.menuMessage")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    BrandMark(size: 44)
+                    BrandWordmark(size: 24)
                 }
-                HStack(alignment: .top, spacing: 14) {
-                    Text("⌥⌘R")
-                        .font(.system(.headline, design: .rounded))
-                        .frame(width: 44, height: 44)
-                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(L("onb.done.hotkeyTitle")).font(.headline)
-                        Text(L("onb.done.hotkeyMessage")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                HStack(alignment: .top, spacing: 14) {
-                    Image(systemName: "sparkles")
-                        .font(.title2)
-                        .frame(width: 44, height: 44)
-                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(L("onb.done.afterTitle")).font(.headline)
-                        Text(L("onb.done.afterMessage")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
+                Text(L("onb.done.title"))
+                    .font(Brand.font(26, .semibold))
+                    .foregroundStyle(Brand.color.text)
+                Text(L("onb.done.message"))
+                    .font(Brand.font(15))
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            BrandCard(padding: 18) {
+                VStack(alignment: .leading, spacing: 16) {
+                    tip(icon: AnyView(BrandMark(size: 22)), title: L("onb.done.menuTitle"), message: L("onb.done.menuMessage"))
+                    tip(icon: AnyView(Text(verbatim: "⌥⌘R").font(Brand.font(12, .semibold)).foregroundStyle(Brand.color.accent)),
+                        title: L("onb.done.hotkeyTitle"), message: L("onb.done.hotkeyMessage"))
+                    tip(icon: AnyView(Image(systemName: "sparkles").font(Brand.font(17)).foregroundStyle(Brand.color.accent)),
+                        title: L("onb.done.afterTitle"), message: L("onb.done.afterMessage"))
                 }
             }
-            .padding(18)
-            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+            ModelsStatusLine()
+        }
+        .onAppear { OnboardingView.prepareModelsInBackground(state) }
+    }
+
+    private func tip(icon: AnyView, title: String, message: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            icon
+                .frame(width: 40, height: 40)
+                .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control + 2, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(Brand.callout).foregroundStyle(Brand.color.text)
+                Text(message).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// The background model download, as one status line: "Descargando… 42 %" · ready · error + Reintentar. Recording
+/// before it finishes still works: the engine waits for the model while the job says "Preparando el modelo…".
+private struct ModelsStatusLine: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if state.modelsReady {
+                Label(L("onb.models.ready"), systemImage: "checkmark.circle")
+                    .foregroundStyle(Brand.color.success)
+            } else if let error = state.modelError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Brand.color.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(L("onb.models.retry")) { state.prepareModels() }.buttonStyle(.brandSecondary)
+            } else {
+                BrandLoader(size: 18, text: L("onb.models.downloading", Fmt.percent(state.modelProgress?.fraction ?? 0)))
+                Text(L("onb.models.hint"))
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text3)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer(minLength: 0)
         }
     }
 }
@@ -492,24 +541,27 @@ private struct AccountsStep: View {
     @ViewState private var help: OrgHelpRequest?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 22) {
             StepHeader(symbol: "person.crop.circle.badge.plus", title: L("onb.accounts.title"), message: L("onb.accounts.message"))
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(state.engine.accounts.accounts) { account in
-                    HStack(spacing: 10) {
-                        ProviderBadge(provider: account.provider)
-                        Text(account.provider == .local ? L("accounts.macCalendar") : account.email)
-                        Spacer()
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            BrandCard(padding: 16) {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(state.engine.accounts.accounts) { account in
+                        HStack(spacing: 10) {
+                            ProviderBadge(provider: account.provider)
+                            Text(account.provider == .local ? L("accounts.macCalendar") : account.email)
+                                .foregroundStyle(Brand.color.text)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Image(systemName: "checkmark.circle").foregroundStyle(Brand.color.success)
+                        }
                     }
+                    ConnectAccountControls(connector: connector, help: $help, context: .onboarding)
+                    Label(L("readonly.promise"), systemImage: "lock.shield")
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
                 }
-                ConnectAccountControls(connector: connector, help: $help, context: .onboarding)
-                Label(L("accounts.footer"), systemImage: "lock.shield")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
             }
-            .padding(16)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
         }
         .sheet(item: $help) { request in OrgAccessHelpSheet(provider: request.provider) }
     }

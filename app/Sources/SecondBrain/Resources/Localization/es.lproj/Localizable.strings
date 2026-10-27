@@ -1333,3 +1333,30 @@
 "tasks.openSource" = "Abrir la reunión o el correo";
 "inbox.thinkingShort" = "Pensando…";
 "inbox.pick" = "Elige a qué proyecto va.";
+
+/* v0.5 — settings */
+"settings.group.look" = "Idioma y apariencia";
+"settings.group.you" = "Tú";
+"settings.group.recording" = "Grabación";
+"settings.group.mailCalendar" = "Correo y calendario";
+"settings.group.models" = "Modelos de Claude";
+"settings.group.git" = "Git";
+"settings.group.oauth" = "Registro propio de apps (técnico)";
+"settings.claude.connected" = "Conectada";
+"settings.addAccount" = "Conectar otra cuenta";
+"settings.disconnect.confirm" = "¿Desconectar %@?";
+"settings.disconnect.message" = "Esta Mac olvida el acceso. Lo que ya está en tu cerebro se queda.";
+"settings.ownerEmails.extraPlaceholder" = "Otras direcciones tuyas, separadas por coma";
+"settings.ownerEmails.hint" = "Así sé qué correos enviaste tú. Las de tus cuentas conectadas ya cuentan.";
+"settings.github.orphanProject" = "Era de «%@»";
+"settings.github.tokenTitle" = "Usar un token personal";
+"github.code.copyOpen" = "Copiar y abrir GitHub";
+"github.failed.useToken" = "Pegar un token personal";
+"accounts.notRegistered.plain" = "La conexión con %@ aún no está disponible en esta versión. Mientras tanto puedes seguir sin ella.";
+"accounts.notRegistered.technical" = "Soy técnico: cómo habilitarla";
+"orghelp.notRegistered.plain" = "Todavía no se puede conectar %@ desde esta versión. Mientras tanto, usa el calendario de la Mac o pega tus correos.";
+"claude.trouble" = "¿Problemas para conectar?";
+"claude.details" = "Ver detalles";
+"onb.you.title" = "Tú y tu primer proyecto";
+"onb.models.downloading" = "Descargando el modelo de transcripción… %@";
+"settings.github.orgTokenDetail" = "Crea un token «fine-grained» de solo lectura para esa organización y pégalo en Ajustes → GitHub → Usar un token personal. Si la organización también aprueba tokens, puede que tengas que esperar su visto bueno.";

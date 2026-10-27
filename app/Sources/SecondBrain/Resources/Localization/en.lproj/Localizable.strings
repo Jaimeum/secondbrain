@@ -1063,16 +1063,16 @@
 "github.orphans.remove" = "Stop following";
 
 /* v0.4 — Rules */
-"rules.offer.from" = "Everything from %1$@ to %2$@ from now on?";
+"rules.offer.from" = "Everything from %1$@ into %2$@ from now on?";
 "rules.offer.to" = "Everything sent to %1$@ into %2$@ from now on?";
-"rules.offer.organizer" = "Meetings and mail from %1$@ to %2$@ from now on?";
-"rules.offer.with" = "Everything that includes %1$@ to %2$@ from now on?";
+"rules.offer.with" = "Everything that includes %1$@ into %2$@ from now on?";
 "rules.offer.always" = "Yes, always";
 "rules.offer.once" = "Just this once";
 "rules.offer.created" = "Rule created";
 "rules.offer.undo" = "Undo";
 "rules.offer.done" = "Done";
 "rules.mail.byRule" = "By the rule “%@”";
+"rules.mail.chip" = "Goes to %@";
 "rules.mail.byDefault" = "Default project";
 "rules.auto.title" = "Mail added";
 "rules.auto.one" = "I added 1 email to %@.";
@@ -1081,7 +1081,7 @@
 "rules.auto.mixed" = "I added %1$d emails: %2$@.";
 "rules.auto.more" = "The rest in a bit.";
 "rules.title" = "Rules";
-"rules.subtitle" = "They say which project each email and each meeting goes to. The first one that matches wins.";
+"rules.subtitle" = "They say which project each email and each meeting goes to.";
 "rules.footer" = "The first one that matches wins. Drag to change the order.";
 "rules.button" = "Rules…";
 "rules.buttonHelp" = "Decide which project each email and meeting goes to";
@@ -1099,7 +1099,7 @@
 "rules.turnOff" = "Turn this rule off";
 "rules.turnOn" = "Turn this rule on";
 "rules.off" = "Off";
-"rules.autoBadge" = "Adds by itself";
+"rules.autoBadge" = "Adds automatically";
 "rules.copyName" = "%@ (copy)";
 "rules.hits.zero" = "Not used yet";
 "rules.hits.one" = "Once";
@@ -1107,8 +1107,8 @@
 "rules.default.label" = "Anything no rule matches goes to";
 "rules.unassigned" = "Unassigned";
 "rules.autoImport" = "Check my email every 15 min";
-"rules.autoImport.on" = "I only add emails for rules that say “Adds by itself”.";
-"rules.autoImport.none" = "No rule adds emails by itself yet. Turn it on when you edit a rule.";
+"rules.autoImport.on" = "I only add emails for rules marked “Adds automatically”.";
+"rules.autoImport.none" = "No rule adds emails automatically yet. You can turn that on when you edit a rule.";
 "rules.editor.newTitle" = "New rule";
 "rules.editor.editTitle" = "Edit rule";
 "rules.editor.subtitle" = "Choose what to look for and where to send it.";
@@ -1121,7 +1121,7 @@
 "rules.editor.section.meetings" = "Meetings";
 "rules.editor.section.both" = "Both";
 "rules.editor.name" = "Name (optional)";
-"rules.editor.autoAdd" = "Add new matching emails by themselves";
+"rules.editor.autoAdd" = "Add new matching emails automatically";
 "rules.editor.autoAddHint" = "Every 15 min I check your email and add the ones that match, without asking.";
 "rules.editor.duplicate" = "You already have a rule that looks for the same thing.";
 "rules.editor.issue.empty" = "Type what to look for.";
@@ -1151,7 +1151,8 @@
 "rules.hint.sender" = "Emails from that person and meetings they organize.";
 "rules.hint.senderDomain" = "Emails from that company and meetings someone there organizes.";
 "rules.hint.senderName" = "The name you see, like “Ana García”.";
-"rules.hint.recipient" = "Who the email went to, your aliases too, like you+acme@…";
+"rules.hint.recipient" = "Who the email was sent to; also works with your other addresses.";
+"rules.hint.organizer" = "Meetings that person organizes (not their emails).";
 "rules.hint.subject" = "The email's subject or the meeting's title.";
 "rules.hint.attendee" = "Someone invited to the meeting or copied on the email (not you).";
 "rules.hint.anyText" = "The email's subject or text, the meeting's title or notes.";
@@ -1163,13 +1164,9 @@
 "rules.placeholder.domain" = "acme.com";
 "rules.placeholder.name" = "Ana García";
 "rules.placeholder.text" = "Nubia";
-"rules.meetings.byRule" = "by rule “%@”";
+"rules.meetings.byRule" = "by the rule “%@”";
 "rules.meetings.byRuleHelp" = "The rule “%@” decided this. Pick another project to change it just here.";
 "rules.meetings.byDefault" = "default project";
 "rules.meetings.byDefaultHelp" = "No rule matches: it goes to your default project (Settings → Rules).";
-"rules.meetingOffer.organizer" = "Meetings organized by %@ to %@?";
-"rules.meetingOffer.with" = "Meetings with %@ to %@?";
-"rules.meetingOffer.always" = "Yes, always";
-"rules.meetingOffer.once" = "Just this once";
-"rules.meetingOffer.created" = "Rule created";
-"rules.meetingOffer.undo" = "Undo";
+"rules.meetingOffer.organizer" = "Meetings organized by %1$@ into %2$@ from now on?";
+"rules.meetingOffer.with" = "Meetings with %1$@ into %2$@ from now on?";

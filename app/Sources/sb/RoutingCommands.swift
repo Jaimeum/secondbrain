@@ -81,7 +81,9 @@ struct RouteCmd: AsyncParsableCommand {
     @Option(help: "Meeting title (makes it a meeting)") var title: String?
     @Option(help: "Recipient / attendee address (repeatable)") var attendee: [String] = []
     @Option(help: "Body or notes") var text: String = ""
-    @Flag(help: "Don't count the hit") var dryRun = false
+    /// "n veces" counts what a rule really decided: asking where something would go is a preview unless told otherwise.
+    @Flag(help: "Count the hit, as if the rule had routed something") var countHit = false
+    @Flag(help: .hidden) var dryRun = false   // the default since v0.4 integration; kept so old scripts still run
 
     @MainActor func run() async throws {
         let engine = makeEngine()
@@ -92,13 +94,15 @@ struct RouteCmd: AsyncParsableCommand {
                                      subject: title ?? subject ?? "", text: text, ownerEmails: engine.vault.ownerEmails())
         let lang = engine.config.uiLanguage
         let projects = engine.projects.list()
-        let decision = dryRun ? engine.routing.match(subject) : engine.routing.route(subject)
+        // Exactly what the app decides (§14.2): a rule to a deleted project is skipped, then the default project.
+        let preview = engine.routingPreview(subject)
+        if countHit, !dryRun, preview.decision != nil { _ = engine.routing.route(subject) }
         engine.routing.flush()
-        if let decision {
-            print("\(RoutingStore.projectLabel(decision.projectSlug, projects: projects, language: lang)) — "
-                  + (es(engine) ? "por regla «" : "by rule «")
-                  + engine.routing.displayName(for: decision.rule, projects: projects, language: lang) + "»")
-        } else if let def = engine.routing.settings.defaultProjectSlug, engine.projects.get(def) != nil {
+        if let decision = preview.decision {
+            print("\(RoutingStore.projectLabel(preview.projectSlug, projects: projects, language: lang)) — "
+                  + (es(engine) ? "por la regla «" : "by the rule “")
+                  + engine.routing.displayName(for: decision.rule, projects: projects, language: lang) + (es(engine) ? "»" : "”"))
+        } else if let def = preview.projectSlug {
             print("\(RoutingStore.projectLabel(def, projects: projects, language: lang)) — " + (es(engine) ? "proyecto por defecto" : "default project"))
         } else {
             print(es(engine) ? "Sin asignar" : "Unassigned")

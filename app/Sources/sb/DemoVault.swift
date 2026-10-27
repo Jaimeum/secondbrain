@@ -3,8 +3,8 @@ import BrainCore
 import Foundation
 
 /// `sb demo-vault --dir <vault>`: a realistic sample brain (3 projects, ~55 wiki pages, 12 people, tasks, timelines,
-/// raw transcripts and emails) richly wikilinked, with event dates spanning the last 3 months. Used to review the
-/// graph (and every other screen) without recording anything. `--scale N` adds N synthetic meetings per project
+/// raw transcripts and emails) richly wikilinked, with event dates spanning the last 3 months, plus two routing rules.
+/// Used to review the graph (and every other screen) without recording anything. `--scale N` adds N synthetic meetings per project
 /// (plus topics and people) to test the graph with thousands of nodes.
 struct DemoVaultCmd: AsyncParsableCommand {
     static let configuration = CommandConfiguration(commandName: "demo-vault", abstract: "Create a sample vault to try SecondBrain.")
@@ -606,8 +606,30 @@ enum DemoVault {
 
         if scale > 0 { try addSynthetic(root: root, projects: created, scale: scale, today: today) }
 
-        return "Created \(root.path): \(created.count) projects, \(pageCount) project pages, \(people.count) people"
+        let rules = try addSampleRules(root: root, projects: created, today: today)
+
+        return "Created \(root.path): \(created.count) projects, \(pageCount) project pages, \(people.count) people, \(rules) routing rules"
             + (scale > 0 ? ", plus \(scale) synthetic meetings per project" : "")
+    }
+
+    /// v0.4 routing (CONTRACT §14): two rules so every screen shows routing at work with the demo accounts
+    /// (`SB_DEMO_ACCOUNTS=1`): mail from @acmelogistics.com → 🚀 Lanzamiento Atlas (added by itself), and anything whose
+    /// subject or title says "2027" (the budget mail and meeting, in both languages) → ☁️ Migración a la nube.
+    static func addSampleRules(root: URL, projects: [Project], today: Date) throws -> Int {
+        func slug(_ name: String) -> String? { projects.first { $0.name == name }?.slug }
+        guard let atlas = slug("Lanzamiento Atlas"), let cloud = slug("Migración a la nube") else { return 0 }
+        let created = Calendar.current.date(byAdding: .day, value: -21, to: today) ?? today
+        let lastHit = Calendar.current.date(byAdding: .day, value: -1, to: today) ?? today
+        let rules = [
+            RoutingRule(conditions: [RuleCondition(field: .senderDomain, op: .is, value: "acmelogistics.com")], projectSlug: atlas,
+                        autoAddMail: true, createdAt: created, hits: 9, lastHitAt: lastHit),
+            RoutingRule(conditions: [RuleCondition(field: .subject, op: .contains, value: "2027")], projectSlug: cloud,
+                        createdAt: created, hits: 3, lastHitAt: lastHit),
+        ]
+        let url = RoutingStore.fileURL(vaultRoot: root)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder.sb.encode(RoutingSettings(rules: rules)).write(to: url, options: .atomic)
+        return rules.count
     }
 
     /// Stress test: N meetings per project, N/5 topics, N/10 people, randomly (but reproducibly) linked.

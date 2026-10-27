@@ -5,7 +5,9 @@ import SwiftUI
 // quiet line offers the rule that would do it next time: «¿Todo lo de @acme.com a 🚀 Acme de ahora en adelante?»
 // · Sí, siempre · Solo esta vez. Shared by Correo, "Agregar correo" and Sin asignar.
 
-/// The offer on screen (at most one): asking for ~10 s, then "Regla creada · Deshacer" for a few seconds.
+/// The offer on screen: asking for 10 s, then "Regla creada · Deshacer" for 6 s. One mechanism for every place that
+/// offers a rule (Correo, "Agregar correo", Sin asignar, Reuniones), and at most one offer on screen in the whole app:
+/// showing one dismisses any other.
 @MainActor @Observable
 final class RuleOffer {
     enum Phase: Equatable { case asking, created, failed(String) }
@@ -13,8 +15,8 @@ final class RuleOffer {
     struct Current: Identifiable, Equatable {
         let id = UUID()
         var rule: RoutingRule
-        /// Markdown: the sender/domain in bold.
-        var prompt: String
+        /// «¿Todo lo de **@acme.com** a 🚀 Acme de ahora en adelante?» (who in bold).
+        var question: AttributedString
         var phase: Phase = .asking
     }
 
@@ -23,22 +25,27 @@ final class RuleOffer {
 
     static let askSeconds: Double = 10
     static let doneSeconds: Double = 6
+    /// The offer currently on screen, wherever it is (§14.3: never more than one).
+    private static weak var active: RuleOffer?
 
     /// Offers the rule for having put `subject` in `projectSlug` by hand. Nothing (false) without a project, when there
-    /// is no sensible rule (mail from the owner to the owner…) or when an equivalent rule already exists.
+    /// is no sensible rule (mail from the owner to the owner…), when an equivalent rule already exists, or when a rule
+    /// already matches `subject` (the user overrode it: a new rule, added last, could never win over it).
     @discardableResult
     func propose(_ subject: RoutingSubject?, projectSlug: String?, state: AppState) -> Bool {
         guard let subject, let projectSlug, state.project(projectSlug) != nil,
-              let rule = RoutingStore.suggestedRule(for: subject, projectSlug: projectSlug, language: Localizer.language),
-              !state.engine.routing.hasEquivalentRule(rule)
+              let rule = RoutingStore.offeredRule(for: subject, projectSlug: projectSlug, existing: state.engine.routing.rules,
+                                                  language: Localizer.language)
         else { return false }
-        show(rule, projectLabel: state.projectName(projectSlug))
+        show(rule, projectLabel: state.projectName(projectSlug), kind: subject.kind)
         return true
     }
 
-    /// Shows `rule` as the offer (snapshots use it directly).
-    func show(_ rule: RoutingRule, projectLabel: String) {
-        current = Current(rule: rule, prompt: Self.prompt(for: rule, projectLabel: projectLabel))
+    /// Shows `rule` as the offer (Reuniones computes its own rule; snapshots use it directly).
+    func show(_ rule: RoutingRule, projectLabel: String, kind: RoutingSubject.Kind = .mail) {
+        if let other = Self.active, other !== self { other.dismiss() }
+        Self.active = self
+        current = Current(rule: rule, question: Self.question(for: rule, projectLabel: projectLabel, kind: kind))
         schedule(Self.askSeconds)
     }
 
@@ -71,6 +78,7 @@ final class RuleOffer {
     func dismiss() {
         timer?.cancel()
         current = nil
+        if Self.active === self { Self.active = nil }
     }
 
     private func schedule(_ seconds: Double) {
@@ -79,88 +87,145 @@ final class RuleOffer {
         timer = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled, let self, self.current?.id == id else { return }
-            self.current = nil
+            self.dismiss()
         }
     }
 
-    /// «¿Todo lo de **@acme.com** a 🚀 Acme de ahora en adelante?», worded after the rule's field.
-    static func prompt(for rule: RoutingRule, projectLabel: String) -> String {
-        guard let condition = rule.conditions.first else { return "" }
+    /// The question, worded after the rule's first field and what was assigned: mail «¿Todo lo de **@acme.com** a
+    /// 🚀 Acme de ahora en adelante?», meeting «¿Las reuniones que organiza **ana@acme.com** a 🚀 Acme de ahora en
+    /// adelante?». Who goes in bold; neither value is read as Markdown.
+    static func question(for rule: RoutingRule, projectLabel: String, kind: RoutingSubject.Kind) -> AttributedString {
+        guard let condition = rule.conditions.first else { return AttributedString(projectLabel) }
         let value = condition.value.trimmingCharacters(in: .whitespaces)
         let isEmail = value.contains("@") && !value.hasPrefix("@")
-        let shown = "**" + (isEmail || value.hasPrefix("@") ? value : "@" + value) + "**"
+        let who = isEmail || value.hasPrefix("@") ? value : "@" + value
         let key: String
-        switch condition.field {
-        case .recipient: key = "rules.offer.to"
-        case .organizerEmail: key = "rules.offer.organizer"
-        case .attendeeEmail, .attendeeDomain: key = "rules.offer.with"
-        default: key = "rules.offer.from"
+        switch (kind, condition.field) {
+        case (.meeting, .organizerEmail), (.meeting, .senderEmail), (.meeting, .senderDomain): key = "rules.meetingOffer.organizer"
+        case (.meeting, _): key = "rules.meetingOffer.with"
+        case (.mail, .recipient): key = "rules.offer.to"
+        case (.mail, .attendeeEmail), (.mail, .attendeeDomain): key = "rules.offer.with"
+        case (.mail, _): key = "rules.offer.from"
         }
-        // "🤝 Alianza" never breaks right after its emoji.
-        let label = projectLabel.replacingOccurrences(of: " ", with: "\u{00A0}", range: projectLabel.range(of: " "))
-        return L(key, shown, label)
+        // "☁️ Migración a la nube" stays on one line: the project reads as one name.
+        let label = projectLabel.replacingOccurrences(of: " ", with: "\u{00A0}")
+        let marker = "\u{1}"
+        var out = AttributedString()
+        let parts = L(key, marker, label).components(separatedBy: marker)
+        for (i, part) in parts.enumerated() {
+            out += AttributedString(part)
+            if i < parts.count - 1 {
+                var bold = AttributedString(who)
+                bold.inlinePresentationIntent = .stronglyEmphasized
+                out += bold
+            }
+        }
+        return out
     }
 }
 
-/// The offer line. Renders nothing when there is no offer.
+/// The offer line. Renders nothing when there is no offer. `compact` (under a meeting's chip): question and buttons on
+/// one line when they fit, else the buttons below; otherwise the buttons sit on the right of a wrapping question.
 struct RuleOfferBar: View {
     @Environment(AppState.self) private var state
     let offer: RuleOffer
+    var compact = false
 
     var body: some View {
         if let current = offer.current {
-            HStack(spacing: 10) {
+            Group {
                 switch current.phase {
                 case .asking:
-                    Image(systemName: "arrow.triangle.branch").foregroundStyle(Color.accentColor)
-                    Text(Self.attributed(current.prompt))
-                        .font(.callout)
-                        .lineLimit(3)
-                        .layoutPriority(1)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Button(L("rules.offer.always")) { offer.accept(state: state) }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                    Button(L("rules.offer.once")) { offer.dismiss() }
-                        .controlSize(.small)
+                    if compact {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { icon; question(current); buttons }
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) { icon; question(current) }
+                                buttons
+                            }
+                        }
+                    } else {
+                        HStack(spacing: 10) {
+                            icon
+                            question(current).lineLimit(3).layoutPriority(1)
+                            Spacer(minLength: 8)
+                            buttons
+                        }
+                    }
                 case .created:
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    Text(L("rules.offer.created")).font(.callout)
-                    Text("·").foregroundStyle(.tertiary)
-                    Button(L("rules.offer.undo")) { offer.undo(state: state) }
-                        .buttonStyle(.link)
-                        .font(.callout.weight(.medium))
-                    Spacer(minLength: 0)
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                        Text(L("rules.offer.created"))
+                        Text("·").foregroundStyle(.tertiary)
+                        Button(L("rules.offer.undo")) { offer.undo(state: state) }
+                            .buttonStyle(.link)
+                            .font(.callout.weight(.medium))
+                        Spacer(minLength: 0)
+                    }
                 case .failed(let message):
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout).foregroundStyle(.orange).lineLimit(2)
-                    Spacer(minLength: 0)
+                    HStack {
+                        Label(message, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange).lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.accentColor.opacity(0.25)))
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .font(.callout)
+            .padding(.horizontal, compact ? 10 : 12)
+            .padding(.vertical, compact ? 7 : 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: compact ? 8 : 10))
+            .overlay(RoundedRectangle(cornerRadius: compact ? 8 : 10).strokeBorder(Color.accentColor.opacity(0.25)))
+            .transition(compact ? .opacity : .move(edge: .bottom).combined(with: .opacity))
         }
     }
 
-    static func attributed(_ markdown: String) -> AttributedString {
-        (try? AttributedString(markdown: markdown, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(markdown.replacingOccurrences(of: "**", with: ""))
+    private var icon: some View {
+        Image(systemName: "arrow.triangle.branch").foregroundStyle(Color.accentColor)
+    }
+
+    private func question(_ current: RuleOffer.Current) -> some View {
+        Text(current.question).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var buttons: some View {
+        HStack(spacing: 8) {
+            Button(L("rules.offer.always")) { offer.accept(state: state) }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button(L("rules.offer.once")) { offer.dismiss() }
+                .controlSize(.small)
+        }
+        .fixedSize()
     }
 }
 
-/// "🚀 Acme" chip for a mail the rules (or the default project) would send somewhere, same look as Reuniones' chip.
+/// A rule's name about to go inside the quotes of "Por la regla «%@»": its own quotes become the inner quotes of the
+/// language (“…” in Spanish, ‘…’ in English), so "por la regla «El asunto contiene «2027»»" never shows.
+func ruleNameForQuotes(_ name: String) -> String {
+    if Localizer.language == "en" {
+        return name.replacingOccurrences(of: "«", with: "\u{2018}").replacingOccurrences(of: "»", with: "\u{2019}")
+            .replacingOccurrences(of: "\u{201C}", with: "\u{2018}").replacingOccurrences(of: "\u{201D}", with: "\u{2019}")
+    }
+    return name.replacingOccurrences(of: "«", with: "\u{201C}").replacingOccurrences(of: "»", with: "\u{201D}")
+}
+
+/// What "Por la regla «…»" names, the same in Correo, "Agregar correo", the mail list and Reuniones: the rule's own
+/// name, else its conditions without the destination (the button or chip next to it already shows the project).
+func ruleLabel(_ rule: RoutingRule) -> String {
+    ruleNameForQuotes(RoutingStore.conditionSummary(rule, language: Localizer.language))
+}
+
+/// "Va a 🚀 Acme" chip for a mail the rules (or the default project) would send somewhere — a destination, not a
+/// place it is already in ("✓ en el cerebro" says that) — same look as Reuniones' chip.
 struct RoutedProjectChip: View {
     let label: String
     let help: String
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: "arrow.triangle.branch").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
-            Text(label)
+            Image(systemName: "arrow.right").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
+            Text(L("rules.mail.chip", label))
         }
         .font(.caption.weight(.medium))
         .lineLimit(1)

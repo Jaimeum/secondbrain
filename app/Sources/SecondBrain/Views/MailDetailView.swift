@@ -181,7 +181,7 @@ struct MailDetailView: View {
     private var destinationWhy: String? {
         switch model.destinationReason {
         case .rule(let rule):
-            return L("rules.mail.byRule", RoutingStore.displayName(for: rule, projects: state.projects, language: Localizer.language))
+            return L("rules.mail.byRule", ruleLabel(rule))
         case .defaultProject:
             return L("rules.mail.byDefault")
         default:

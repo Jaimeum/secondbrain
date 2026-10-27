@@ -258,10 +258,7 @@ private struct MailRow: View {
                 } else if let routed = model.routedDestination(for: message) {
                     // MARK: v0.4 routing — where a rule (or the default project) would send it.
                     RoutedProjectChip(label: state.projectName(routed.projectSlug),
-                                      help: routed.rule.map {
-                                          L("rules.mail.byRule", RoutingStore.displayName(for: $0, projects: state.projects,
-                                                                                         language: Localizer.language))
-                                      } ?? L("rules.mail.byDefault"))
+                                      help: routed.rule.map { L("rules.mail.byRule", ruleLabel($0)) } ?? L("rules.mail.byDefault"))
                         .padding(.top, 3)
                 }
             }

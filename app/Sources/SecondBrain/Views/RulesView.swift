@@ -27,6 +27,7 @@ struct RulesSection: View {
         .sheet(item: $editing) { item in
             RuleEditorSheet(store: state.engine.routing, item: item)
         }
+        .onAppear { state.engine.routing.refresh() }   // `sb rules add` or another Mac may have changed them
     }
 }
 
@@ -88,6 +89,7 @@ struct RulesSheet: View {
         .sheet(item: $editing) { item in
             RuleEditorSheet(store: routing, item: item, mail: mail)
         }
+        .onAppear { routing.refresh() }   // `sb rules add` or another Mac may have changed them
     }
 }
 
@@ -232,8 +234,12 @@ struct RulesRows: View {
                 set: { slug in attempt { try store.setDefaultProject(slug.isEmpty ? nil : slug) } })
     }
 
+    /// "Revisar el correo cada 15 min": the vault's rules go through `MailAutoImporter` (turning it on checks right away);
+    /// another store (snapshots) only saves the switch.
     private var autoBinding: Binding<Bool> {
-        Binding(get: { store.settings.autoImportEnabled }, set: { on in attempt { try store.setAutoImportEnabled(on) } })
+        let isVault = store === state.engine.routing
+        return Binding(get: { isVault ? MailAutoImporter.shared.isEnabled : store.settings.autoImportEnabled },
+                       set: { on in attempt { isVault ? try MailAutoImporter.shared.setEnabled(on) : try store.setAutoImportEnabled(on) } })
     }
 
     private func newRule() -> RoutingRule {

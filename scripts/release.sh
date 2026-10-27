@@ -87,10 +87,8 @@ mantiene un wiki por proyecto con todo lo que se habló. El audio nunca sale de 
 único que se envía es el texto que Claude lee con tu propia cuenta.
 
 ### Novedades
-- **Grafo:** tu cerebro como un mapa (pestaña *Grafo*): colores por proyecto o por tipo, clic para explorar, ▶ para ver cómo creció.
-- **Reuniones:** agenda desde el calendario de la Mac o tu cuenta de Microsoft 365 / Google; *Prepararme* antes, **Grabar** con un clic durante, *Ver resumen* después.
-- **Correo conectado:** lee tus mensajes recientes de Microsoft 365 / Google y agrégalos a un proyecto con un botón (solo lectura, siempre se puede deshacer). Si tu organización lo bloquea, *¿Cómo lo habilito?* trae el mensaje para TI y los pasos del administrador.
-- **Apariencia:** claro, oscuro o sistema.
+- **GitHub por proyecto:** cada proyecto sigue varios repositorios y solo las ramas que elijas (ej. *main* y *development*). Se actualiza solo (cada 15 min, hora, 6 h, día o a mano), detecta historial reescrito y ramas borradas, y responde preguntas que cruzan el código con tus correos y reuniones (pestaña *Código*, Ajustes → GitHub).
+- **Reglas:** cada correo y reunión a su proyecto, por remitente, dominio, asunto, asistentes o título (Ajustes → Reglas, o *Reglas…* en Correo y Reuniones).
 
 ### Instalar
 1. Descarga **SecondBrain-$VERSION.dmg** (abajo, en *Assets*), ábrelo y arrastra **SecondBrain** a la
@@ -115,10 +113,8 @@ Records your meetings (computer audio + your mic), transcribes them **on your Ma
 per-project wiki of everything discussed. Audio never leaves your computer.
 
 ### What's new
-- **Graph:** your brain as a map (colors by project or type, click to explore, ▶ to replay how it grew).
-- **Meetings:** agenda from the Mac Calendar or your Microsoft 365 / Google account; prepare before, **Record** with one click during, open the summary after.
-- **Connected mail:** read recent Microsoft 365 / Google messages and add them to a project with one button (read-only, always undoable). If your organization blocks it, *How do I enable it?* has the message for IT and the admin steps.
-- **Appearance:** light, dark or system.
+- **GitHub per project:** each project follows several repositories and only the branches you choose (e.g. *main* and *development*). It keeps itself up to date (every 15 min, hour, 6 h, day or manually), detects rewritten history and deleted branches, and answers questions that cross the code with your emails and meetings (*Code* tab, Settings → GitHub).
+- **Rules:** each email and meeting goes to its project, by sender, domain, subject, attendees or title (Settings → Rules, or *Rules…* in Mail and Meetings).
 
 ### Install
 1. Download **SecondBrain-$VERSION.dmg** (under *Assets*), open it and drag **SecondBrain** to

@@ -147,15 +147,21 @@ private struct InboxRow: View {
     }
 
     private func assign(_ slug: String) {
-        // An email from its raw; a recording through its calendar event, when Reuniones has it loaded.
-        let subject = source.kind == .email || source.kind == .meeting
-            ? state.engine.routingSubject(forSourceId: source.id, event: MeetingsModel.shared.event(id: source.calendarEventId))
-            : nil
+        // An email from its raw (read before the move); a recording through its calendar event, asked of the calendar
+        // when the agenda doesn't have it (a meeting before today).
+        let source = source
+        let subject = source.kind == .email ? state.engine.routingSubject(forSourceId: source.id) : nil
         do {
             try state.engine.assign(sourceId: source.id, to: slug)
-            onAssigned(subject, slug)
         } catch {
             onError((error as? EngineError)?.errorDescription ?? L("sources.moveFailed"))
+            return
+        }
+        guard source.kind == .meeting, source.calendarEventId != nil else { return onAssigned(subject, slug) }
+        let state = state, onAssigned = onAssigned
+        Task {
+            let event = await MeetingsModel.shared.event(for: source, state: state)
+            onAssigned(state.engine.routingSubject(forSourceId: source.id, event: event), slug)
         }
     }
 }

@@ -20,6 +20,7 @@ struct RuleEditorSheet: View {
     @ViewState private var error: String?
     @ViewState private var test: RuleTestResult?
     @ViewState private var testing = false
+    @ViewState private var testTask: Task<Void, Never>?
     @FocusState private var focused: Int?
 
     init(store: RoutingStore, item: RuleEditorItem, mail: [MailMessageSummary] = [], testOnAppear: Bool = false) {
@@ -74,7 +75,13 @@ struct RuleEditorSheet: View {
             if draft.conditions.isEmpty { draft.conditions = [RuleCondition(field: .senderEmail, op: .is, value: "")] }
             if testOnAppear { runTest() } else if isNew { focused = 0 }
         }
-        .onChange(of: draft.conditions) { test = nil }
+        .onChange(of: draft.conditions) {
+            // A result (or a test still loading) is about conditions that are no longer the ones on screen.
+            test = nil
+            testTask?.cancel()
+            testing = false
+        }
+        .onDisappear { testTask?.cancel() }
     }
 
     // MARK: Sentence
@@ -251,8 +258,11 @@ struct RuleEditorSheet: View {
         guard isValid else { showIssues = true; return }
         testing = true
         let rule = RuleValidation.cleaned(draft)
-        Task {
+        testTask?.cancel()
+        testTask = Task {
             let (messages, events, owners) = await RuleTestData.load(state: state, mail: mail)
+            // Edited while the mail loaded: this result is about other conditions.
+            guard !Task.isCancelled, RuleValidation.cleaned(draft).conditions == rule.conditions else { return }
             test = RuleTester.run(rule, mails: messages, events: events, ownerEmails: owners)
             testing = false
         }
@@ -316,7 +326,8 @@ struct RuleEditorSheet: View {
     /// What the field catches, in plain words (fields work on mail and meetings alike).
     static func fieldHint(_ f: RuleField) -> String {
         switch f {
-        case .senderEmail, .organizerEmail: L("rules.hint.sender")
+        case .senderEmail: L("rules.hint.sender")
+        case .organizerEmail: L("rules.hint.organizer")
         case .senderDomain: L("rules.hint.senderDomain")
         case .senderName: L("rules.hint.senderName")
         case .recipient: L("rules.hint.recipient")

@@ -1065,7 +1065,6 @@
 /* v0.4 — Reglas */
 "rules.offer.from" = "¿Todo lo de %1$@ a %2$@ de ahora en adelante?";
 "rules.offer.to" = "¿Todo lo que va para %1$@ a %2$@ de ahora en adelante?";
-"rules.offer.organizer" = "¿Las reuniones y correos de %1$@ a %2$@ de ahora en adelante?";
 "rules.offer.with" = "¿Todo lo que incluya a %1$@ a %2$@ de ahora en adelante?";
 "rules.offer.always" = "Sí, siempre";
 "rules.offer.once" = "Solo esta vez";
@@ -1073,6 +1072,7 @@
 "rules.offer.undo" = "Deshacer";
 "rules.offer.done" = "Listo";
 "rules.mail.byRule" = "Por la regla «%@»";
+"rules.mail.chip" = "Va a %@";
 "rules.mail.byDefault" = "Proyecto por defecto";
 "rules.auto.title" = "Correo agregado";
 "rules.auto.one" = "Agregué 1 correo a %@.";
@@ -1081,7 +1081,7 @@
 "rules.auto.mixed" = "Agregué %1$d correos: %2$@.";
 "rules.auto.more" = "El resto, en un rato.";
 "rules.title" = "Reglas";
-"rules.subtitle" = "Dicen a qué proyecto va cada correo y cada reunión. Gana la primera que coincide.";
+"rules.subtitle" = "Dicen a qué proyecto va cada correo y cada reunión.";
 "rules.footer" = "Gana la primera que coincide. Arrastra para cambiar el orden.";
 "rules.button" = "Reglas…";
 "rules.buttonHelp" = "Decide a qué proyecto va cada correo y cada reunión";
@@ -1099,7 +1099,7 @@
 "rules.turnOff" = "Apagar esta regla";
 "rules.turnOn" = "Encender esta regla";
 "rules.off" = "Apagada";
-"rules.autoBadge" = "Agrega sola";
+"rules.autoBadge" = "Agrega automáticamente";
 "rules.copyName" = "%@ (copia)";
 "rules.hits.zero" = "Aún sin usar";
 "rules.hits.one" = "1 vez";
@@ -1107,8 +1107,8 @@
 "rules.default.label" = "Lo que no coincide con ninguna regla va a";
 "rules.unassigned" = "Sin asignar";
 "rules.autoImport" = "Revisar el correo cada 15 min";
-"rules.autoImport.on" = "Agrego solo los correos de las reglas que dicen «Agrega sola».";
-"rules.autoImport.none" = "Ninguna regla agrega correos sola todavía. Actívalo al editar una regla.";
+"rules.autoImport.on" = "Solo agrego los correos de las reglas marcadas «Agrega automáticamente».";
+"rules.autoImport.none" = "Todavía ninguna regla agrega correos automáticamente. Puedes activarlo al editar una regla.";
 "rules.editor.newTitle" = "Nueva regla";
 "rules.editor.editTitle" = "Editar regla";
 "rules.editor.subtitle" = "Elige qué buscar y a dónde mandarlo.";
@@ -1121,7 +1121,7 @@
 "rules.editor.section.meetings" = "Reuniones";
 "rules.editor.section.both" = "Los dos";
 "rules.editor.name" = "Nombre (opcional)";
-"rules.editor.autoAdd" = "Agregar solos los correos nuevos que coincidan";
+"rules.editor.autoAdd" = "Agregar automáticamente los correos nuevos que coincidan";
 "rules.editor.autoAddHint" = "Cada 15 min reviso tu correo y agrego los que coincidan, sin preguntarte.";
 "rules.editor.duplicate" = "Ya tienes una regla que busca lo mismo.";
 "rules.editor.issue.empty" = "Escribe qué buscar.";
@@ -1151,7 +1151,8 @@
 "rules.hint.sender" = "Correos de esa persona y reuniones que organiza.";
 "rules.hint.senderDomain" = "Correos de esa empresa y reuniones que organiza alguien de ahí.";
 "rules.hint.senderName" = "El nombre que se ve, como «Ana García».";
-"rules.hint.recipient" = "A quién iba el correo, también tus alias, como tu+acme@…";
+"rules.hint.recipient" = "A quién iba dirigido el correo; también sirve con otras direcciones tuyas.";
+"rules.hint.organizer" = "Reuniones que organiza esa persona (sus correos no).";
 "rules.hint.subject" = "El asunto del correo o el título de la reunión.";
 "rules.hint.attendee" = "Alguien invitado a la reunión o copiado en el correo (no tú).";
 "rules.hint.anyText" = "El asunto o el texto del correo, el título o las notas de la reunión.";
@@ -1163,13 +1164,9 @@
 "rules.placeholder.domain" = "acme.com";
 "rules.placeholder.name" = "Ana García";
 "rules.placeholder.text" = "Nubia";
-"rules.meetings.byRule" = "por regla «%@»";
+"rules.meetings.byRule" = "por la regla «%@»";
 "rules.meetings.byRuleHelp" = "Lo decidió la regla «%@». Elige otro proyecto para cambiarlo solo aquí.";
 "rules.meetings.byDefault" = "proyecto por defecto";
 "rules.meetings.byDefaultHelp" = "Ninguna regla coincide: va a tu proyecto por defecto (Ajustes → Reglas).";
-"rules.meetingOffer.organizer" = "¿Las reuniones que organiza %@ a %@?";
-"rules.meetingOffer.with" = "¿Las reuniones con %@ a %@?";
-"rules.meetingOffer.always" = "Sí, siempre";
-"rules.meetingOffer.once" = "Solo esta vez";
-"rules.meetingOffer.created" = "Regla creada";
-"rules.meetingOffer.undo" = "Deshacer";
+"rules.meetingOffer.organizer" = "¿Las reuniones que organiza %1$@ a %2$@ de ahora en adelante?";
+"rules.meetingOffer.with" = "¿Las reuniones con %1$@ a %2$@ de ahora en adelante?";

@@ -80,7 +80,7 @@ En **Ajustes → Cuentas** (o desde las secciones *Correo* y *Reuniones*) pulsa 
 
 ## Conectar tus repositorios de GitHub
 
-En **Ajustes → Cuentas** pulsa **Conectar GitHub** (código de dispositivo en tu navegador, **Usar mi sesión de GitHub CLI** o pegar un token). Después, en cada proyecto agrega los repositorios que quieras: **varios por proyecto**, y de cada uno **solo las ramas que elijas** (por ejemplo `main` y `development`). Lo demás del repo se ignora.
+En **Ajustes → GitHub** pulsa **Conectar GitHub** (código de dispositivo en tu navegador, **Usar mi sesión de GitHub CLI** o pegar un token). Después, en cada proyecto agrega los repositorios que quieras: **varios por proyecto**, y de cada uno **solo las ramas que elijas** (por ejemplo `main` y `development`). Lo demás del repo se ignora.
 
 - **Actualización automática:** SecondBrain revisa tus ramas cada cierto tiempo (por defecto cada 60 minutos; lo cambias en Ajustes). Es incremental: si nada cambió, no hace nada. Si alguien reescribe una rama (force-push, rebase) o la borra, lo detecta y lo anota.
 - **Qué aprende:** commits de cada rama, pull requests, issues, releases, y las diferencias entre ramas (qué está en `development` y todavía no en `main`). El código de las ramas elegidas se guarda en tu Mac para poder responder preguntas sobre él.
@@ -91,6 +91,10 @@ En **Ajustes → Cuentas** pulsa **Conectar GitHub** (código de dispositivo en 
   - "¿Qué PRs siguen abiertos y qué dijo el cliente sobre ellos?"
 - **Terminal:** `sb github status`, `sb github login --gh|--device|--token -` (`--token -` reads the token from stdin, e.g. `pbpaste | sb github login --token -`), `sb github logout`, `sb github add`, `sb github remove`, `sb github sync [--project] [--repo] [--if-due]`.
 - **Organizaciones que restringen apps:** si tu organización exige aprobación, pídele a un admin aprobar SecondBrain (Third-party access policy) o autoriza el token con SAML SSO.
+
+## Reglas: cada correo y reunión a su proyecto
+
+Si todo te llega a una sola cuenta, las **Reglas** (Ajustes → Reglas, o el botón *Reglas…* en Correo y Reuniones) deciden a qué proyecto va cada cosa: "lo que venga de @acme.com va a 🚀 Acme", "si el asunto dice Nubia va a 🤝 Alianza", "las reuniones que organiza ana@acme.com…". Gana la primera que coincide; lo que no coincide con ninguna cae en *Sin asignar* (o en el proyecto por defecto que elijas) y lo asignas a mano. Cada vez que asignas algo a mano, SecondBrain te propone la regla con un clic ("¿Todo lo de @acme.com a 🚀 Acme de ahora en adelante? · Sí, siempre"). Una regla puede además **agregar automáticamente** los correos nuevos que coincidan, revisando tu correo cada 15 minutos.
 
 ## Apariencia
 

@@ -38,8 +38,7 @@ struct MeetingActionButton: View {
         case .recordable:
             let busyElsewhere = state.isRecording || state.isRecorderBusy
             Button {
-                let slug = model.projectSlugForRecording(event, state: state)   // v0.4: a rule counts a hit
-                Task { await state.startRecording(for: event, projectSlug: slug) }
+                Task { await model.record(event, state: state) }
             } label: {
                 HStack(spacing: 6) {
                     PulsingDot(active: !busyElsewhere)
@@ -216,15 +215,14 @@ struct MeetingProjectChip: View {
                 .help(L("meetings.changeProject"))
         case .rule(let rule):
             // MARK: v0.4 routing — decided by a rule: confirmed, no question, and it says which rule.
-            let lang = state.config.uiLanguage
-            withSubtitle(L("rules.meetings.byRule", RoutingStore.conditionSummary(rule, language: lang))) {
+            withSubtitle(L("rules.meetings.byRule", ruleLabel(rule))) {
                 if let slug = resolution.projectSlug {
                     picker { chip(state.projectName(slug), color: .accentColor) }
                 } else {
                     picker { chip(L("meetings.noProject"), color: .secondary, chevron: true) }
                 }
             }
-            .help(L("rules.meetings.byRuleHelp", state.engine.routing.displayName(for: rule, projects: state.projects, language: lang)))
+            .help(L("rules.meetings.byRuleHelp", ruleLabel(rule)))
         case .defaultProject:
             withSubtitle(L("rules.meetings.byDefault")) {
                 picker { chip(state.projectName(resolution.projectSlug), color: .accentColor) }

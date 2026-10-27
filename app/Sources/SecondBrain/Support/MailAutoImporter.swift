@@ -5,8 +5,9 @@ import Observation
 /// "Agregar solos" (CONTRACT §14.5): every 15 minutes and when Correo opens, new mail that falls on a rule with
 /// "Agregar solos los correos nuevos" is added by itself (`BrainEngine.runMailAutoImport`), with one local notification
 /// per cycle ("Agregué 3 correos a 🚀 Acme"). Does nothing without mail accounts, without such rules, with the switch
-/// off (Ajustes → Reglas, stored in the vault's routing.json) or while rendering debug snapshots. Account errors are
-/// silent here: Correo already shows "Vuelve a conectar".
+/// off (Ajustes → Reglas, stored in the vault's routing.json), while rendering debug snapshots (never, not even when
+/// asked: a snapshot must not write mail nor queue Claude jobs) or with the demo accounts (`SB_DEMO_ACCOUNTS=1`) unless
+/// `SB_DEMO_AUTO_IMPORT=1` asks for it. Account errors are silent here: Correo already shows "Vuelve a conectar".
 @MainActor @Observable
 final class MailAutoImporter {
     static let shared = MailAutoImporter()
@@ -40,10 +41,19 @@ final class MailAutoImporter {
 
     // MARK: Lifecycle
 
+    /// Snapshots never run a cycle; demo accounts only with `SB_DEMO_AUTO_IMPORT=1`.
+    static func isAllowed(isDemo: Bool, snapshot: Bool? = nil,
+                          environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard !(snapshot ?? (DebugSnapshots.directory != nil)) else { return false }
+        return !isDemo || environment["SB_DEMO_AUTO_IMPORT"] == "1"
+    }
+
+    private var allowed: Bool { Self.isAllowed(isDemo: state?.engine.accounts.isDemo ?? false) }
+
     /// From `AppState.startEngine`: a cycle shortly after launch, then every 15 minutes.
     func start(state: AppState) {
         self.state = state
-        guard loop == nil, DebugSnapshots.directory == nil else { return }
+        guard loop == nil, allowed else { return }
         loop = Task { [weak self] in
             try? await Task.sleep(for: .seconds(20))   // let the app (and the accounts) settle first
             while !Task.isCancelled {
@@ -61,7 +71,7 @@ final class MailAutoImporter {
 
     /// One cycle now (opening Correo, the switch turned on). Skipped while one runs or right after the last one.
     func runNow(force: Bool = false) {
-        guard let state, cycle == nil, DebugSnapshots.directory == nil, hasWork else { return }
+        guard let state, cycle == nil, allowed, hasWork else { return }
         if !force, let lastRun, Date().timeIntervalSince(lastRun) < Self.minimumGap { return }
         let engine = state.engine
         isRunning = true

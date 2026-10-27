@@ -651,6 +651,20 @@ private final class ConfigBox: @unchecked Sendable {
             source.resume()
             watchers.append(source)
         }
+        // MARK: v0.4 routing — rules changed by `sb rules` or by another Mac through a synced vault (the routing screen,
+        // `match` and a later reorder must see them). Watched when the vault already has its `.secondbrain` folder.
+        let rulesDir = RoutingStore.fileURL(vaultRoot: config.vaultURL).deletingLastPathComponent()
+        let fd = open(rulesDir.path, O_EVTONLY)
+        if fd >= 0 {
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete],
+                                                                   queue: .main)
+            source.setEventHandler { [weak self] in
+                MainActor.assumeIsolated { self?.routing.refresh() }
+            }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            watchers.append(source)
+        }
     }
 
     private func stopWatching() {

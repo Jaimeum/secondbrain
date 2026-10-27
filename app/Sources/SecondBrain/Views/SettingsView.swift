@@ -35,8 +35,10 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 if state.engineStarted {
-                    OwnerNameField().id(state.vaultGeneration)
-                    OwnerEmailsField().id(state.vaultGeneration)
+                    // Distinct ids: two Form rows with the same explicit id collapse into one view (it showed
+                    // "Tu nombre" twice and no "Tus correos").
+                    OwnerNameField().id("owner.name.\(state.vaultGeneration)")
+                    OwnerEmailsField().id("owner.emails.\(state.vaultGeneration)")
                 }
                 Toggle(L("settings.captureMic"), isOn: binding(\.captureMic))
                 Toggle(L("settings.hotkey"), isOn: binding(\.hotkeyEnabled))

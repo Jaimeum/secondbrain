@@ -2,7 +2,7 @@
   "use strict";
 
   const PAGE_PREFIX = "sbwiki://page/";
-  const HIDDEN_PROPS = new Set(["title", "source_id", "sources", "speakers", "aliases", "original_file", "source_url"]);
+  const HIDDEN_PROPS = new Set(["title", "source_id", "sources", "speakers", "aliases", "original_file", "source_url", "language"]);
 
   let links = {};
 
@@ -86,6 +86,26 @@
     for (const a of root.querySelectorAll("a[href^='http']")) a.setAttribute("target", "_blank");
   }
 
+  // A front-matter value as the user should read it: names instead of slugs, localized words, a short date.
+  // Returns "" to hide the chip (a technical value such as `type: index`).
+  function chipValue(key, value, payload) {
+    const map = (payload.propValues || {})[key];
+    if (map && Object.prototype.hasOwnProperty.call(map, value)) return map[value];
+    if (key === "project") return (payload.projectNames || {})[value] || value;
+    if (key === "people") {
+      const names = payload.peopleNames || {};
+      return value.split(/\s*,\s*/).map(s => names[s.replace(/^people\//, "")] || s).join(", ");
+    }
+    const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (d && (key === "updated" || key === "date")) {
+      try {
+        return new Date(+d[1], +d[2] - 1, +d[3]).toLocaleDateString(payload.locale || undefined,
+          { day: "numeric", month: "short", year: "numeric" });
+      } catch (e) { return value; }
+    }
+    return value;
+  }
+
   window.SB = {
     render(payload) {
       links = payload.links || {};
@@ -93,6 +113,8 @@
       const { body, props } = splitFrontMatter(payload.markdown || "");
 
       document.getElementById("props").innerHTML = props
+        .map(([k, v]) => [k, chipValue(k, v, payload)])
+        .filter(([, v]) => v)
         .map(([k, v]) => '<span class="chip">' + escapeHTML((payload.propLabels || {})[k] || k) + ": <b>" + escapeHTML(v) + "</b></span>")
         .join("");
 

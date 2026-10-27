@@ -218,6 +218,16 @@ private final class ConfigBox: @unchecked Sendable {
         upsert(&src)
     }
 
+    /// The project picked for the recording in progress changed (menu bar, Reuniones chip): the source follows it, so
+    /// "Sin proyecto" chosen mid-recording sends it to Inbox (`recordingFinished` only applies a non-nil slug).
+    public func setRecordingProject(sourceId: String, projectSlug: String?) {
+        guard var src = source(sourceId), src.status == .recording else { return }
+        let slug = validProject(projectSlug)
+        guard src.projectSlug != slug else { return }
+        src.projectSlug = slug
+        upsert(&src)
+    }
+
     public func recordingFinished(_ m: SessionManifest) {
         var src = source(m.id) ?? SourceRecord(id: m.id, kind: .meeting, title: meetingTitle(m), projectSlug: m.projectSlug,
                                                status: .queued, createdAt: m.startedAt)
@@ -480,6 +490,27 @@ private final class ConfigBox: @unchecked Sendable {
         jobs = queue.jobs
         onJobUpdate?(job)
         Log.info("enqueued \(job.kind.rawValue) job \(job.id) source=\(job.sourceId ?? "-")")
+        kick()
+    }
+
+    /// Delays the queued jobs of these sources until `date` (CONTRACT §12.7: while Correo's "Deshacer" toast shows,
+    /// so undoing finds them still queued and simply deletes them instead of hitting a running ingest).
+    /// Payload mark of a job held by `hold(sourceIds:until:)` (the queue status shows it as plain waiting, not as Claude's limit).
+    public static let heldForUndoKey = "heldForUndo"
+
+    public func hold(sourceIds: [String], until date: Date) {
+        let ids = Set(sourceIds)
+        var changed = false
+        for var job in queue.jobs where job.status == .queued && job.sourceId.map(ids.contains) == true {
+            guard (job.notBefore ?? .distantPast) < date else { continue }
+            job.notBefore = date
+            job.payload[Self.heldForUndoKey] = "1"
+            queue.upsert(job)
+            changed = true
+        }
+        guard changed else { return }
+        writeGeneration += 1
+        jobs = queue.jobs
         kick()
     }
 

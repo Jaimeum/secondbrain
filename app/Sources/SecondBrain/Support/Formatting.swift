@@ -219,6 +219,20 @@ extension SourceKind {
 extension TimelineKind {
     static let allKinds: [TimelineKind] = [.meeting, .email, .document, .note, .url, .decision, .milestone, .task]
 
+    /// The same SF Symbols as the graph chips and the wiki sidebar (CONTRACT §12.7).
+    var symbol: String {
+        switch self {
+        case .meeting: "waveform"
+        case .email: "envelope"
+        case .document: "doc.text"
+        case .note: "note.text"
+        case .url: "link"
+        case .decision: "checkmark.seal"
+        case .milestone: "flag"
+        case .task: "calendar"   // a due date, not a done task
+        }
+    }
+
     var emoji: String {
         switch self {
         case .meeting: "🎙️"

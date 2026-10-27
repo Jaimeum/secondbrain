@@ -201,10 +201,14 @@ public extension BrainEngine {
                                                                             rawPath: "\(folder)/\(m.file)")
             }
         }
+        // A provider message is identified by its externalId: the body heuristic (for pasted copies) only compares it
+        // with messages that have none, and never on an empty body (two plain forwards in the same minute differ).
+        if externalId != nil, email.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
         let hash = EmailParser.bodyFingerprint(email.body)
         for folder in vault.threadFolders() {
             guard let meta = vault.threadMeta(at: folder) else { continue }
-            for m in meta.messages where m.bodyHash == hash && Self.sameSender(m.from, email.from) && Self.sameMinute(m.date, email.date) {
+            for m in meta.messages where (externalId == nil || m.externalId == nil) && m.bodyHash == hash
+                && Self.sameSender(m.from, email.from) && Self.sameMinute(m.date, email.date) {
                 return sources.first { $0.id == m.sourceId } ?? SourceRecord(id: m.sourceId ?? m.file, kind: .email, title: meta.subject,
                                                                             projectSlug: VaultStore.projectSlug(of: folder), status: .done,
                                                                             rawPath: "\(folder)/\(m.file)")

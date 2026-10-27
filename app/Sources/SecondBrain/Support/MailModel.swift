@@ -32,6 +32,13 @@ final class MailModel {
         var projectLocked: Bool { continuesStoredThread && existingThreadProject != nil }
     }
 
+    /// A learned email whose undo hits pages changed later: "Deshacer de todos modos" (like Actividad).
+    struct UndoConflict: Identifiable {
+        let id = UUID()
+        var sourceIds: [String]
+        var paths: [String]
+    }
+
     /// "Aprendiendo del correo… · Deshacer" (6 s).
     struct Toast: Identifiable, Equatable {
         let id = UUID()
@@ -59,6 +66,7 @@ final class MailModel {
     private(set) var isSaving = false
     private(set) var toast: Toast?
     var actionError: String?
+    var undoConflict: UndoConflict?
     private(set) var known = KnownPeople()
     /// The user changed the filter: don't switch it on their behalf any more.
     @ObservationIgnored private var filterChosen = false
@@ -67,6 +75,7 @@ final class MailModel {
 
     @ObservationIgnored private weak var state: AppState?
     @ObservationIgnored private var listTask: Task<Void, Never>?
+    @ObservationIgnored private var moreTask: Task<Void, Never>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var detailTask: Task<Void, Never>?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
@@ -132,6 +141,10 @@ final class MailModel {
     func load(force: Bool = false) {
         guard let state, let account else { return }
         listTask?.cancel()
+        // A "Cargar más" in flight belongs to the old list: drop it, or its spinner would never go away.
+        moreTask?.cancel()
+        moreTask = nil
+        isLoadingMore = false
         let key = MailCache.key(account: account.id, query: query)
         if !force, let cached = MailCache.shared.list(key) {
             apply(cached.messages, next: cached.next, append: false)
@@ -165,7 +178,7 @@ final class MailModel {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = MailCache.key(account: account.id, query: query)
         isLoadingMore = true
-        listTask = Task {
+        moreTask = Task {
             do {
                 let page = q.isEmpty
                     ? try await provider.listMessages(since: Date().addingTimeInterval(-Self.window), pageToken: token)
@@ -177,7 +190,7 @@ final class MailModel {
                 guard !Task.isCancelled, !(error is CancellationError) else { return }
                 actionError = FriendlyError.message(error)
             }
-            isLoadingMore = false
+            if !Task.isCancelled { isLoadingMore = false }
         }
     }
 
@@ -189,6 +202,7 @@ final class MailModel {
             messages = list
         }
         nextToken = next
+        autoPickFilter()
         // Keep reading what was open; otherwise open the newest message, like Mail does.
         if selectedId == nil || !visibleMessages.contains(where: { $0.id == selectedId }) { select(visibleMessages.first?.id) }
     }
@@ -212,8 +226,7 @@ final class MailModel {
 
     // MARK: Known people
 
-    /// Reads people/*.md (off the main thread) when the vault changed; the first time it also picks the filter:
-    /// "Conocidos" when there is somebody known, "Todos" otherwise.
+    /// Reads people/*.md (off the main thread) when the vault changed and picks the filter (`autoPickFilter`).
     func refreshKnown() {
         guard let state, state.vaultRevision != knownRevision else { return }
         knownRevision = state.vaultRevision
@@ -223,9 +236,19 @@ final class MailModel {
             let scanned = await Task.detached(priority: .utility) { KnownPeople.scan(vault) }.value
             guard !Task.isCancelled else { return }
             known = scanned
-            if !filterChosen { filter = scanned.pageCount > 0 ? .known : .all }
+            autoPickFilter()
             if let selectedId, !visibleMessages.contains(where: { $0.id == selectedId }) { select(visibleMessages.first?.id) }
         }
+    }
+
+    /// Until the user picks one: "Conocidos" only when something loaded comes from a known person; otherwise
+    /// "Todos" (people pages that match nobody in the inbox must not open on an empty list).
+    private func autoPickFilter() {
+        guard !filterChosen else { return }
+        let owners = Set(accounts.map(\.email))
+        let anyKnown = known.pageCount > 0
+            && messages.contains { known.contains($0.from) && !owners.contains($0.from.email ?? "") }
+        filter = anyKnown ? .known : .all
     }
 
     // MARK: Reading
@@ -356,6 +379,9 @@ final class MailModel {
                 self.detail?.existingThreadProject = first.projectSlug
                 self.detail?.continuesStoredThread = true
             }
+            // Their ingest (or classify) waits until the toast is gone, so "Deshacer" always finds them still queued
+            // and can delete them (a running job can't be deleted).
+            state.engine.hold(sourceIds: added.map(\.id), until: Date().addingTimeInterval(Self.toastSeconds + 2))
             showToast(Toast(text: L("mail.learning"), sourceIds: added.map(\.id)))
         } catch {
             actionError = FriendlyError.message(error)
@@ -378,31 +404,51 @@ final class MailModel {
     }
 
     /// "Deshacer": sources not learned yet are deleted (raw too); learned ones are undone first.
+    /// The toast goes away only once everything was forgotten, so a failure can be retried.
     func undo() {
         guard let toast, let state else { return }
-        dismissToast()
-        do {
-            for id in toast.sourceIds.reversed() { try forget(id, engine: state.engine) }
-            state.bumpVault()
-        } catch {
-            actionError = FriendlyError.message(error)
-        }
+        if forgetAll(toast.sourceIds.reversed(), state: state) { dismissToast() }
     }
 
     /// Chip menu "Quitar".
     func remove(_ source: SourceRecord) {
         guard let state else { return }
-        do {
-            try forget(source.id, engine: state.engine)
-            state.bumpVault()
-        } catch {
-            actionError = FriendlyError.message(error)
-        }
+        _ = forgetAll([source.id], state: state)
     }
 
-    private func forget(_ sourceId: String, engine: BrainEngine) throws {
+    /// "Deshacer de todos modos" after a conflict: overwrites the later changes to those pages.
+    func forceUndo(_ conflict: UndoConflict) {
+        undoConflict = nil
+        guard let state else { return }
+        _ = forgetAll(conflict.sourceIds, force: true, state: state)
+    }
+
+    /// Forgets each source in order; stops at the first failure (a conflict asks "¿deshacer de todos modos?").
+    private func forgetAll(_ ids: [String], force: Bool = false, state: AppState) -> Bool {
+        defer { state.bumpVault() }
+        for (i, id) in ids.enumerated() {
+            do {
+                try forget(id, force: force, engine: state.engine)
+            } catch HistoryError.conflict(let paths) {
+                undoConflict = UndoConflict(sourceIds: Array(ids[i...]), paths: paths)
+                return false
+            } catch {
+                actionError = FriendlyError.message(error)
+                return false
+            }
+        }
+        return true
+    }
+
+    private func forget(_ sourceId: String, force: Bool = false, engine: BrainEngine) throws {
         guard let src = engine.source(sourceId) else { return }
-        if src.status == .done, let history = src.historyId { try engine.undo(historyId: history) }
+        if src.status == .done, let history = src.historyId {
+            do {
+                try engine.undo(historyId: history, force: force)
+            } catch HistoryError.notFound, HistoryError.alreadyUndone {
+                // History pruned (or undone in Actividad): nothing left to undo, just forget the source.
+            }
+        }
         try engine.delete(sourceId: sourceId)
     }
 

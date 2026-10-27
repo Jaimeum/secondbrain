@@ -53,7 +53,7 @@ struct BrainTimelineView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(presentKinds, id: \.self) { kind in
-                            FilterChip(title: "\(kind.emoji) \(kind.label)", isOn: !hidden.contains(kind)) {
+                            FilterChip(title: kind.label, symbol: kind.symbol, isOn: !hidden.contains(kind)) {
                                 if hidden.contains(kind) { hidden.remove(kind) } else { hidden.insert(kind) }
                             }
                         }
@@ -179,11 +179,13 @@ private struct EntryRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(entry.kind.emoji)
-                .font(.system(size: 14))
+            Image(systemName: entry.kind.symbol)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
                 .frame(width: 26, height: 26)
                 .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
                 .overlay(Circle().strokeBorder(Color.primary.opacity(0.12)))
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }   // an image has no text baseline
                 .offset(x: -28)
                 .padding(.trailing, -28)
             VStack(alignment: .leading, spacing: 3) {
@@ -223,12 +225,16 @@ private struct EntryRow: View {
 
 struct FilterChip: View {
     let title: String
+    var symbol: String? = nil
     let isOn: Bool
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            HStack(spacing: 4) {
+                if let symbol { Image(systemName: symbol).imageScale(.small) }
+                Text(title)
+            }
                 .font(.callout)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)

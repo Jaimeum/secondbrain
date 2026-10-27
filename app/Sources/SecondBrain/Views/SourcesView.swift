@@ -3,7 +3,7 @@ import BrainCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// "Reuniones y fuentes": everything the project learned from, with status, and ways to add more.
+/// "Fuentes" (`tab.sources`): everything the project learned from, with status, and ways to add more.
 struct SourcesView: View {
     @Environment(AppState.self) private var state
     let projectSlug: String

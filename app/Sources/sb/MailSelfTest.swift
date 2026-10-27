@@ -108,6 +108,8 @@ import Foundation
         bare.body = "Otro texto"
         t.check(engine.duplicateOf(bare, externalId: "microsoft:demo-m03") != nil, "externalId matched via sources/_thread.json")
         t.check(engine.duplicateOf(bare, externalId: "microsoft:nope") == nil, "unknown externalId + different body → new")
+        t.check(engine.duplicateOf(e3, externalId: "microsoft:other-id") == nil,
+                "another provider message (new externalId) is never a body-hash duplicate of an imported one")
 
         // Continue a thread: the first message alone, then the conversation → only the new one, same thread.
         let k1 = try await demo.fetchMessage(id: "demo-m04")
@@ -129,6 +131,13 @@ import Foundation
         t.check(!fm.fileExists(atPath: inboxRaw.path) && engine.emailSource(externalId: "microsoft:demo-m06") == nil, "undo removes raw + record")
         let readded = try engine.addMailMessages([budget], account: account, threadKey: nil, projectSlug: kickoff.slug)
         t.eq(readded.count, 1, "after undo the message can be added again")
+        // "Deshacer" window: the new sources' jobs wait, so undo finds them queued (never running) and deletes them.
+        let until = Date().addingTimeInterval(8)
+        engine.hold(sourceIds: readded.map(\.id), until: until)
+        let held = engine.jobs.filter { $0.sourceId == readded.first?.id }
+        t.check(!held.isEmpty && held.allSatisfy { $0.status == .queued && $0.notBefore == until }, "held jobs wait for the undo toast")
+        if let id = readded.first?.id { try engine.delete(sourceId: id) }
+        t.check(engine.jobs.allSatisfy { $0.sourceId != readded.first?.id }, "undo during the hold deletes source and jobs")
     } catch {
         t.check(false, "mail import engine: \(error)")
     }

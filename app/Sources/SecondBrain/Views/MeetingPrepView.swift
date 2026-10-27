@@ -65,7 +65,7 @@ struct MeetingPrepView: View {
                 }
                 Spacer()
                 MeetingActionButton(event: event, showsPrepare: false, onPrepare: {}, onShowPage: onShowPage)
-                if let join = event.joinURL {
+                if let join = event.joinURL, JoinLink.isSafe(join) {
                     Button { NSWorkspace.shared.open(join) } label: { Label(L("meetings.join"), systemImage: "video.fill") }
                 }
             }
@@ -84,7 +84,30 @@ struct MeetingPrepView: View {
     // MARK: Local cards (no Claude)
 
     @ViewBuilder private var localCards: some View {
-        if let data {
+        if let data, data.knowsNothing {
+            // Nothing known about anyone: one row of people and one sentence, not a card per stranger.
+            VStack(alignment: .leading, spacing: 10) {
+                if !data.attendees.isEmpty {
+                    sectionTitle(L("prep.who"), symbol: "person.2")
+                    FlowLayout(spacing: 6) {
+                        ForEach(data.attendees) { a in
+                            HStack(spacing: 6) {
+                                InitialsCircle(address: EmailAddress(name: a.name, email: a.email), size: 20)
+                                Text(a.name).font(.callout).lineLimit(1)
+                            }
+                            .padding(.leading, 3)
+                            .padding(.trailing, 10)
+                            .padding(.vertical, 3)
+                            .background(Color.primary.opacity(0.05), in: Capsule())
+                        }
+                    }
+                }
+                Label(L(data.attendees.isEmpty ? "prep.knowNothing" : "prep.knowNoOne"), systemImage: "leaf")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else if let data {
             VStack(alignment: .leading, spacing: 12) {
                 if !data.attendees.isEmpty {
                     sectionTitle(L("prep.who"), symbol: "person.2")
@@ -118,12 +141,6 @@ struct MeetingPrepView: View {
                             }
                         }
                     }
-                }
-                if data.knowsNothing {
-                    Label(L("prep.knowNothing"), systemImage: "leaf")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         } else {
@@ -307,5 +324,47 @@ enum MeetingPrepCache {
         let models = (ChatModel(), ChatModel())
         cache[eventId] = models
         return models
+    }
+}
+
+/// Left-aligned rows that wrap (attendee chips).
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: proposal.width.map { min($0, width) } ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for i in row.indices {
+                let size = subviews[i].sizeThatFits(.unspecified)
+                subviews[i].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [(indices: [Int], width: CGFloat, height: CGFloat)] {
+        var rows: [(indices: [Int], width: CGFloat, height: CGFloat)] = []
+        var current: (indices: [Int], width: CGFloat, height: CGFloat) = ([], 0, 0)
+        for i in subviews.indices {
+            let size = subviews[i].sizeThatFits(.unspecified)
+            let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+            if needed > width, !current.indices.isEmpty {
+                rows.append(current)
+                current = ([i], size.width, size.height)
+            } else {
+                current = (current.indices + [i], needed, max(current.height, size.height))
+            }
+        }
+        if !current.indices.isEmpty { rows.append(current) }
+        return rows
     }
 }

@@ -16,6 +16,7 @@ enum DebugSnapshots {
         guard let dir = directory else { return }
         Task {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            state.engine.autoProcess = false   // a snapshot never starts a Claude job (AppState.launch also does this)
             try? await Task.sleep(for: .seconds(2))
             if ProcessInfo.processInfo.environment["SB_SNAPSHOT_SELFTEST"] == "1" { await selfTest(state: state, dir: dir) }
             let project = state.projects.first
@@ -63,7 +64,21 @@ enum DebugSnapshots {
             shots.append(("blocked", CGSize(width: 460, height: 520), AnyView(AccountBlockedView(
                 provider: .microsoft, reason: .consent, context: .meetings, onUseMacCalendar: {}, onClose: {}))))
             shots.append(("connect-empty", CGSize(width: 760, height: 460), AnyView(ConnectAccountsEmptyState(
-                symbol: "calendar", title: L("meetings.empty.title"), message: L("meetings.empty.message")))))
+                symbol: "calendar", title: L("meetings.empty.title"), message: L("meetings.empty.message"), context: .meetings))))
+            // Integration: Correo never offers the Mac Calendar; a narrow Reuniones wraps the buttons without repeating any.
+            shots.append(("connect-empty-mail", CGSize(width: 760, height: 460), AnyView(ConnectAccountsEmptyState(
+                symbol: "envelope", title: L("mail.empty.title"), message: L("mail.empty.message"),
+                secondaryTitle: L("mail.pasteInstead"), secondaryAction: {}, context: .mail))))
+            shots.append(("connect-empty-narrow", CGSize(width: 440, height: 520), AnyView(ConnectAccountsEmptyState(
+                symbol: "calendar", title: L("meetings.empty.title"), message: L("meetings.empty.message"), context: .meetings))))
+            shots.append(("blocked-notregistered", CGSize(width: 460, height: 520), AnyView(AccountBlockedView(
+                provider: .google, reason: .notRegistered, context: .mail, onUseMacCalendar: {}, onClose: {}))))
+            // Integration: the main screens with their tab bars (Wiki · Grafo · …) and the sidebar footer banner.
+            shots.append(("sidebar", CGSize(width: 260, height: 720), AnyView(SidebarView(showNewProject: .constant(false)))))
+            if let project {
+                shots.append(("web-project", CGSize(width: 1100, height: 720), AnyView(ProjectView(project: project))))
+            }
+            shots.append(("web-brain", CGSize(width: 1100, height: 720), AnyView(BrainView())))
             // MARK: v0.3 graph — focused graph + web views need a run loop and WKWebView.takeSnapshot.
             if let topic = await state.engine.graph(projectSlug: nil).nodes.filter({ $0.kind == .topic }).max(by: { $0.links < $1.links }) {
                 shots.append(("graph-focus", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: topic.id, onOpen: { _ in }))))
@@ -74,11 +89,16 @@ enum DebugSnapshots {
             }
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
-                if name.hasPrefix("graph") {
+                if name.hasPrefix("graph") || name.hasPrefix("web-") {   // views with a WKWebView
                     await GraphSnapshot.render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
                     continue
                 }
                 await render(view.environment(state), size: size, to: dir.appendingPathComponent(name + ".png"))
+            }
+            // Integration: the optional accounts step of the onboarding, then its primary button ("Más tarde" without
+            // accounts) pressed through the default-action shortcut: the next shot must be the last step.
+            if only.isEmpty || "onboarding-accounts".hasPrefix(only) {
+                await renderOnboardingAccounts(state: state, dir: dir)
             }
             // MARK: v0.3 mail — after the smart button: ✓ chips + "Aprendiendo del correo… · Deshacer" (writes to the vault).
             if let mail = await MailModel.snapshotAfterAdd(state: state) {
@@ -133,6 +153,34 @@ enum DebugSnapshots {
             }
         }
         log("migrationNotice=\(engine.migrationNotice ?? "nil") templates=\(state.templates.count)")
+    }
+
+    /// "onboarding-accounts" and "onboarding-accounts-next" (after pressing Return = the primary button).
+    private static func renderOnboardingAccounts(state: AppState, dir: URL) async {
+        let size = CGSize(width: 760, height: 620)
+        let host = NSHostingView(rootView: OnboardingView(initialStep: .accounts).environment(state)
+            .frame(width: size.width, height: size.height))
+        host.frame = CGRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        try? await Task.sleep(for: .seconds(1.5))
+        writePNG(host, to: dir.appendingPathComponent("onboarding-accounts.png"))
+        let ret = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                   windowNumber: window.windowNumber, context: nil, characters: "\r",
+                                   charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)
+        if let ret { _ = window.performKeyEquivalent(with: ret) }
+        try? await Task.sleep(for: .seconds(1.5))
+        writePNG(host, to: dir.appendingPathComponent("onboarding-accounts-next.png"))
+        window.contentView = nil
+        OnboardingStep.clearSaved()
+    }
+
+    private static func writePNG(_ host: NSView, to url: URL) {
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: url)
     }
 
     private static func render(_ view: some View, size: CGSize, to url: URL) async {

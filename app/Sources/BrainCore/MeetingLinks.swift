@@ -40,7 +40,7 @@ public final class MeetingLinks: @unchecked Sendable {
     /// The event's own choice, else its series'. nil = nothing chosen yet (a suggestion may be shown).
     public func choice(for event: CalendarEvent) -> MeetingProjectChoice? {
         lock.lock(); defer { lock.unlock() }
-        let value = stored.events[event.id] ?? event.seriesId.flatMap { stored.series[$0] }
+        let value = event.allIds.lazy.compactMap { self.stored.events[$0] }.first ?? event.seriesId.flatMap { stored.series[$0] }
         return value.map { $0.isEmpty ? .noProject : .project($0) }
     }
 
@@ -53,6 +53,7 @@ public final class MeetingLinks: @unchecked Sendable {
                 stored.series[series] = value
                 stored.events[event.id] = nil
             } else {
+                for alias in event.aliasIds { stored.events[alias] = nil }   // one choice per meeting, under its kept id
                 stored.events[event.id] = value
             }
             return stored
@@ -268,6 +269,11 @@ public extension BrainEngine {
         src.calendarEventId = event.id
         if !event.isAllDay { src.eventDate = event.start }
         upsert(&src)
+    }
+
+    /// The newest source recorded for this calendar event (under any id it was merged from), if any.
+    func meetingSource(for event: CalendarEvent) -> SourceRecord? {
+        sources.last { event.matches($0.calendarEventId) }
     }
 
     /// The newest source recorded for this calendar event, if any.

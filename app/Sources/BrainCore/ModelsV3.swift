@@ -228,12 +228,23 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
     public var attendees: [EmailAddress]
     public var notes: String?
     public var webLink: String?
+    /// Ids of the same meeting seen through other accounts (`MeetingAgenda.dedupe` merged them into this one).
+    public var aliasIds: [String] = []
     public init(id: String, accountId: String, seriesId: String? = nil, title: String, start: Date, end: Date,
                 isAllDay: Bool = false, location: String? = nil, joinURL: URL? = nil, organizer: EmailAddress? = nil,
                 attendees: [EmailAddress] = [], notes: String? = nil, webLink: String? = nil) {
         self.id = id; self.accountId = accountId; self.seriesId = seriesId; self.title = title; self.start = start
         self.end = end; self.isAllDay = isAllDay; self.location = location; self.joinURL = joinURL
         self.organizer = organizer; self.attendees = attendees; self.notes = notes; self.webLink = webLink
+    }
+
+    /// This event's id and the ids of the copies merged into it.
+    public var allIds: [String] { [id] + aliasIds }
+
+    /// Whether `eventId` names this event (or a copy merged into it).
+    public func matches(_ eventId: String?) -> Bool {
+        guard let eventId else { return false }
+        return eventId == id || aliasIds.contains(eventId)
     }
 
     /// §12.5 "En curso": now ∈ [start − 2 min, end].

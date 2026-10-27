@@ -71,7 +71,7 @@ public final class GoogleProvider: MailCalendarProvider {
                 nextIndex += 1
                 group.addTask {
                     let data = try await api.get(Self.metadataURL(id: id))
-                    return (i, try? GmailParser.summary(data, account: account))
+                    return (i, try? GmailParser.visibleSummary(data, account: account))
                 }
             }
             for _ in 0..<Self.parallelFetches { addNext() }
@@ -156,6 +156,17 @@ public enum GmailParser {
         return ((list.messages ?? []).map(\.id), list.nextPageToken)
     }
 
+    /// Drafts (never sent), trash and spam: not part of the inbox nor of a conversation to learn from.
+    static let hiddenLabels: Set<String> = ["DRAFT", "TRASH", "SPAM"]
+
+    static func isHidden(_ m: Message) -> Bool { !hiddenLabels.isDisjoint(with: m.labelIds ?? []) }
+
+    /// `messages.get` → summary, nil for a draft / trash / spam message.
+    public static func visibleSummary(_ data: Data, account: ConnectedAccount) throws -> MailMessageSummary? {
+        let m = try decodeJSON(Message.self, data, provider: .google)
+        return isHidden(m) ? nil : summary(m, account: account)
+    }
+
     /// `messages.get` (metadata or full) → summary.
     public static func summary(_ data: Data, account: ConnectedAccount) throws -> MailMessageSummary {
         summary(try decodeJSON(Message.self, data, provider: .google), account: account)
@@ -165,11 +176,11 @@ public enum GmailParser {
         try await full(decodeJSON(Message.self, data, provider: .google), account: account)
     }
 
-    /// `threads.get` → messages oldest first.
+    /// `threads.get` → messages oldest first (drafts, trash and spam left out).
     public static func thread(_ data: Data, account: ConnectedAccount) async throws -> [MailMessageFull] {
         let thread = try decodeJSON(Thread.self, data, provider: .google)
         var out: [MailMessageFull] = []
-        for m in thread.messages ?? [] { out.append(try await full(m, account: account)) }
+        for m in thread.messages ?? [] where !isHidden(m) { out.append(try await full(m, account: account)) }
         return out.sorted { $0.summary.date < $1.summary.date }
     }
 
@@ -288,7 +299,7 @@ public enum GoogleCalendarParser {
         let notes = e.description.map(plainText)?.nonEmptyString
         let location = e.location?.nonEmptyString
         let video = e.conferenceData?.entryPoints?.first { $0.entryPointType == "video" }?.uri
-        let join = e.hangoutLink.flatMap { URL(string: $0) } ?? video.flatMap { URL(string: $0) } ?? JoinLink.find(in: [location, notes])
+        let join = JoinLink.https(e.hangoutLink) ?? JoinLink.https(video) ?? JoinLink.find(in: [location, notes])
         func address(_ p: Person?) -> EmailAddress? {
             guard let p, p.email != nil || p.displayName != nil else { return nil }
             return EmailAddress(name: p.displayName?.nonEmptyString, email: p.email?.lowercased())

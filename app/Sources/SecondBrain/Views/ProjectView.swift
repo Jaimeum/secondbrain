@@ -218,8 +218,8 @@ struct TabPicker: View {
 }
 
 extension View {
-    /// The section switcher ("Wiki · Reuniones y fuentes · Pendientes · …") in a slim bar above the content:
-    /// six tabs don't fit in the toolbar next to the title at the default window width.
+    /// The section switcher ("Wiki · Grafo · Fuentes · Pendientes · …") in a slim bar above the content:
+    /// seven tabs don't fit in the toolbar next to the title at the default window width.
     func tabBar(_ picker: TabPicker) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {

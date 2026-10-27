@@ -79,6 +79,7 @@ struct GraphView: View {
             "links": L("graph.links"), "showAll": L("graph.showAll"), "fit": L("graph.fit"), "search": L("graph.search"),
             "play": L("graph.play"), "today": L("graph.today"), "hint": L("graph.hint"), "close": L("graph.close"),
             "connected": L("graph.connected"), "matches": L("graph.matches"), "noMatches": L("graph.noMatches"),
+            "overview": L("graph.overviewLabel"),
         ]
         let projects = state.projects.enumerated().map { i, p -> [String: Any] in
             ["slug": p.slug, "name": p.name, "emoji": p.emoji, "color": GraphPalette.colors[i % GraphPalette.colors.count]]

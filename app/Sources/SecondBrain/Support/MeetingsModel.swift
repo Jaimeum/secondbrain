@@ -103,7 +103,7 @@ final class MeetingsModel {
         let providers = accounts.map { ($0, store.provider(for: $0)) }
         let from = Calendar.current.startOfDay(for: Date())
         let to = Calendar.current.date(byAdding: .day, value: Self.horizonDays + 1, to: from) ?? from.addingTimeInterval(31 * 86_400)
-        let results = await withTaskGroup(of: (ConnectedAccount, Result<[CalendarEvent], Error>).self) { group in
+        let arrived = await withTaskGroup(of: (ConnectedAccount, Result<[CalendarEvent], Error>).self) { group in
             for (account, provider) in providers {
                 group.addTask {
                     do { return (account, .success(try await provider.events(from: from, to: to))) }
@@ -115,6 +115,9 @@ final class MeetingsModel {
             return out
         }
         guard !Task.isCancelled else { return }
+        // Account order, not arrival order: which copy of a shared meeting is kept must not depend on network timing.
+        let order = Dictionary(accounts.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let results = arrived.sorted { (order[$0.0.id] ?? .max, $0.0.id) < (order[$1.0.id] ?? .max, $1.0.id) }
         var all: [CalendarEvent] = []
         var errors: [String: String] = [:]
         for (account, result) in results {
@@ -173,7 +176,7 @@ final class MeetingsModel {
 
     func event(id: String?) -> CalendarEvent? {
         guard let id else { return nil }
-        return events.first { $0.id == id }
+        return events.first { $0.matches(id) }
     }
 
     /// "Ahora" (in its record window) or else "Siguiente".
@@ -185,7 +188,7 @@ final class MeetingsModel {
 
     func phase(of event: CalendarEvent, state: AppState, now: Date) -> MeetingPhase {
         MeetingAgenda.phase(of: event, now: now, recordingEventId: state.recordingEventId,
-                            source: state.engine.meetingSource(forEvent: event.id))
+                            source: state.engine.meetingSource(for: event))
     }
 
     /// Attendees other than me.
@@ -229,6 +232,6 @@ final class MeetingsModel {
         }
         linksRevision += 1
         // Recording this meeting right now: the recording follows the new choice.
-        if state.recordingEventId == event.id { state.recordingProjectSlug = choice?.projectSlug }
+        if event.matches(state.recordingEventId) { state.recordingProjectSlug = choice?.projectSlug }
     }
 }

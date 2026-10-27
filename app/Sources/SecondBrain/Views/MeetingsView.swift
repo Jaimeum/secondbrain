@@ -21,7 +21,7 @@ struct MeetingsView: View {
         Group {
             if state.engine.accounts.accounts.isEmpty {
                 ConnectAccountsEmptyState(symbol: "calendar", title: L("meetings.empty.title"),
-                                          message: L("meetings.empty.message"))
+                                          message: L("meetings.empty.message"), context: .meetings)
             } else {
                 content
             }
@@ -234,7 +234,7 @@ struct MeetingHeroCard: View {
             .foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 MeetingActionButton(event: event, large: true, onPrepare: onPrepare, onShowPage: onShowPage)
-                if let join = event.joinURL {
+                if let join = event.joinURL, JoinLink.isSafe(join) {
                     Button { NSWorkspace.shared.open(join) } label: {
                         Label(L("meetings.join"), systemImage: "video.fill")
                     }
@@ -318,7 +318,7 @@ struct MeetingDetail: View {
 
                 HStack(spacing: 10) {
                     MeetingActionButton(event: event, large: true, onPrepare: onPrepare, onShowPage: onShowPage)
-                    if let join = event.joinURL {
+                    if let join = event.joinURL, JoinLink.isSafe(join) {
                         Button { NSWorkspace.shared.open(join) } label: {
                             Label(L("meetings.join"), systemImage: "video.fill")
                         }
@@ -351,7 +351,7 @@ struct MeetingDetail: View {
                     }
                 }
 
-                if let web = event.webLink.flatMap(URL.init(string:)) {
+                if let web = JoinLink.https(event.webLink) {
                     Link(destination: web) {
                         Label(L("meetings.openInCalendar"), systemImage: "arrow.up.forward.square")
                     }

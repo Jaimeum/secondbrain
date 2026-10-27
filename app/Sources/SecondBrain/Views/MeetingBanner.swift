@@ -18,12 +18,19 @@ struct MeetingBanner: View {
         content(now: model.now)
     }
 
+    /// The meeting the banner offers to record right now (its own "Grabar"), if any.
+    @MainActor static func recordableNow(state: AppState, now: Date) -> CalendarEvent? {
+        let model = MeetingsModel.shared
+        guard !state.isRecording, let live = MeetingAgenda.current(in: model.events, now: now),
+              model.phase(of: live, state: state, now: now) == .recordable else { return nil }
+        return live
+    }
+
     @ViewBuilder private func content(now: Date) -> some View {
         if let id = state.recordingEventId, let event = model.event(id: id),
            MeetingAgenda.isOverrunning(event, now: now, recordingEventId: id) {
             MeetingOverrunRow(event: event, now: now, compact: true)
-        } else if !state.isRecording, let live = MeetingAgenda.current(in: model.events, now: now),
-                  model.phase(of: live, state: state, now: now) == .recordable {
+        } else if let live = Self.recordableNow(state: state, now: now) {
             HStack(spacing: 8) {
                 Circle().fill(Color.red).frame(width: 7, height: 7)
                 VStack(alignment: .leading, spacing: 1) {

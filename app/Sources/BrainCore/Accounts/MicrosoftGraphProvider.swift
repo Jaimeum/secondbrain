@@ -6,7 +6,7 @@ public final class MicrosoftGraphProvider: MailCalendarProvider {
     let api: APIClient
 
     public static let base = "https://graph.microsoft.com/v1.0"
-    static let summaryFields = "id,conversationId,subject,bodyPreview,receivedDateTime,sentDateTime,isRead,hasAttachments,webLink,from,sender,toRecipients"
+    static let summaryFields = "id,conversationId,subject,bodyPreview,receivedDateTime,sentDateTime,isRead,isDraft,hasAttachments,webLink,from,sender,toRecipients"
     static let eventFields = "id,subject,start,end,isAllDay,isCancelled,location,onlineMeeting,onlineMeetingUrl,organizer,attendees,bodyPreview,webLink,seriesMasterId,type"
     static let textBody = ["Prefer": "outlook.body-content-type=\"text\""]
     static let utc = ["Prefer": "outlook.timezone=\"UTC\""]
@@ -125,6 +125,7 @@ public enum GraphParser {
         var receivedDateTime: String?
         var sentDateTime: String?
         var isRead: Bool?
+        var isDraft: Bool?
         var hasAttachments: Bool?
         var webLink: String?
         var from: Recipient?
@@ -170,18 +171,18 @@ public enum GraphParser {
 
     public static func messageList(_ data: Data) throws -> (messages: [MailMessageSummary], next: String?) {
         let page = try decodeJSON(Page<Message>.self, data, provider: .microsoft)
-        return (page.value.map(summary), page.next)
+        return (page.value.filter { $0.isDraft != true }.map(summary), page.next)   // drafts were never sent
     }
 
     public static func message(_ data: Data) async throws -> MailMessageFull {
         try await full(decodeJSON(Message.self, data, provider: .microsoft))
     }
 
-    /// A conversation, oldest first.
+    /// A conversation, oldest first (unsent drafts left out).
     public static func thread(_ data: Data) async throws -> [MailMessageFull] {
         let page = try decodeJSON(Page<Message>.self, data, provider: .microsoft)
         var out: [MailMessageFull] = []
-        for m in page.value { out.append(try await full(m)) }
+        for m in page.value where m.isDraft != true { out.append(try await full(m)) }
         return out.sorted { $0.summary.date < $1.summary.date }
     }
 
@@ -224,7 +225,7 @@ public enum GraphParser {
         guard let start = graphDate(s, allDay: allDay), let end = graphDate(en, allDay: allDay) else { return nil }
         let location = e.location?.displayName?.nonEmptyString
         let notes = e.bodyPreview?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmptyString
-        let join = e.onlineMeeting?.joinUrl.flatMap { URL(string: $0) } ?? e.onlineMeetingUrl.flatMap { URL(string: $0) }
+        let join = JoinLink.https(e.onlineMeeting?.joinUrl) ?? JoinLink.https(e.onlineMeetingUrl)
             ?? JoinLink.find(in: [location, notes])
         let attendees = (e.attendees ?? []).filter { $0.type?.lowercased() != "resource" }
             .compactMap { address(Recipient(emailAddress: $0.emailAddress)) }

@@ -1,4 +1,3 @@
-"app.name" = "SecondBrain";
 
 /* Common */
 "common.back" = "Back";
@@ -35,6 +34,7 @@
 
 /* Recording */
 "record.start" = "Record";
+"record.somethingElse" = "Record something else";
 "record.starting" = "Starting…";
 "record.stopping" = "Saving…";
 "record.stopWithTime" = "Stop · %@";
@@ -104,8 +104,37 @@
 "prop.project" = "Project";
 "prop.people" = "People";
 "prop.role" = "Role";
+"prop.type.meeting" = "Meeting";
+"prop.type.transcript" = "Transcript";
+"prop.type.email" = "Email";
+"prop.type.email-thread" = "Email conversation";
+"prop.type.document" = "Document";
+"prop.type.note" = "Note";
+"prop.type.url" = "Web page";
+"prop.type.person" = "Person";
+"prop.type.topic" = "Topic";
+"prop.type.decision" = "Decision";
+"prop.type.question" = "Question";
+"prop.type.overview" = "Project overview";
+"prop.type.timeline" = "Timeline";
+"prop.type.tasks" = "Tasks";
+"prop.type.template" = "Format";
+"prop.type.source" = "Source";
+"prop.status.active" = "Active";
+"prop.status.paused" = "Paused";
+"prop.status.done" = "Done";
+"prop.status.dropped" = "Dropped";
+"prop.status.proposed" = "Proposed";
+"prop.status.accepted" = "Accepted";
+"prop.status.superseded" = "Superseded";
+"prop.status.reversed" = "Reversed";
+"prop.status.open" = "Open";
+"prop.status.waiting" = "Waiting";
+"prop.status.closed" = "Closed";
+"prop.status.answered" = "Answered";
+"prop.status.processed" = "Processed";
 
-/* Meetings & sources */
+/* Sources */
 "sources.emptyTitle" = "Nothing here yet";
 "sources.emptyMessage" = "Record a meeting, drop files (PDF, Word, text, audio or video) or paste a link. Recordings are transcribed automatically. I’ll learn from all of it and organize it in the wiki.";
 "sources.dropHere" = "Drop to add to this project";
@@ -410,7 +439,7 @@
 "tl.kind.email" = "Email";
 "tl.kind.document" = "Document";
 "tl.kind.note" = "Note";
-"tl.kind.url" = "Link";
+"tl.kind.url" = "Web page";
 "tl.kind.decision" = "Decision";
 "tl.kind.milestone" = "Milestone";
 "tl.kind.task" = "Due date";
@@ -619,15 +648,14 @@
 "theme.dark" = "Dark";
 
 /* v0.3 — Graph */
-"graph.title" = "Graph";
-"graph.count" = "%ld pages, %ld connections";
 "graph.empty.title" = "Your brain is still empty";
 "graph.empty.message" = "This is where you'll see how everything I learn connects. Record a meeting or add something to start.";
 "graph.seeInGraph" = "See in graph";
 "graph.showAll" = "Show all";
 "graph.fit" = "Fit";
 "graph.search" = "Search the graph";
-"graph.links" = "%ld links";
+"graph.links" = "%ld connections";
+"graph.overviewLabel" = "Overview";
 "graph.play" = "Watch it grow";
 "graph.open" = "Open page";
 "graph.openOverview" = "Open overview";
@@ -648,7 +676,7 @@
 "graph.kind.decision" = "Decision";
 "graph.kind.question" = "Question";
 "graph.kind.task" = "Task";
-"graph.kind.page" = "Page";
+"graph.kind.page" = "Summary";
 "graph.kinds.project" = "Projects";
 "graph.kinds.meeting" = "Meetings";
 "graph.kinds.email" = "Emails";
@@ -660,7 +688,7 @@
 "graph.kinds.decision" = "Decisions";
 "graph.kinds.question" = "Questions";
 "graph.kinds.task" = "Tasks";
-"graph.kinds.page" = "Pages";
+"graph.kinds.page" = "Summaries";
 
 /* v0.3 — Accounts */
 "accounts.section" = "Accounts";
@@ -671,6 +699,7 @@
 "accounts.disconnect" = "Disconnect";
 "accounts.waiting" = "Waiting for you to sign in to %@ in your browser…";
 "accounts.howToEnable" = "How do I enable it?";
+"accounts.troubleConnecting" = "Trouble connecting a work account?";
 "accounts.notConfigured" = "This connection isn't set up yet. Here's how, in a minute.";
 "accounts.consentRequired" = "Your organization needs to approve SecondBrain.";
 "accounts.advanced" = "Advanced";
@@ -681,6 +710,7 @@
 "accounts.macCalendar" = "Mac Calendar";
 "accounts.macCalendar.detail" = "Calendar only · whatever is already in the Calendar app";
 "accounts.useMacCalendar" = "Use the Mac's calendar";
+"accounts.orConnect" = "or connect your account:";
 "accounts.openCalendarSettings" = "Open System Settings";
 "accounts.needsSignIn" = "The session expired: sign in again.";
 "accounts.signInAgain" = "Sign in";
@@ -776,8 +806,6 @@
 "mail.empty.message" = "Connect your account and pick which emails I should learn from. Nothing is saved until you say so.";
 "mail.pasteInstead" = "or paste an email";
 "mail.pickMessage" = "Pick an email to read it.";
-"mail.addToBrain" = "Add to brain";
-"mail.addThread" = "Add whole thread";
 "mail.inBrain" = "✓ in your brain";
 "mail.loadMore" = "Load more";
 "mail.search" = "Search mail";
@@ -826,18 +854,16 @@
 "meetings.title" = "Meetings";
 "meetings.subtitle" = "Your agenda, ready to record";
 "meetings.empty.title" = "Bring in your calendar";
-"meetings.empty.message" = "Connect your account and your meetings show up here: join, record and prepare in one click.";
+"meetings.empty.message" = "Use your Mac's calendar or connect your account to see your meetings here — join, record and get ready in one click.";
 "meetings.nothing.title" = "Nothing on the agenda";
 "meetings.nothing.message" = "Your meetings will show up here.";
 "meetings.today" = "Today";
 "meetings.week" = "This week";
 "meetings.upcoming" = "Upcoming";
 "meetings.inProgress" = "In progress";
-"meetings.recorded" = "Recorded ✓";
 "meetings.record" = "Record";
-"meetings.recordThis" = "Record this meeting";
 "meetings.join" = "Join";
-"meetings.prepare" = "Prepare me";
+"meetings.prepare" = "Get ready";
 "meetings.viewSummary" = "View summary";
 "meetings.now" = "NOW";
 "meetings.next" = "NEXT";
@@ -861,6 +887,7 @@
 "meetings.over" = "Ended";
 "meetings.noProject" = "No project";
 "meetings.noProjectHelp" = "Without a project, the recording goes to the Inbox and I'll suggest one later.";
+"meetings.chooseProject" = "Choose project";
 "meetings.changeProject" = "Change project";
 "meetings.isItProject" = "Is it for %@?";
 "meetings.yesProject" = "Yes, it belongs to this project";
@@ -883,8 +910,6 @@
 /* v0.3 — Prepare */
 "prep.title" = "Get ready for “%@”";
 "prep.loading" = "Going over what I know about this meeting and who's coming…";
-"prep.save" = "Save to wiki";
-"prep.copy" = "Copy";
 "prep.back" = "Back";
 "prep.who" = "Who's coming";
 "prep.lastTime" = "Last time: %@ · %@";
@@ -895,6 +920,7 @@
 "prep.more" = "and %ld more";
 "prep.lastDecision" = "Last decision";
 "prep.knowNothing" = "I don't know anything about this meeting or who's coming yet. Record it and next time I'll have a summary ready.";
+"prep.knowNoOne" = "I don't know them yet. Record this meeting and next time I'll have a summary ready.";
 "prep.withClaude" = "Briefing";
 "prep.withClaudeButton" = "Prepare with Claude";
 "prep.withClaudeHint" = "Takes a minute. I only use what's already in your brain: who's coming, what's open and what to ask.";

@@ -222,7 +222,7 @@ public enum KnowledgeGraphBuilder {
 
     // MARK: Page parsing
 
-    nonisolated(unsafe) private static let wikilinkRegex =
+    private static let wikilinkRegex =
         try! NSRegularExpression(pattern: #"\[\[([^\[\]\|#\n]+)(?:#[^\[\]\|\n]*)?(?:\|[^\[\]\n]*)?\]\]"#)
 
     static func wikilinkTargets(in text: String) -> [String] {

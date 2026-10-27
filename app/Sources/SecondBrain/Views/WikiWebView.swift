@@ -86,6 +86,13 @@ struct WikiWebView: NSViewRepresentable {
                     "status": L("prop.status"), "duration": L("prop.duration"), "language": L("prop.language"),
                     "project": L("prop.project"), "people": L("prop.people"), "role": L("prop.role"),
                 ],
+                // Front-matter values in the user's words; "" hides a technical one (CONTRACT §12.7: no raw slugs).
+                "propValues": [
+                    "type": Dictionary(uniqueKeysWithValues: Self.typeValues.map { ($0, L("prop.type.\($0)")) })
+                        .merging(Self.hiddenTypes.map { ($0, "") }) { a, _ in a },
+                    "status": Dictionary(uniqueKeysWithValues: Self.statusValues.map { ($0, L("prop.status.\($0)")) }),
+                ],
+                "locale": Localizer.locale.identifier.replacingOccurrences(of: "_", with: "-"),
             ]
             renderGeneration += 1
             let generation = renderGeneration
@@ -106,7 +113,18 @@ struct WikiWebView: NSViewRepresentable {
                     var links: [String: Any] = [:]
                     for target in targets { links[target] = resolved[target] ?? NSNull() }
                     let backlinks = vault.backlinks(to: path).filter { $0.path != path }.map { ["path": $0.path, "title": $0.title] }
-                    return ["markdown": markdown, "links": links, "backlinks": backlinks]
+                    // Project and people chips show names, not slugs.
+                    let head = markdown.hasPrefix("---") ? String(markdown.prefix(4000)) : ""
+                    var projectNames: [String: String] = [:]
+                    if head.contains("\nproject:") {
+                        for p in ProjectManager(vaultRoot: vault.root).list() { projectNames[p.slug] = "\(p.emoji) \(p.name)" }
+                    }
+                    var peopleNames: [String: String] = [:]
+                    if head.contains("\npeople:") {
+                        for p in MeetingPeopleIndex.load(vault: vault).people { peopleNames[p.slug] = p.title }
+                    }
+                    return ["markdown": markdown, "links": links, "backlinks": backlinks,
+                            "projectNames": projectNames, "peopleNames": peopleNames]
                 }.value
                 guard generation == renderGeneration, path == shownPath, let webView = self.webView else { return }
                 send(payload.merging(page) { _, new in new }, to: webView)
@@ -118,6 +136,12 @@ struct WikiWebView: NSViewRepresentable {
                   let json = String(data: data, encoding: .utf8) else { return }
             webView.evaluateJavaScript("SB.render(\(json))")
         }
+
+        static let typeValues = ["meeting", "transcript", "email", "email-thread", "document", "note", "url", "person", "topic",
+                                 "decision", "question", "overview", "timeline", "tasks", "template", "source"]
+        static let hiddenTypes = ["index", "log", "health", "people"]
+        static let statusValues = ["active", "paused", "done", "dropped", "proposed", "accepted", "superseded", "reversed",
+                                   "open", "waiting", "closed", "answered", "processed"]
 
         nonisolated private static let wikilinkRegex = try! NSRegularExpression(pattern: #"\[\[([^\[\]\|#\n]+)(?:#[^\[\]\|\n]*)?(?:\|[^\[\]\n]*)?\]\]"#)
 

@@ -304,6 +304,12 @@ private final class FakeBrowser: @unchecked Sendable {
          "Zoom link inside parentheses")
     t.eq(JoinLink.find(in: ["Oficina 3, piso 2", "https://example.com/agenda"]), nil, "no join link in plain text")
     t.check(JoinLink.isJoinLink(URL(string: "https://zoom.us/j/1")), "zoom URL is a join link")
+    for bad in ["smb://attacker.example/share?x=https://zoom.us/j/123", "file:///tmp/x?https://zoom.us/j/1",
+                "zoommtg://zoom.us/join?confno=1#https://zoom.us/j/1", "https://evil.example/?u=https://zoom.us/j/1"] {
+        t.check(!JoinLink.isJoinLink(URL(string: bad)), "not a join link: \(bad)")
+    }
+    t.eq(JoinLink.https("smb://attacker.example/x#https://meet.google.com/abc-defg-hij"), nil, "provider join URL must be https")
+    t.eq(JoinLink.https(" https://meet.google.com/abc-defg-hij ")?.host, "meet.google.com", "https provider join URL kept")
 }
 
 // MARK: - Fixtures
@@ -454,6 +460,13 @@ private func gmailHeaders(_ pairs: [(String, String)]) -> String {
         let msgs = try await GmailParser.thread(Data(thread.utf8), account: account)
         t.eq(msgs.map(\.summary.id), ["g0", "g1"], "Gmail thread oldest first")
         t.eq(msgs.first?.bodyText, "primero", "Gmail single-part body")
+        let draft = #"{"id":"gd","threadId":"t1","labelIds":["DRAFT"],"internalDate":"\#(ms)","payload":{"mimeType":"text/plain","headers":[],"body":{"data":"\#(HTTP.base64url(Data("borrador".utf8)))"}}}"#
+        let withDraft = #"{"id":"t1","messages":[\#(fullJSON),\#(draft)]}"#
+        t.eq(try await GmailParser.thread(Data(withDraft.utf8), account: account).map(\.summary.id), ["g1"], "Gmail thread leaves drafts out")
+        t.check(try GmailParser.visibleSummary(Data(draft.utf8), account: account) == nil, "Gmail list leaves drafts out")
+        let graphDraft = #"{"value":[{"id":"a","conversationId":"c","receivedDateTime":"2026-10-01T10:00:00Z","body":{"contentType":"text","content":"hola"}},{"id":"b","conversationId":"c","isDraft":true,"receivedDateTime":"2026-10-01T11:00:00Z","body":{"contentType":"text","content":"borrador"}}]}"#
+        t.eq(try await GraphParser.thread(Data(graphDraft.utf8)).map(\.summary.id), ["a"], "Graph thread leaves drafts out")
+        t.eq(try GraphParser.messageList(Data(graphDraft.utf8)).messages.map(\.id), ["a"], "Graph list leaves drafts out")
     } catch { t.check(false, "Gmail full parses: \(error)") }
     do {
         let me = try GmailParser.profile(Data(#"{"sub":"1","email":"Demo@Gmail.com","name":"Ana García","email_verified":true}"#.utf8),
@@ -607,6 +620,24 @@ private let googleEvents = #"""
     } catch { t.check(false, "loopback round trip: \(error)") }
     server.stop()
     t.check(LoopbackServer.page(success: true, language: "en").contains("Done, you can go back to SecondBrain"), "callback page (en)")
+
+    // With an expected state, a forged callback (other state, or none) gets a 404 and doesn't end the wait.
+    let guarded = LoopbackServer(language: "en", expectedState: "good")
+    do {
+        let port = try await guarded.start()
+        let waiter = Task { try await guarded.waitForCallback(timeout: .seconds(10)) }
+        let (_, forged) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/?error=admin_policy_enforced&state=bad")!)
+        t.eq((forged as? HTTPURLResponse)?.statusCode, 404, "forged error (wrong state) → 404")
+        let (_, stateless) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/?code=x")!)
+        t.eq((stateless as? HTTPURLResponse)?.statusCode, 404, "callback without state → 404")
+        let (_, real) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/?code=c2&state=good")!)
+        t.eq((real as? HTTPURLResponse)?.statusCode, 200, "real callback → 200")
+        t.eq(try await waiter.value["code"], "c2", "only the real callback ends the wait")
+    } catch { t.check(false, "loopback state guard: \(error)") }
+    guarded.stop()
+    t.eq(errorKind { _ = try OAuthClient.validateCallback(["error": "admin_policy_enforced", "state": "bad"], expectedState: "mine",
+                                                          provider: .microsoft) },
+         "failed", "error with a wrong state is not believed (no 'org blocked')")
 
     // localhost (Microsoft's redirect host) reaches the loopback listener too.
     let local = LoopbackServer(language: "en")

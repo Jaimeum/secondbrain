@@ -85,12 +85,13 @@ public enum OAuthClient {
     public static func authorize(_ endpoint: OAuthEndpoint, language: String, loginHint: String? = nil,
                                  timeout: Duration = defaultTimeout, transport: @escaping HTTPTransport = HTTP.urlSession,
                                  openURL: @escaping @Sendable (URL) -> Void) async throws -> OAuthTokens {
-        let server = LoopbackServer(language: language)
+        let state = randomToken(bytes: 24)
+        // Only the redirect carrying this sign-in's `state` ends the wait: stray or hostile requests get a 404.
+        let server = LoopbackServer(language: language, expectedState: state)
         defer { server.stop() }
         let port = try await server.start()
         let redirect = endpoint.redirectURI(port: port)
         let pkce = PKCE.generate()
-        let state = randomToken(bytes: 24)
         let url = authorizationURL(endpoint, redirectURI: redirect, state: state, pkce: pkce, loginHint: loginHint)
         openURL(url)
         let params: [String: String]
@@ -121,15 +122,16 @@ public enum OAuthClient {
         return HTTP.url(endpoint.authorizeURL, query: query)
     }
 
-    /// The code from the redirect, after checking `state` (CSRF) and turning `error=` into an `AccountError`.
+    /// The code from the redirect, after checking `state` (CSRF) and turning `error=` into an `AccountError`. `state`
+    /// is checked first: an `error=` that doesn't belong to this sign-in is not believed.
     public static func validateCallback(_ params: [String: String], expectedState: String,
                                         provider: AccountProvider) throws -> String {
-        if let error = params["error"] {
-            throw AccountErrorMapper.map(provider: provider, error: error, description: params["error_description"])
-        }
         guard let state = params["state"], constantTimeEquals(state, expectedState) else {
             throw AccountError.failed(lang.t("La respuesta del navegador no coincide con este inicio de sesión. Inténtalo de nuevo.",
                                              "The browser's answer doesn't match this sign-in. Please try again."))
+        }
+        if let error = params["error"] {
+            throw AccountErrorMapper.map(provider: provider, error: error, description: params["error_description"])
         }
         guard let code = params["code"], !code.isEmpty else {
             throw AccountError.failed(lang.t("El navegador no devolvió un código de acceso.", "The browser didn't return an access code."))
@@ -224,7 +226,13 @@ public final class LoopbackServer: @unchecked Sendable {
     private var result: Result<[String: String], Error>?
     private var waiter: CheckedContinuation<[String: String], Error>?
 
-    public init(language: String) { self.language = language }
+    /// When set, only a callback whose `state` equals it is accepted; anything else gets a 404 and the wait goes on.
+    private let expectedState: String?
+
+    public init(language: String, expectedState: String? = nil) {
+        self.language = language
+        self.expectedState = expectedState
+    }
 
     /// Starts listening and returns the port.
     public func start() async throws -> UInt16 {
@@ -339,7 +347,8 @@ public final class LoopbackServer: @unchecked Sendable {
         if let comps = URLComponents(string: "http://127.0.0.1" + target) {
             for item in comps.queryItems ?? [] where params[item.name] == nil { params[item.name] = item.value ?? "" }
         }
-        let isCallback = parts.first == "GET" && (params["code"] != nil || params["error"] != nil)
+        let stateMatches = expectedState.map { expected in params["state"].map { OAuthClient.constantTimeEquals($0, expected) } ?? false } ?? true
+        let isCallback = parts.first == "GET" && (params["code"] != nil || params["error"] != nil) && stateMatches
         let status: String
         let body: String
         if isCallback {

@@ -105,27 +105,31 @@ private struct SidebarFooter: View {
 }
 
 /// "Transcribing… 42%", "Learning from the meeting…", "Waiting for Claude until 15:40".
+/// No TimelineView here: an empty TimelineView still takes a slot in the surrounding stack (an extra blank gap in the
+/// menu bar and the sidebar footer). The clock comes from `MeetingsModel.now`, which ticks every 20 s.
 struct QueueStatusLine: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 20)) { context in
-            if let status = state.queueStatus(now: context.date) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        if status.waiting {
-                            Image(systemName: "hourglass").foregroundStyle(.orange)
-                        } else {
-                            ProgressView().controlSize(.mini)
-                        }
-                        Text(status.text)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+        content(now: MeetingsModel.shared.now)
+    }
+
+    @ViewBuilder private func content(now: Date) -> some View {
+        if let status = state.queueStatus(now: now) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    if status.waiting {
+                        Image(systemName: "hourglass").foregroundStyle(.orange)
+                    } else {
+                        ProgressView().controlSize(.mini)
                     }
-                    if let progress = status.progress {
-                        ProgressView(value: progress).controlSize(.small)
-                    }
+                    Text(status.text)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                if let progress = status.progress {
+                    ProgressView(value: progress).controlSize(.small)
                 }
             }
         }
@@ -136,7 +140,23 @@ struct RecordButton: View {
     @Environment(AppState.self) private var state
     var large = false
 
+    /// The meeting banner above already offers "Grabar" for the meeting on now: this one becomes the plain secondary
+    /// "Grabar otra cosa" (one primary action, CONTRACT §12.7).
+    private var meetingOffered: Bool {
+        !state.isRecording && !state.isRecorderBusy && MeetingBanner.recordableNow(state: state, now: MeetingsModel.shared.now) != nil
+    }
+
     var body: some View {
+        if meetingOffered {
+            button.buttonStyle(.bordered).controlSize(.large)
+        } else {
+            button.buttonStyle(.borderedProminent)
+                .tint(state.isRecording ? .red : .accentColor)
+                .controlSize(.large)
+        }
+    }
+
+    private var button: some View {
         Button {
             // From the main window, a new recording goes to the project being viewed.
             if large, !state.isRecording, case .project(let slug) = state.selection {
@@ -155,16 +175,13 @@ struct RecordButton: View {
                 } else if state.isRecorderBusy {
                     Text(state.recorder.state == .starting ? L("record.starting") : L("record.stopping"))
                 } else {
-                    Text(L("record.start"))
+                    Text(meetingOffered ? L("record.somethingElse") : L("record.start"))
                 }
             }
             .font(.system(size: large ? 14 : 13, weight: .semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, large ? 9 : 7)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(state.isRecording ? .red : .accentColor)
-        .controlSize(.large)
         .disabled(state.isRecorderBusy)
         .help(state.config.hotkeyEnabled ? L("record.hotkeyHint") : "")
     }

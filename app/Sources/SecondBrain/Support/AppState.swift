@@ -58,7 +58,12 @@ final class AppState {
     var selection: SidebarItem? = .brain
 
     var recordingProjectSlug: String? {
-        didSet { if isRecording { recorder.updateCurrent(title: recordingTitleOrNil, projectSlug: recordingProjectSlug) } }
+        didSet {
+            guard isRecording else { return }
+            recorder.updateCurrent(title: recordingTitleOrNil, projectSlug: recordingProjectSlug)
+            // The source follows too ("Sin proyecto" mid-recording must send it to Inbox).
+            if let id = currentRecordingId { engine.setRecordingProject(sourceId: id, projectSlug: recordingProjectSlug) }
+        }
     }
     var recordingTitle = "" {
         didSet { if isRecording { recorder.updateCurrent(title: recordingTitleOrNil, projectSlug: recordingProjectSlug) } }
@@ -116,11 +121,17 @@ final class AppState {
 
     func launch() {
         Self.applyAppearance(config.appearance)
-        Notifier.requestAuthorization()
-        applyHotKey()
+        // Development snapshots (SB_SNAPSHOT_DIR) never start Claude jobs, download models, register the hot key or
+        // ask for any system permission.
+        let snapshot = DebugSnapshots.directory != nil
+        if snapshot { engine.autoProcess = false }
+        if !snapshot {
+            Notifier.requestAuthorization()
+            applyHotKey()
+        }
         if config.onboardingComplete {
             startEngine()
-            prepareModels()
+            if !snapshot { prepareModels() }
         }
     }
 
@@ -534,7 +545,8 @@ final class AppState {
         }
         let queued = jobs.filter { $0.status == .queued }
         guard !queued.isEmpty else { return nil }
-        let waits = queued.map { $0.notBefore ?? .distantPast }
+        // A job held for Correo's "Deshacer" (a few seconds) is not waiting for Claude.
+        let waits = queued.map { $0.payload[BrainEngine.heldForUndoKey] != nil && $0.attempts == 0 ? .distantPast : ($0.notBefore ?? .distantPast) }
         if let earliest = waits.min(), earliest > now {
             return QueueStatus(text: L("queue.waitingClaude", Fmt.time(earliest)), progress: nil, waiting: true)
         }

@@ -12,14 +12,15 @@ struct MailView: View {
     }
 
     private var hasMailAccounts: Bool {
-        state.engine.accounts.accounts.contains { $0.provider.hasMail }
+        !state.engine.accounts.mailAccounts.isEmpty
     }
 
     var body: some View {
         Group {
             if !hasMailAccounts {
                 ConnectAccountsEmptyState(symbol: "envelope", title: L("mail.empty.title"), message: L("mail.empty.message"),
-                                          secondaryTitle: L("mail.pasteInstead")) { state.requestEmail() }
+                                          secondaryTitle: L("mail.pasteInstead"), secondaryAction: { state.requestEmail() },
+                                          context: .mail)
             } else {
                 HSplitView {
                     MailListPane(model: model)
@@ -48,6 +49,16 @@ struct MailView: View {
         .task(id: hasMailAccounts) { if hasMailAccounts { model.start(state: state) } }
         .onChange(of: state.accountsRevision) { model.accountsChanged() }
         .onChange(of: state.vaultRevision) { model.refreshKnown() }
+        .alert(L("activity.conflictTitle"), isPresented: Binding(get: { model.undoConflict != nil },
+                                                                set: { if !$0 { model.undoConflict = nil } })) {
+            Button(L("activity.undoAnyway"), role: .destructive) {
+                if let conflict = model.undoConflict { model.forceUndo(conflict) }
+            }
+            Button(L("common.cancel"), role: .cancel) { model.undoConflict = nil }
+        } message: {
+            Text(L("activity.conflictMessage",
+                   model.undoConflict?.paths.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ") ?? ""))
+        }
     }
 }
 

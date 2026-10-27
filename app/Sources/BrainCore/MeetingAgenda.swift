@@ -29,7 +29,7 @@ public enum MeetingAgenda {
     /// The phase of `event` at `now`. `recordingEventId` = the event being recorded (nil = not recording one);
     /// `source` = the newest source whose `calendarEventId` is this event's id.
     public static func phase(of event: CalendarEvent, now: Date, recordingEventId: String?, source: SourceRecord?) -> MeetingPhase {
-        if let recordingEventId, recordingEventId == event.id { return .recording }
+        if event.matches(recordingEventId) { return .recording }
         if let source {
             switch source.status {
             case .done: return .done
@@ -47,7 +47,7 @@ public enum MeetingAgenda {
 
     /// Recording this event and it ended more than 5 minutes ago: ask "¿Sigues en la reunión?".
     public static func isOverrunning(_ event: CalendarEvent, now: Date, recordingEventId: String?) -> Bool {
-        recordingEventId == event.id && !event.isAllDay && now >= event.end.addingTimeInterval(recordGrace)
+        event.matches(recordingEventId) && !event.isAllDay && now >= event.end.addingTimeInterval(recordGrace)
     }
 
     /// The meeting happening now (start − 2 min … end), preferring the one that started last; all-day events never count.
@@ -62,7 +62,9 @@ public enum MeetingAgenda {
 
     /// Same meeting seen through two accounts (an invite to both work and personal calendars) → one row. Two events are
     /// the same when their titles match (case, accents and spacing ignored) and they start in the same minute. The kept
-    /// copy is the richest one (attendees, join link, notes) and borrows what it lacks from the others.
+    /// copy is the richest one (attendees, join link, notes; ties → lowest account id, then lowest id, so the kept id
+    /// doesn't depend on which account answered first) and borrows what it lacks from the others. It remembers the
+    /// other copies' ids in `aliasIds`, so choices and recordings keyed by any of them still find it.
     public static func dedupe(_ events: [CalendarEvent]) -> [CalendarEvent] {
         var order: [String] = []
         var byKey: [String: CalendarEvent] = [:]
@@ -74,7 +76,8 @@ public enum MeetingAgenda {
                 continue
             }
             var other = event
-            if richness(other) > richness(kept) { swap(&kept, &other) }
+            if prefer(other, over: kept) { swap(&kept, &other) }
+            kept.aliasIds = Array(Set(kept.aliasIds + [other.id] + other.aliasIds).subtracting([kept.id])).sorted()
             if kept.joinURL == nil { kept.joinURL = other.joinURL }
             if kept.notes?.isEmpty ?? true { kept.notes = other.notes }
             if kept.location?.isEmpty ?? true { kept.location = other.location }
@@ -92,6 +95,13 @@ public enum MeetingAgenda {
             .joined(separator: " ")
         let minute = Int((event.start.timeIntervalSince1970 / 60).rounded(.down))
         return "\(title)|\(minute)"
+    }
+
+    /// Richer wins; equal richness → a stable order (account id, then event id).
+    private static func prefer(_ a: CalendarEvent, over b: CalendarEvent) -> Bool {
+        let ra = richness(a), rb = richness(b)
+        if ra != rb { return ra > rb }
+        return (a.accountId, a.id) < (b.accountId, b.id)
     }
 
     private static func richness(_ e: CalendarEvent) -> Int {

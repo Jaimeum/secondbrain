@@ -29,7 +29,7 @@ struct AccountsSection: View {
             HStack {
                 Label(L("accounts.footer"), systemImage: "lock.shield").foregroundStyle(.secondary)
                 Spacer()
-                Button(L("accounts.howToEnable")) { help = OrgHelpRequest(provider: nil) }
+                Button(L("accounts.troubleConnecting")) { help = OrgHelpRequest(provider: nil) }
                     .buttonStyle(.link)
             }
         }
@@ -176,7 +176,8 @@ struct ConnectAccountControls: View {
     var body: some View {
         VStack(alignment: centered ? .center : .leading, spacing: 10) {
             ConnectAccountButtons(includeMacCalendar: context.offersMacCalendar && !state.engine.accounts.hasLocalCalendar,
-                                  busyLocal: connector.connectingLocal, centered: centered) { connector.start($0, state: state) }
+                                  busyLocal: connector.connectingLocal, centered: centered,
+                                  macCalendarFirst: context == .meetings) { connector.start($0, state: state) }
             if let account = connector.lastConnected, connector.error == nil {
                 Label(L("accounts.connected", account.provider == .local ? L("accounts.macCalendar") : account.email),
                       systemImage: "checkmark.circle.fill")
@@ -257,9 +258,28 @@ struct ConnectAccountButtons: View {
     var includeMacCalendar = false
     var busyLocal = false
     var centered = false
+    /// Reuniones: the Mac calendar (always available, one click) is the primary action; accounts come second.
+    var macCalendarFirst = false
     var onConnect: (AccountProvider) -> Void
 
     var body: some View {
+        if macCalendarFirst && includeMacCalendar {
+            VStack(alignment: centered ? .center : .leading, spacing: 10) {
+                macCalendarButton
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                Text(L("accounts.orConnect")).font(.callout).foregroundStyle(.secondary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) { oauthButtons }
+                    VStack(alignment: centered ? .center : .leading, spacing: 8) { oauthButtons }
+                }
+            }
+        } else {
+            allButtons
+        }
+    }
+
+    private var allButtons: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) { oauthButtons; macCalendarButton }
             VStack(alignment: centered ? .center : .leading, spacing: 8) {
@@ -275,7 +295,11 @@ struct ConnectAccountButtons: View {
             Button {
                 onConnect(provider)
             } label: {
-                Label(L(provider == .microsoft ? "accounts.connectMicrosoft" : "accounts.connectGoogle"), systemImage: provider.symbol)
+                // The same "M" / "G" badges as the account rows and the trust sheet (envelopes mean "add an email").
+                HStack(spacing: 6) {
+                    ProviderBadge(provider: provider, size: 16)
+                    Text(L(provider == .microsoft ? "accounts.connectMicrosoft" : "accounts.connectGoogle"))
+                }
             }
         }
     }
@@ -351,8 +375,7 @@ struct ProviderBadge: View {
 extension AccountProvider {
     var symbol: String {
         switch self {
-        case .microsoft: "envelope.badge"
-        case .google: "envelope.circle"
+        case .microsoft, .google: "person.crop.circle.badge.plus"
         case .local: "calendar"
         }
     }

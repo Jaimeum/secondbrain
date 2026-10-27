@@ -267,9 +267,19 @@ public enum JoinLink {
         return nil
     }
 
-    /// Whether `url` itself is a video-call link.
+    /// Whether `url` itself is a video-call link: an https URL that is the whole match, never a link merely containing
+    /// one (`smb://host/x#https://zoom.us/j/1`, a custom app scheme…).
     public static func isJoinLink(_ url: URL?) -> Bool {
-        guard let url else { return false }
-        return find(in: [url.absoluteString]) != nil
+        guard let url, isSafe(url) else { return false }
+        return find(in: [url.absoluteString])?.absoluteString == url.absoluteString
+    }
+
+    /// Only https links are ever opened from a calendar invite (an invite is untrusted input).
+    public static func isSafe(_ url: URL) -> Bool { url.scheme?.lowercased() == "https" && url.host?.isEmpty == false }
+
+    /// A provider's join URL string, kept only when it is https.
+    public static func https(_ string: String?) -> URL? {
+        guard let s = string?.trimmingCharacters(in: .whitespacesAndNewlines), let url = URL(string: s), isSafe(url) else { return nil }
+        return url
     }
 }

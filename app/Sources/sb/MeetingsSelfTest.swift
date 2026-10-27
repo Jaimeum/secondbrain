@@ -56,7 +56,7 @@ import Foundation
 
     // --- Dedupe across accounts: same title (case/accents/spaces ignored) + same minute.
     let ms = ev("ms-1", "Revisión  semanal", start: t0.addingTimeInterval(20),
-                attendees: ["l", "c", "d"].map { EmailAddress(name: $0, email: "\($0)@x.com") })
+                attendees: ["l", "c", "d"].map { (s: String) in EmailAddress(name: s, email: "\(s)@x.com") })
     let gg = ev("g-1", "revision semanal", start: t0, account: "google:b@y.com",
                 join: URL(string: "https://meet.google.com/abc"), notes: "Agenda")
     let other = ev("g-2", "Revisión semanal", start: t0.addingTimeInterval(3600), account: "google:b@y.com")
@@ -65,6 +65,12 @@ import Foundation
     t.eq(deduped.first?.id, "ms-1", "dedupe keeps the richest copy, sorted by start")
     t.check(deduped.first?.joinURL?.host == "meet.google.com" && deduped.first?.notes == "Agenda", "dedupe borrows join link and notes")
     t.eq(MeetingAgenda.dedupe([ms, ms]).count, 1, "same event twice")
+    t.eq(deduped.first?.aliasIds, ["g-1"], "kept copy remembers the merged id")
+    t.check(deduped.first?.matches("g-1") == true && deduped.first?.matches("ms-1") == true, "matches any merged id")
+    // Equal richness: the kept copy doesn't depend on which account answered first.
+    let twinA = ev("tw-ms", "Comité", start: t0, account: "microsoft:a@x.com")
+    let twinB = ev("tw-gg", "Comité", start: t0, account: "google:b@y.com")
+    t.eq(MeetingAgenda.dedupe([twinA, twinB]).first?.id, MeetingAgenda.dedupe([twinB, twinA]).first?.id, "tie → same kept copy in any order")
 
     // --- MeetingLinks: data/meetings.json, remembered per series.
     let linksURL = root.appendingPathComponent("data/meetings.json")
@@ -81,6 +87,11 @@ import Foundation
         t.eq(reread.choice(for: single), .noProject, "explicit Sin proyecto persists")
         try reread.set(nil, for: single)
         t.check(MeetingLinks(fileURL: linksURL).choice(for: single) == nil, "nil forgets the choice")
+        // A choice stored under a merged copy's id still applies when the other account's copy is the kept one.
+        try reread.set(.project("acme"), for: ev("dup-gg", "Dup", start: t0))
+        var kept = ev("dup-ms", "Dup", start: t0)
+        kept.aliasIds = ["dup-gg"]
+        t.eq(MeetingLinks(fileURL: linksURL).choice(for: kept), .project("acme"), "choice found through an alias id")
         let json = (try? String(contentsOf: linksURL, encoding: .utf8)) ?? ""
         t.check(json.contains("\"series-w\"") && json.contains("\"acme\""), "meetings.json stores the series")
     } catch {

@@ -38,6 +38,13 @@ struct OnboardingView: View {
     @ViewState private var projectError: String?
     @ViewState private var createdProject: Project?
 
+    /// `initialStep`: development snapshots open a given step; normally the saved one (or the welcome).
+    init(initialStep: OnboardingStep? = nil) {
+        let step = initialStep ?? .saved
+        _step = ViewState(initialValue: step)
+        _consent = ViewState(initialValue: step != .welcome)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -92,8 +99,6 @@ struct OnboardingView: View {
                     .disabled(state.isSwitchingVault)
             }
             Spacer()
-            ProgressDots(count: OnboardingStep.allCases.count, current: step.rawValue)
-            Spacer()
             if step == .project {
                 Button(L("onb.skip")) { go(1) }.controlSize(.large)
             }
@@ -105,6 +110,8 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 18)
+        // Centered on the window whatever buttons are on each side (the last step has no "Atrás").
+        .overlay { ProgressDots(count: OnboardingStep.allCases.count, current: step.rawValue).allowsHitTesting(false) }
         .background(.bar)
     }
 
@@ -486,7 +493,7 @@ private struct AccountsStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            StepHeader(symbol: "envelope.badge", title: L("onb.accounts.title"), message: L("onb.accounts.message"))
+            StepHeader(symbol: "person.crop.circle.badge.plus", title: L("onb.accounts.title"), message: L("onb.accounts.message"))
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(state.engine.accounts.accounts) { account in
                     HStack(spacing: 10) {

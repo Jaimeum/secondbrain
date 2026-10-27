@@ -76,7 +76,7 @@ struct MeetingActionButton: View {
             .padding(.vertical, 4)
         case .done:
             Button {
-                guard let source = state.engine.meetingSource(forEvent: event.id) else { return }
+                guard let source = state.engine.meetingSource(for: event) else { return }
                 Task { if let path = await state.openMeetingSummary(source) { onShowPage(path) } }
             } label: {
                 Label(L("meetings.viewSummary"), systemImage: "checkmark.circle.fill")
@@ -85,7 +85,7 @@ struct MeetingActionButton: View {
             .tint(.green)
         case .failed:
             Button {
-                if let source = state.engine.meetingSource(forEvent: event.id) { state.engine.retry(sourceId: source.id) }
+                if let source = state.engine.meetingSource(for: event) { state.engine.retry(sourceId: source.id) }
             } label: {
                 Label(L("meetings.retry"), systemImage: "arrow.clockwise")
             }
@@ -219,9 +219,25 @@ struct MeetingProjectChip: View {
             .background(Color.accentColor.opacity(0.1), in: Capsule())
             .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
             .help(reason(suggestion))
-        } else {
-            picker { chip(L("meetings.noProject"), color: .secondary) }
+        } else if model.choice(for: event) == .noProject {
+            picker { chip(L("meetings.noProject"), color: .secondary, chevron: true) }
                 .help(L("meetings.noProjectHelp"))
+        } else {
+            // Nothing chosen yet: it must read as something to click, not as a tag.
+            picker {
+                HStack(spacing: 3) {
+                    Text(L("meetings.chooseProject"))
+                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+                }
+                .font(.caption.weight(.medium))
+                .lineLimit(1)
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.accentColor.opacity(0.08), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+            }
+            .help(L("meetings.noProjectHelp"))
         }
     }
 
@@ -242,8 +258,11 @@ struct MeetingProjectChip: View {
         Button(L("meetings.noProject")) { model.setProject(.noProject, for: event, state: state) }
     }
 
-    private func chip(_ text: String, color: Color) -> some View {
-        Text(text)
+    private func chip(_ text: String, color: Color, chevron: Bool = false) -> some View {
+        HStack(spacing: 3) {
+            Text(text)
+            if chevron { Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)) }
+        }
             .font(.caption.weight(.medium))
             .lineLimit(1)
             .foregroundStyle(color == .secondary ? Color.secondary : Color.primary)

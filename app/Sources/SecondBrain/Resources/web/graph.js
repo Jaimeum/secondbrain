@@ -126,9 +126,14 @@
     return n.title;
   }
 
+  // The project's overview page: the one structural page worth a label ("📋 Resumen").
+  function isOverview(n) { return n.kind === 'page' && /\/wiki\/overview\.md$/.test(n.id); }
+
   function radiusOf(n) {
     const base = 2.6 + 2.2 * Math.pow(Math.log2(1 + n.links), 1.25);
     if (n.kind === 'project') return Math.max(14, Math.min(base, 30));
+    // Index, pendientes, línea de tiempo… link to everything: at full size they'd be the biggest, unlabeled shapes.
+    if (n.kind === 'page' && !isOverview(n)) return Math.min(base, 8);
     return Math.min(base, 28);
   }
 
@@ -428,6 +433,7 @@
     S.timeMax = Math.max(today, S.timeMin + 86400000 * 2);
     S.time = Infinity;
     $('todayLabel').textContent = L('today');
+    $('strip').style.marginRight = ($('todayLabel').offsetWidth + 16) + 'px';   // the label never runs under the thumb
     $('playBtn').innerHTML = glyph('play');
     $('playBtn').setAttribute('aria-label', L('play'));
     $('playBtn').title = L('play');
@@ -818,6 +824,7 @@
     const K = Math.round(Math.min(40, Math.max(7, 6 + vis.length * 0.07)) * Math.min(3, Math.max(0.6, t.k)));
     const prio = new Map();
     ranked.slice(0, K).forEach((n, i) => prio.set(n.id, 10 + (K - i) / K));
+    for (const n of vis) if (isOverview(n)) prio.set(n.id, 25);
     // The 3 most connected knowledge pages (topics, meetings, decisions …) of each project.
     const perProject = new Map();
     for (const n of ranked) {
@@ -840,7 +847,8 @@
     for (const [n, p] of items) {
       const strong = p >= 30;
       const font = `${strong ? 600 : 500} ${strong ? 12 : 11}px -apple-system, "SF Pro Text", sans-serif`;
-      let text = n.kind === 'project' ? `${projectEmoji(n)} ${projectName(n)}` : n.title;
+      let text = n.kind === 'project' ? `${projectEmoji(n)} ${projectName(n)}`
+        : isOverview(n) ? `📋 ${S.labels.overview || n.title}` : n.title;
       if (text.length > 38) text = text.slice(0, 36) + '…';
       const w = textWidth(text, font) + 6;
       const x = t.applyX(n.x), y = t.applyY(n.y) + n.r * n.appear * t.k + 9;

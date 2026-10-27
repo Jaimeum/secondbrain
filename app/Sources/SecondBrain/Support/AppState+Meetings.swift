@@ -15,6 +15,7 @@ extension AppState {
     /// event (`calendarEventId`, event date = start). Without a project it goes to Inbox as usual.
     func startRecording(for event: CalendarEvent, projectSlug: String?) async {
         guard !isRecording, !isRecorderBusy else { return }
+        let previous = (title: recordingTitle, projectSlug: recordingProjectSlug)
         recordingTitle = event.title
         recordingProjectSlug = projectSlug
         let mine = MeetingsModel.shared.myEmails.union(engine.accounts.accounts.map(\.email))
@@ -22,8 +23,12 @@ extension AppState {
             .filter { a in !(a.email.map { mine.contains($0.lowercased()) } ?? false) }
             .map(\.display)
         await startRecording(calendarEventId: event.id, attendees: names.isEmpty ? nil : names)
-        if let current = recorder.current, current.calendarEventId == event.id {
+        if isRecording, let current = recorder.current, current.calendarEventId == event.id {
             engine.linkCalendarEvent(sourceId: current.id, event: event)
+        } else {
+            // It didn't start (no permission, recorder error): the next manual recording must not inherit this meeting.
+            recordingTitle = previous.title
+            recordingProjectSlug = previous.projectSlug
         }
     }
 

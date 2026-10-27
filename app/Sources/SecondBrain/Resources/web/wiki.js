@@ -2,7 +2,14 @@
   "use strict";
 
   const PAGE_PREFIX = "sbwiki://page/";
-  const HIDDEN_PROPS = new Set(["title", "source_id", "sources", "speakers", "aliases", "original_file", "source_url", "language"]);
+  // Only front-matter keys with a localized label (payload.propLabels) become chips, in this order; raw keys such as
+  // `owner`, `organization` (until it has a label), `source_id` never show (CONTRACT §12.7 / §15.4).
+  const PROP_ORDER = ["type", "status", "date", "updated", "duration", "project", "projects", "organization", "role", "people"];
+  const MONTHS = {
+    es: ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"],
+    en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+  };
+  let lang = "es";
 
   let links = {};
 
@@ -19,11 +26,21 @@
       const kv = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
       if (!kv) continue;
       let value = kv[2].replace(/\s+#.*$/, "").trim();
-      if (!value || value === "null" || value === "[]" || HIDDEN_PROPS.has(kv[1])) continue;
+      if (!value || value === "null" || value === "[]") continue;
       value = value.replace(/^\[|\]$/g, "").replace(/["']/g, "").replace(/\[\[|\]\]/g, "");
       props.push([kv[1], value]);
     }
     return { body: src.slice(m[0].length), props };
+  }
+
+  // "2026-09-22" (or an ISO date-time) → "22 sep 2026" / "Sep 22, 2026". Returns null when it is not a date.
+  function humanDate(value) {
+    const d = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(value);
+    if (!d) return null;
+    const month = +d[2] - 1, day = +d[3];
+    if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+    const m = (MONTHS[lang] || MONTHS.es)[month];
+    return lang === "en" ? m + " " + day + ", " + d[1] : day + " " + m + " " + d[1];
   }
 
   function wikilinkPlugin(md) {
@@ -84,39 +101,78 @@
       li.style.listStyle = "none";
     }
     for (const a of root.querySelectorAll("a[href^='http']")) a.setAttribute("target", "_blank");
+    // Bare ISO dates in prose read as dates ("del 2026-10-26" → "del 26 oct 2026"); code keeps them verbatim.
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: (t) => (t.parentElement.closest("code, pre") || !/\d{4}-\d{2}-\d{2}/.test(t.nodeValue)
+        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const texts = [];
+    while (walker.nextNode()) texts.push(walker.currentNode);
+    for (const t of texts) {
+      t.nodeValue = t.nodeValue.replace(/(?<![\w-])(\d{4}-\d{2}-\d{2})(?![\w-])/g, (m) => humanDate(m) || m);
+    }
   }
 
   // A front-matter value as the user should read it: names instead of slugs, localized words, a short date.
-  // Returns "" to hide the chip (a technical value such as `type: index`).
+  // Returns "" to hide the chip (a technical value such as `type: index`, or the project the page already lives in).
   function chipValue(key, value, payload) {
     const map = (payload.propValues || {})[key];
     if (map && Object.prototype.hasOwnProperty.call(map, value)) return map[value];
-    if (key === "project") return (payload.projectNames || {})[value] || value;
+    if (value === "true" || value === "false") return "";
+    if (key === "project" || key === "projects") {
+      const here = /^projects\/([^/]+)\//.exec(payload.path || "");
+      const names = payload.projectNames || {};
+      return value.split(/\s*,\s*/).filter((s) => s && !(here && s === here[1]))
+        .map((s) => names[s] || s).join(", ");
+    }
     if (key === "people") {
       const names = payload.peopleNames || {};
       return value.split(/\s*,\s*/).map(s => names[s.replace(/^people\//, "")] || s).join(", ");
     }
-    const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-    if (d && (key === "updated" || key === "date")) {
-      try {
-        return new Date(+d[1], +d[2] - 1, +d[3]).toLocaleDateString(payload.locale || undefined,
-          { day: "numeric", month: "short", year: "numeric" });
-      } catch (e) { return value; }
-    }
+    if (key === "date" || key === "updated") return humanDate(value) || value;
     return value;
   }
 
+  // The chip row is one line: chips that do not fit are left out whole (never cut mid-word), again on resize.
+  let chipsHTML = "";
+  function fitChips() {
+    const row = document.getElementById("props");
+    row.innerHTML = chipsHTML;
+    const right = row.getBoundingClientRect().right;
+    for (const chip of [...row.children].reverse()) {
+      if (row.children.length > 1 && chip.getBoundingClientRect().right > right + 0.5) chip.remove();
+    }
+  }
+  let fitPending = false;
+  window.addEventListener("resize", () => {
+    if (fitPending) return;
+    fitPending = true;
+    requestAnimationFrame(() => { fitPending = false; fitChips(); });
+  });
+
   window.SB = {
+    // Ajustes → Apariencia may force light/dark: WikiWebView tells the page explicitly (CONTRACT §15.1 Tema).
+    setTheme(theme) {
+      document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+    },
     render(payload) {
       links = payload.links || {};
+      lang = payload.lang === "en" ? "en" : "es";
+      document.documentElement.lang = lang;
+      if (payload.theme) document.documentElement.dataset.theme = payload.theme;
       const scrollY = payload.keepScroll ? window.scrollY : 0;
       const { body, props } = splitFrontMatter(payload.markdown || "");
 
-      document.getElementById("props").innerHTML = props
+      const labels = payload.propLabels || {};
+      chipsHTML = props
+        .filter(([k]) => labels[k] && !(k === "type" && payload.hideType))
+        .sort((a, b) => PROP_ORDER.indexOf(a[0]) - PROP_ORDER.indexOf(b[0]))
         .map(([k, v]) => [k, chipValue(k, v, payload)])
         .filter(([, v]) => v)
-        .map(([k, v]) => '<span class="chip">' + escapeHTML((payload.propLabels || {})[k] || k) + ": <b>" + escapeHTML(v) + "</b></span>")
+        .map(([k, v]) => '<span class="chip" title="' + escapeHTML(labels[k] + ": " + v) + '">' + escapeHTML(labels[k]) +
+          ": <b>" + escapeHTML(v) + "</b></span>")
         .join("");
+      fitChips();
 
       const content = document.getElementById("content");
       content.innerHTML = body.trim() ? md.render(body) : '<p class="empty">' + escapeHTML(payload.emptyText || "") + "</p>";

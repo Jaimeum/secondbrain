@@ -2,9 +2,9 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// "Código" (`tab.code`, CONTRACT §13.6): the GitHub repositories this project follows, one card per repo with a chip
-/// per followed branch (✓ synced · ⚠ rewritten · ✕ gone · ⟳ syncing), how the other branches compare to the primary
-/// one, and how often it all refreshes.
+/// The GitHub repositories this project follows (CONTRACT §13.6, shown in the project's "Repositorios…" sheet since
+/// v0.5): one card per repo with a chip per followed branch (synced · rewritten · gone · syncing), how the other
+/// branches compare to the primary one, and how often it all refreshes. One sync control: "Actualizar" in the header.
 struct ReposView: View {
     @Environment(AppState.self) private var state
     let projectSlug: String
@@ -40,6 +40,8 @@ struct ReposView: View {
                 list
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Brand.color.surface)
         .sheet(item: $sheet) { request in
             AddRepoSheet(projectSlug: projectSlug, editing: request.repo)
         }
@@ -70,9 +72,9 @@ struct ReposView: View {
     private var list: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             ScrollView {
-                VStack(spacing: 12) {
+                VStack(spacing: Brand.spacing.m) {
                     if !github.isConnected { disconnectedBanner }
                     if let notice = model.notice { noticeBanner(notice) }
                     ForEach(repos) { repo in
@@ -84,38 +86,64 @@ struct ReposView: View {
                                  onOrgHelp: { showOrgHelp = true })
                     }
                 }
-                .padding(16)
+                .padding(Brand.spacing.content)
                 .frame(maxWidth: 820)
                 .frame(maxWidth: .infinity)
             }
-            Divider()
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             footer
         }
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Brand.spacing.s) {
             Text(repos.count == 1 ? L("repos.count.one") : L("repos.count.many", repos.count))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Spacer()
+                .font(Brand.body)
+                .foregroundStyle(Brand.color.text2)
+                .lineLimit(1)
+            Spacer(minLength: Brand.spacing.s)
+            ViewThatFits(in: .horizontal) {
+                headerButtons(iconsOnly: false)
+                headerButtons(iconsOnly: true)
+            }
+        }
+        .padding(.horizontal, Brand.spacing.content)
+        .padding(.vertical, Brand.spacing.m)
+    }
+
+    private func headerButtons(iconsOnly: Bool) -> some View {
+        HStack(spacing: Brand.spacing.s) {
             Button {
                 model.syncNow(state: state, project: projectSlug)
             } label: {
-                Label(L("github.syncNow"), systemImage: "arrow.clockwise")
+                HStack(spacing: 6) {
+                    if isProjectSyncing {
+                        BrandLoader(size: 14)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    if !iconsOnly { Text(isProjectSyncing ? L("repos.syncing") : L("project.reposSync")) }
+                }
             }
+            .buttonStyle(.brandSecondary)
             .disabled(!github.isConnected || isProjectSyncing)
+            .help(L("github.syncNow"))
             Button {
                 sheet = RepoSheetRequest(mode: .add)
             } label: {
-                Label(L("repos.add"), systemImage: "plus")
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                    if !iconsOnly { Text(L("repos.add")) }
+                }
             }
+            .buttonStyle(.brandPrimary)
             .disabled(!github.isConnected)
+            .help(L("repos.add"))
         }
-        .padding(12)
+        .fixedSize()
     }
 
-    /// Without SecondBrain's OAuth App (no client id yet), the GitHub CLI's session is the way to connect.
+    /// Without the app's OAuth App (no client id yet), the GitHub CLI's session is the way to connect.
     private var connectMethod: GitHubAuthMethod {
         GitHubAuth.clientId(config: state.config) == nil && ghAvailable ? .ghCLI : .deviceFlow
     }
@@ -125,52 +153,72 @@ struct ReposView: View {
     private var isProjectSyncing: Bool { repos.contains { github.syncing.contains($0.id) } }
 
     private var disconnectedBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "powerplug").foregroundStyle(.orange)
-            Text(L("repos.disconnected")).font(.callout).fixedSize(horizontal: false, vertical: true)
-            Spacer()
+        HStack(spacing: Brand.spacing.m) {
+            Image(systemName: "powerplug").foregroundStyle(Brand.color.warning)
+            Text(L("repos.disconnected"))
+                .font(Brand.body)
+                .foregroundStyle(Brand.color.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Button(connectTitle) { showConnect = true }
+                .buttonStyle(.brandSecondary)
         }
-        .padding(12)
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+        .padding(Brand.spacing.m)
+        .background(Brand.color.warningSoft, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
     }
 
     private func noticeBanner(_ text: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
-            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            Button { model.dismissNotice() } label: { Image(systemName: "xmark") }
-                .buttonStyle(.borderless)
-                .help(L("common.close"))
+        HStack(spacing: Brand.spacing.m) {
+            Image(systemName: "sparkles").foregroundStyle(Brand.color.accent)
+            Text(text)
+                .font(Brand.body)
+                .foregroundStyle(Brand.color.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button { model.dismissNotice() } label: {
+                Image(systemName: "xmark").foregroundStyle(Brand.color.text2)
+            }
+            .buttonStyle(.borderless)
+            .help(L("common.close"))
         }
-        .padding(12)
-        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .padding(Brand.spacing.m)
+        .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
     }
 
     private var footer: some View {
         HStack(spacing: 6) {
-            Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary)
-            Text(footerText).foregroundStyle(.secondary)
-            SettingsLink { Text(L("github.change")) }
-                .buttonStyle(.link)
-            Spacer()
+            Image(systemName: "clock.arrow.circlepath").foregroundStyle(Brand.color.text3)
+            Text(footerText)
+                .foregroundStyle(Brand.color.text2)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Text(verbatim: "·").foregroundStyle(Brand.color.text3)
+            Button(L("github.change")) { openGitHubSettings() }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Brand.color.accent)
+                .fixedSize()
+            Spacer(minLength: Brand.spacing.s)
             if let problem = model.problem {
-                Label(problem, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                Label(problem, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Brand.color.warning)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help(problem)
             }
         }
-        .font(.callout)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .font(Brand.caption)
+        .padding(.horizontal, Brand.spacing.content)
+        .padding(.vertical, Brand.spacing.s)
     }
 
     private var footerText: String {
         let minutes = state.config.githubSyncMinutes
-        return minutes == 0 ? L("repos.footer.manual") : L("repos.footer.every", GitHubModel.intervalTitle(minutes).lowercased())
+        return minutes == 0 ? L("project.reposManual") : L("project.reposEvery", GitHubModel.intervalTitle(minutes).lowercased())
+    }
+
+    /// Ajustes › GitHub (the `settings.selectedTab` deep link, CONTRACT §15.2).
+    private func openGitHubSettings() {
+        SettingsTab.open(.github)
     }
 
     private func toggleCode(_ repo: TrackedRepo) {
@@ -201,89 +249,92 @@ private struct RepoCard: View {
     var onOrgHelp: () -> Void
 
     private var htmlURL: URL? { URL(string: "https://github.com/\(repo.fullName)") }
-    private var primary: TrackedBranch? { repo.branches.first { $0.name == repo.primaryBranch } }
     private var gone: [TrackedBranch] { repo.branches.filter { $0.state == .gone } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "chevron.left.forwardslash.chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 30, height: 30)
-                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 0) {
-                        Text(repo.owner + "/").foregroundStyle(.secondary)
-                        Text(repo.name).fontWeight(.semibold)
+        BrandCard(padding: Brand.spacing.l) {
+            VStack(alignment: .leading, spacing: Brand.spacing.m) {
+                HStack(alignment: .top, spacing: Brand.spacing.m) {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(Brand.font(13, .semibold))
+                        .foregroundStyle(Brand.color.text2)
+                        .frame(width: 30, height: 30)
+                        .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        (Text(repo.owner + "/").foregroundStyle(Brand.color.text2)
+                            + Text(repo.name).foregroundStyle(Brand.color.text).fontWeight(.semibold))
+                            .font(Brand.section)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if let description = repo.description, !description.isEmpty {
+                            Text(description).font(Brand.body).foregroundStyle(Brand.color.text2).lineLimit(2)
+                        }
+                        HStack(spacing: 6) {
+                            if syncing { BrandLoader(size: 12) }
+                            Text(updatedText)
+                                .font(Brand.caption)
+                                .foregroundStyle(Brand.color.text2)
+                                .lineLimit(1)
+                        }
+                        .padding(.top, 2)
                     }
-                    .font(.headline)
-                    .lineLimit(1)
-                    if let description = repo.description, !description.isEmpty {
-                        Text(description).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    menu
+                }
+
+                FlowLayout(spacing: 6) {
+                    ForEach(repo.branches) { branch in
+                        BranchChip(branch: branch, isPrimary: branch.name == repo.primaryBranch, syncing: syncing)
+                    }
+                    if !repo.readCode {
+                        BrandChip(text: L("repos.noCode"), symbol: "eye.slash")
+                            .help(L("repos.noCode.help"))
                     }
                 }
-                Spacer(minLength: 8)
-                Text(updatedText).font(.caption).foregroundStyle(.secondary).fixedSize()
-                    .padding(.top, 3)
-                Button(action: onSync) {
-                    if syncing {
-                        ProgressView().controlSize(.small).frame(width: 16, height: 16)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-                .buttonStyle(.borderless)
-                .disabled(syncing)
-                .help(L("repos.syncRepo"))
-                menu
-            }
 
-            FlowLayout(spacing: 6) {
-                ForEach(repo.branches) { branch in
-                    BranchChip(branch: branch, isPrimary: branch.name == repo.primaryBranch, syncing: syncing)
-                }
-                if !repo.readCode {
-                    Chip(text: L("repos.noCode"), symbol: "eye.slash")
-                        .help(L("repos.noCode.help"))
-                }
-            }
-
-            ForEach(comparisons, id: \.name) { branch in
-                Text(compareText(branch))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
-            if !gone.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "xmark.circle").foregroundStyle(.red)
-                    Text(gone.count == 1 ? L("repos.gone.one", gone[0].name) : L("repos.gone.many", gone.map(\.name).joined(separator: ", ")))
+                ForEach(comparisons, id: \.name) { branch in
+                    Text(compareText(branch))
+                        .font(Brand.body)
+                        .foregroundStyle(Brand.color.text2)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button(L("repos.chooseBranches"), action: onEditBranches).buttonStyle(.link)
                 }
-                .font(.callout)
-            }
 
-            if let error = repo.lastError {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text(error).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                    if GitHubModel.isOrgRestricted(error) {
-                        Button(L("github.org.howTo"), action: onOrgHelp).buttonStyle(.link)
+                if !gone.isEmpty {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "xmark.circle").foregroundStyle(Brand.color.danger)
+                        Text(gone.count == 1 ? L("repos.gone.one", gone[0].name) : L("repos.gone.many", gone.map(\.name).joined(separator: ", ")))
+                            .foregroundStyle(Brand.color.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(L("repos.chooseBranches"), action: onEditBranches)
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(Brand.color.accent)
                     }
+                    .font(Brand.body)
                 }
-                .font(.callout)
+
+                if let error = repo.lastError {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle").foregroundStyle(Brand.color.warning)
+                        Text(error)
+                            .foregroundStyle(Brand.color.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                        if GitHubModel.isOrgRestricted(error) {
+                            Button(L("github.org.howTo"), action: onOrgHelp)
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(Brand.color.accent)
+                        }
+                    }
+                    .font(Brand.body)
+                }
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.primary.opacity(0.08)))
     }
 
     private var menu: some View {
         Menu {
+            Button(action: onSync) { Label(L("repos.syncRepo"), systemImage: "arrow.clockwise") }
+                .disabled(syncing)
             Button(action: onEditBranches) { Label(L("repos.chooseBranches"), systemImage: "arrow.triangle.branch") }
             Button {
                 if let htmlURL { NSWorkspace.shared.open(htmlURL) }
@@ -296,7 +347,7 @@ private struct RepoCard: View {
             Divider()
             Button(role: .destructive, action: onRemove) { Label(L("repos.remove"), systemImage: "minus.circle") }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            Image(systemName: "ellipsis").foregroundStyle(Brand.color.text2)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -322,7 +373,8 @@ private struct RepoCard: View {
     }
 }
 
-/// `main ✓ a1b2c3d · hace 2 h`, `development ⚠ reescrita`, `testing ✕ ya no existe`, `⟳ sincronizando`.
+/// `main ✓ a1b2c3d · hace 2 h`, `development ⚠ reescrita`, `testing ✕ ya no existe`: a tinted capsule, no border
+/// (nothing to clip), one line.
 private struct BranchChip: View {
     let branch: TrackedBranch
     let isPrimary: Bool
@@ -330,44 +382,48 @@ private struct BranchChip: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "arrow.triangle.branch").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-            Text(branch.name).fontWeight(isPrimary ? .semibold : .regular)
-            Image(systemName: symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(tint)
-            if let detail { Text(detail).foregroundStyle(.secondary) }
+            Image(systemName: "arrow.triangle.branch").font(Brand.font(10, .semibold)).foregroundStyle(Brand.color.text3)
+            Text(branch.name)
+                .font(Brand.font(12, isPrimary ? .semibold : .regular))
+                .foregroundStyle(Brand.color.text)
+            Image(systemName: symbol).font(Brand.font(10, .semibold)).foregroundStyle(tint)
+            if let detail {
+                Text(detail).font(Brand.font(12)).foregroundStyle(Brand.color.text2)
+            }
         }
-        .font(.callout)
         .lineLimit(1)
-        .fixedSize()
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
         .background(background, in: Capsule())
-        .overlay(Capsule().strokeBorder(tint.opacity(stateIsCalm ? 0 : 0.35)))
-        .padding(1)   // the tooltip host clips at the frame: keep the border's curve inside it
+        .contentShape(Capsule())
         .help(help)
     }
 
     private var stateIsCalm: Bool { syncing || branch.state == .ok || branch.state == .pending }
 
-    private var background: Color { stateIsCalm ? Color.primary.opacity(0.06) : tint.opacity(0.1) }
+    private var background: Color {
+        if stateIsCalm { return Brand.color.cardAlt }
+        return branch.state == .rewritten ? Brand.color.warningSoft : Brand.color.recordSoft
+    }
 
     private var symbol: String {
         if syncing { return "arrow.triangle.2.circlepath" }
         switch branch.state {
         case .ok: return "checkmark"
-        case .rewritten: return "exclamationmark.triangle.fill"
+        case .rewritten: return "exclamationmark.triangle"
         case .gone: return "xmark"
         case .pending: return "clock"
-        case .error: return "exclamationmark.circle.fill"
+        case .error: return "exclamationmark.circle"
         }
     }
 
     private var tint: Color {
-        if syncing { return .accentColor }
+        if syncing { return Brand.color.accent }
         switch branch.state {
-        case .ok: return .green
-        case .rewritten: return .orange
-        case .gone, .error: return .red
-        case .pending: return .secondary
+        case .ok: return Brand.color.success
+        case .rewritten: return Brand.color.warning
+        case .gone, .error: return Brand.color.danger
+        case .pending: return Brand.color.text3
         }
     }
 
@@ -377,7 +433,8 @@ private struct BranchChip: View {
         if syncing { return L("repos.branch.syncing") }
         switch branch.state {
         case .ok:
-            return [shortSHA, branch.lastSyncedAt.map(Fmt.relative)].compactMap { $0 }.joined(separator: " · ")
+            let text = [shortSHA, branch.lastSyncedAt.map(Fmt.relative)].compactMap { $0 }.joined(separator: " · ")
+            return text.isEmpty ? nil : text
         case .rewritten: return L("repos.branch.rewritten")
         case .gone: return L("repos.branch.gone")
         case .pending: return L("repos.branch.pending")

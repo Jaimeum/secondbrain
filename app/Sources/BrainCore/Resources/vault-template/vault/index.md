@@ -8,7 +8,7 @@ updated: null
 
 # Mi segundo cerebro
 
-> **En breve:** todo lo que SecondBrain ha aprendido de tus reuniones, documentos y notas, organizado por proyecto. *Everything SecondBrain has learned, by project.*
+> **En breve:** todo lo que secondbrain ha aprendido de tus reuniones, correos y documentos, organizado por proyecto.
 
 ## Proyectos
 

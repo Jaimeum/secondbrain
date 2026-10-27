@@ -4,15 +4,50 @@ import Observation
 import Recorder
 import Transcription
 
+/// Sidebar destinations (CONTRACT §15.2): Inicio · Reuniones · Correo · Pendientes · Personas · Proyectos.
 enum SidebarItem: Hashable {
-    case project(String)
-    case inbox
-    case mail
+    case home
     case meetings
+    case mail
+    case tasks
     case people
+    case project(String)
+    // Deprecated aliases, kept one release (MainView maps them): `.brain` → Inicio, `.inbox` → Inicio › Sin asignar,
+    // `.myTasks` → Pendientes, `.templates` → Ajustes › Formatos (then Inicio).
     case brain
+    case inbox
     case myTasks
     case templates
+
+    /// The item the sidebar shows as selected (aliases resolved); nil for `.templates`, which opens Ajustes instead.
+    var normalized: SidebarItem? {
+        switch self {
+        case .brain, .inbox: .home
+        case .myTasks: .tasks
+        case .templates: nil
+        default: self
+        }
+    }
+}
+
+/// Screens pushed inside Inicio's NavigationStack (CONTRACT §15.2).
+enum HomeRoute: Hashable {
+    /// A global page (index.md, log.md…) shown in place.
+    case page(String)
+    /// "Ver todo por fecha": the timeline of every project.
+    case timeline
+    /// "Explorar cómo se conecta todo": the global graph.
+    case graph
+    /// "Por ordenar › Ver todo": Sin asignar.
+    case inbox
+    /// "Preguntar: «…»" from ⌘K for the whole brain (asked in `AppState.homeChat`).
+    case ask(String)
+}
+
+/// "Nueva nota" from ⌘K (MainView presents `NoteSheet`).
+struct NoteRequest: Identifiable, Equatable {
+    let id = UUID()
+    var projectSlug: String?
 }
 
 /// "Agregar correo": which thread (fixed when adding the next email of a thread) and project to start with.
@@ -55,7 +90,7 @@ final class AppState {
     private(set) var rateLimitedUntil: Date?
     var recordingError: String?
     var restartNeeded = false
-    var selection: SidebarItem? = .brain
+    var selection: SidebarItem? = .home
 
     var recordingProjectSlug: String? {
         didSet {
@@ -94,6 +129,32 @@ final class AppState {
     var pendingPage: String?
     /// v0.3: a page to focus in the Grafo tab ("Ver en el grafo" from a wiki page header).
     var pendingGraphFocus: String?
+    // MARK: v0.5 navigation (CONTRACT §15.2)
+    /// Set by Inicio or the search palette; MeetingsView selects this event and clears it.
+    var pendingEventId: String?
+    /// Set by Inicio or the search palette; ProjectView switches to this tab and clears it.
+    var pendingProjectTab: ProjectTab?
+    /// Question typed in the search palette, sent by ChatView when it appears.
+    var pendingQuestion: String?
+    /// A screen to push inside Inicio's NavigationStack; HomeView consumes it and clears it.
+    var homeRoute: HomeRoute?
+    /// Bumped by "Inicio" (sidebar row re-selected, ⌘1) while Inicio is on screen: HomeView pops back to its root.
+    var homePopToken = 0
+    /// With `pendingEventId`: open the event on its preparation ("Prepararme" from Inicio), not the plain detail.
+    var pendingEventPrepare = false
+    /// When the last whole-brain question was asked from ⌘K (Inicio offers to go back to its answer).
+    var homeChatAskedAt: Date?
+    /// The ⌘K palette is on screen.
+    var searchPresented = false
+    /// "Nuevo proyecto" sheet (⌘N, sidebar, ⌘K).
+    var showNewProject = false
+    /// "Nueva nota" from ⌘K.
+    var noteRequest: NoteRequest?
+    /// The whole-brain conversation of Inicio ("Preguntar" from ⌘K without a project).
+    let homeChat = ChatModel()
+    /// Each project's "Preguntar" conversation, kept while the app runs: leaving a project and coming back (or asking
+    /// it from ⌘K) continues the same conversation. Created on first use; dropped when the vault changes.
+    @ObservationIgnored private(set) var projectChats: [String: ChatModel] = [:]
     /// v0.3: bumped when connected accounts change (connect / disconnect), so Correo and Reuniones reload.
     var accountsRevision = 0
     @ObservationIgnored private var overdueReload: Task<Void, Never>?
@@ -252,7 +313,7 @@ final class AppState {
             // The recorder writes sessions under the data folder for the life of the app: restart for this one.
             restartNeeded = true
         } else if next.vaultPath != old.vaultPath || modelChanged {
-            switchEngine(to: next, modelChanged: modelChanged)
+            switchEngine(to: next, modelChanged: modelChanged, vaultChanged: next.vaultPath != old.vaultPath)
         } else {
             try? engine.updateConfig(next)
         }
@@ -260,7 +321,7 @@ final class AppState {
 
     /// Moves the running engine to another vault (or transcription model) without a restart: it stops taking
     /// jobs, lets the current one finish (the UI says "Terminando la tarea actual…"), then reopens everything.
-    private func switchEngine(to next: AppConfig, modelChanged: Bool) {
+    private func switchEngine(to next: AppConfig, modelChanged: Bool, vaultChanged: Bool) {
         var newTranscriber: WhisperTranscriber?
         if modelChanged {
             modelTask?.cancel()
@@ -288,17 +349,26 @@ final class AppState {
             guard self.config.vaultPath == next.vaultPath, self.config.whisperModel == next.whisperModel else { return }
             self.isSwitchingVault = false
             self.vaultSwitch = nil
-            self.didSwitchVault()
+            self.didSwitchVault(vaultChanged: vaultChanged)
             if modelChanged { self.prepareModels() }
         }
     }
 
-    private func didSwitchVault() {
+    private func didSwitchVault(vaultChanged: Bool) {
         reloadProjectsNow()
         reloadTemplates()
         refreshTasks()
-        if case .project(let slug) = selection, project(slug) == nil { selection = .brain }
+        if case .project(let slug) = selection, project(slug) == nil { selection = .home }
         if let slug = recordingProjectSlug, project(slug) == nil { recordingProjectSlug = nil }
+        // Conversations were about the other vault's pages: start fresh (an answer still streaming is stopped).
+        // A transcription-model change alone keeps them.
+        if vaultChanged {
+            for chat in projectChats.values { chat.stop() }
+            projectChats.removeAll()
+            homeChat.clear()
+            homeChatAskedAt = nil
+            homeRoute = nil
+        }
         vaultGeneration += 1
         bumpHistory()
     }
@@ -319,7 +389,7 @@ final class AppState {
         hotKey?.unregister()
         hotKey = nil
         if config.hotkeyEnabled {
-            hotKey = GlobalHotKey { [weak self] in self?.toggleRecording() }
+            hotKey = GlobalHotKey { [weak self] in self?.recordNow(placement: .menuBar) }
         }
     }
 
@@ -378,6 +448,22 @@ final class AppState {
         reloadProjects()
         vaultRevision += 1
         return project
+    }
+
+    /// "Editar proyecto…": name, emoji, description (the slug never changes).
+    func updateProject(_ project: Project) throws {
+        try engine.projects.update(project)
+        projects = Self.sorted(projects.map { $0.slug == project.slug ? project : $0 })
+        reloadProjects()
+        vaultRevision += 1
+    }
+
+    /// The project's persistent conversation (see `projectChats`).
+    func projectChat(for slug: String) -> ChatModel {
+        if let chat = projectChats[slug] { return chat }
+        let chat = ChatModel()
+        projectChats[slug] = chat
+        return chat
     }
 
     func project(_ slug: String?) -> Project? {
@@ -488,6 +574,24 @@ final class AppState {
         Task { isRecording ? await stopRecording() : await startRecording() }
     }
 
+    /// The one "Grabar" behind every plain path (⌥⌘R, ⌘K › Grabar, the empty Inicio, RecordControl): stops a running
+    /// recording; else records the meeting on now (its title, attendees and project, like its own "Grabar"); else a
+    /// plain recording. `.sidebar` (the main window) sends a plain recording to the project on screen; `.menuBar`
+    /// (and the hot key) keeps what "Detalles" says. `meeting: false` is "o grabar otra cosa".
+    func recordNow(placement: RecordControlPlacement, meeting: Bool = true) {
+        guard !isRecorderBusy else { return }
+        if isRecording {
+            Task { await stopRecording() }
+            return
+        }
+        if meeting, let live = MeetingBanner.recordableNow(state: self, now: Date()) {
+            Task { await MeetingsModel.shared.record(live, state: self) }
+            return
+        }
+        if placement == .sidebar { recordingProjectSlug = currentProjectSlug }
+        Task { await startRecording() }
+    }
+
     // MARK: v0.3 meetings — optional calendar event + attendees (see AppState+Meetings.swift)
     func startRecording(calendarEventId: String? = nil, attendees: [String]? = nil) async {
         guard engineStarted else {
@@ -517,7 +621,11 @@ final class AppState {
             let manifest = try await recorder.stop()
             engine.recordingFinished(manifest)
             currentRecordingId = nil
+            // The next recording starts clean: no title, project or format inherited from this one (didSet only
+            // forwards these while recording).
             recordingTitle = ""
+            recordingProjectSlug = nil
+            recordingTemplateId = nil
         } catch {
             recordingError = L("record.couldNotStop")
         }
@@ -555,7 +663,7 @@ final class AppState {
         if let until = rateLimitedUntil, until > now {
             return QueueStatus(text: L("queue.waitingClaude", Fmt.time(until)), progress: nil, waiting: true)
         }
-        return QueueStatus(text: queued.count == 1 ? L("queue.oneWaiting") : L("queue.manyWaiting", queued.count), progress: nil)
+        return QueueStatus(text: L("queue.processing", queued.count), progress: nil)
     }
 
     // MARK: Engine events

@@ -1,8 +1,8 @@
 import BrainCore
 import SwiftUI
 
-// v0.4 routing (CONTRACT §14.4): the rules screen. The same rows live in Ajustes → Reglas (a Form section) and in the
-// "Reglas…" sheet of Correo and Reuniones. Order = priority (drag to reorder); the first rule that matches wins.
+// v0.4 routing (CONTRACT §14.4, §15.2): the rules screen. The same panel lives in Ajustes → Reglas and in the "Reglas…"
+// sheet of Correo and Reuniones. Order = priority (drag to reorder); the first rule that matches wins.
 
 /// Opens `RuleEditorSheet` for a new rule or a copy of an existing one.
 struct RuleEditorItem: Identifiable {
@@ -12,22 +12,15 @@ struct RuleEditorItem: Identifiable {
 }
 
 /// Ajustes → Reglas.
-struct RulesSection: View {
+struct RulesSettingsPage: View {
     @Environment(AppState.self) private var state
-    @ViewState private var editing: RuleEditorItem?
 
     var body: some View {
-        Section {
-            RulesRows(store: state.engine.routing, editing: $editing)
-        } header: {
-            Text(L("rules.title"))
-        } footer: {
-            Text(L("rules.footer")).foregroundStyle(.secondary)
-        }
-        .sheet(item: $editing) { item in
-            RuleEditorSheet(store: state.engine.routing, item: item)
-        }
-        .onAppear { state.engine.routing.refresh() }   // `sb rules add` or another Mac may have changed them
+        // Same column width as the other tabs (640 + padding). The tab already says "Reglas": no page title.
+        RulesPanel(store: state.engine.routing, showsTitle: false)
+            .frame(maxWidth: 688)
+            .frame(maxWidth: .infinity)
+            .background(Brand.color.surface)
     }
 }
 
@@ -53,118 +46,182 @@ struct RulesSheet: View {
     /// nil = the vault's rules (snapshots pass another store).
     var store: RoutingStore?
     var mail: [MailMessageSummary] = []
-    @ViewState private var editing: RuleEditorItem?
 
     private var routing: RoutingStore { store ?? state.engine.routing }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(L("rules.title")).font(.title3.weight(.semibold))
-                    Text(L("rules.subtitle")).font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 4)
-            Form {
-                Section {
-                    RulesRows(store: routing, editing: $editing)
-                } footer: {
-                    if !routing.rules.isEmpty { Text(L("rules.footer")).foregroundStyle(.secondary) }
-                }
-            }
-            .formStyle(.grouped)
-            Divider()
+            RulesPanel(store: routing, mail: mail)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             HStack {
                 Spacer()
                 Button(L("common.done")) { dismiss() }
+                    .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(12)
         }
-        .frame(width: 600, height: 560)
-        .sheet(item: $editing) { item in
-            RuleEditorSheet(store: routing, item: item, mail: mail)
-        }
-        .onAppear { routing.refresh() }   // `sb rules add` or another Mac may have changed them
+        .frame(minWidth: 560, idealWidth: 600, minHeight: 380, idealHeight: 520)
+        .background(Brand.color.surface)
     }
 }
 
-/// The rows: each rule (toggle · name · "n veces" · menu), "Nueva regla", where the rest goes, and the auto-check switch.
-struct RulesRows: View {
+/// Title + "Nueva regla", the rules (toggle · name → destination · "n veces" · ⋯, drag to reorder), then where the
+/// rest goes and — only when a rule adds mail by itself — the auto-check switch.
+struct RulesPanel: View {
     @Environment(AppState.self) private var state
     let store: RoutingStore
-    @Binding var editing: RuleEditorItem?
+    var mail: [MailMessageSummary] = []
+    /// The sheet shows "Reglas" as its title; Ajustes → Reglas doesn't repeat the tab's name.
+    var showsTitle = true
+    @ViewState private var editing: RuleEditorItem?
     @ViewState private var error: String?
     @ViewState private var deleted: (rule: RoutingRule, index: Int)?
 
     private var lang: String { state.config.uiLanguage }
 
+    /// One row of the list (two lines of text + padding), used to size the card to its rows.
+    private static let rowHeight: CGFloat = 48
+    private var listHeight: CGFloat { CGFloat(store.rules.count) * Self.rowHeight + 22 }
+
     var body: some View {
-        if store.rules.isEmpty {
-            VStack(spacing: 8) {
-                Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 26))
-                    .foregroundStyle(.tertiary)
-                Text(L("rules.empty"))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            if store.rules.isEmpty {
+                empty
+            } else {
+                list
+            }
+            footer
+            // Leftover height goes below the controls, never inside the card.
+            Spacer(minLength: 0)
+        }
+        .animation(Brand.motion.animation(), value: deleted?.rule.id)
+        .onChange(of: editing?.id) { if editing != nil { deleted = nil } }
+        .sheet(item: $editing) { item in
+            RuleEditorSheet(store: store, item: item, mail: mail)
+        }
+        .onAppear { store.refresh() }   // `sb rules add` or another Mac may have changed them
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                if showsTitle {
+                    Text(L("rules.title")).font(Brand.title).foregroundStyle(Brand.color.text)
+                }
+                Text(L("rules.subtitle"))
+                    .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-        } else {
-            ForEach(store.rules) { rule in
-                row(rule)
-            }
-            .onMove { from, to in attempt { try store.move(fromOffsets: from, toOffset: to) } }
-        }
-        if let deleted {
-            HStack(spacing: 8) {
-                Text(L("rules.deleted")).foregroundStyle(.secondary)
-                Button(L("rules.undo")) { restore(deleted) }.buttonStyle(.link)
-                Spacer()
-            }
-            .font(.callout)
-        }
-        HStack {
+            .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 editing = RuleEditorItem(rule: newRule(), isNew: true)
             } label: {
                 Label(L("rules.new"), systemImage: "plus")
             }
-            Spacer()
+            .buttonStyle(.brandPrimary)
         }
-        Picker(L("rules.default.label"), selection: defaultBinding) {
-            Text(L("rules.unassigned")).tag("")
-            if !state.projects.isEmpty { Divider() }
-            ForEach(state.projects) { p in Text("\(p.emoji) \(p.name)").tag(p.slug) }
-            if let slug = store.settings.defaultProjectSlug, state.project(slug) == nil { Text(slug).tag(slug) }
-        }
-        VStack(alignment: .leading, spacing: 2) {
-            Toggle(L("rules.autoImport"), isOn: autoBinding)
-            Text(store.rules.contains(where: \.autoAddMail) ? L("rules.autoImport.on") : L("rules.autoImport.none"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        .padding(.horizontal, Brand.spacing.contentWide)
+        .padding(.top, showsTitle ? 20 : Brand.spacing.contentWide)
+        .padding(.bottom, 12)
+    }
+
+    private var empty: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(Brand.font(26))
+                .foregroundStyle(Brand.color.text3)
+            Text(L("rules.empty"))
+                .foregroundStyle(Brand.color.text2)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 380)
         }
-        if let error {
-            Label(error, systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.orange)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+    }
+
+    /// A real List: `.onMove` reorders by drag there (it does nothing inside a grouped Form on macOS).
+    private var list: some View {
+        List {
+            ForEach(store.rules) { rule in
+                row(rule)
+                    .listRowSeparatorTint(Brand.color.line)
+            }
+            .onMove { from, to in attempt { try store.move(fromOffsets: from, toOffset: to) } }
         }
+        .listStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
+        .scrollContentBackground(.hidden)
+        .background(Brand.color.card)
+        .clipShape(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
+        // Sized to its rows (scrolls when they don't fit), so no empty block sits under the last rule.
+        .frame(minHeight: min(120, listHeight), idealHeight: listHeight, maxHeight: listHeight)
+        .padding(.horizontal, Brand.spacing.contentWide)
+        .layoutPriority(1)
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let deleted {
+                HStack(spacing: 8) {
+                    Text(L("rules.deleted")).foregroundStyle(Brand.color.text2)
+                    Button(L("rules.undo")) { restore(deleted) }
+                        .buttonStyle(.settingsLink)
+                }
+                .transition(.opacity)
+            }
+            if store.rules.count > 1 {
+                Text(L("rules.footer"))
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 12) {
+                Text(L("rules.default.label"))
+                    .foregroundStyle(Brand.color.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Picker("", selection: defaultBinding) {
+                    Text(L("rules.unassigned")).tag("")
+                    if !state.projects.isEmpty { Divider() }
+                    ForEach(state.projects) { p in Text("\(p.emoji) \(p.name)").tag(p.slug) }
+                    if let slug = store.settings.defaultProjectSlug, state.project(slug) == nil { Text(slug).tag(slug) }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 240)
+            }
+            if store.rules.contains(where: \.autoAddMail) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("rules.autoImport")).foregroundStyle(Brand.color.text)
+                        Text(L("rules.autoImport.on"))
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Toggle("", isOn: autoBinding).toggleStyle(.switch).labelsHidden()
+                }
+            }
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, Brand.spacing.contentWide)
+        .padding(.vertical, 14)
     }
 
     private func row(_ rule: RoutingRule) -> some View {
         HStack(spacing: 10) {
             if store.rules.count > 1 {
                 Image(systemName: "line.3.horizontal")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Brand.color.text3)
                     .help(L("rules.dragHelp"))
             }
             Toggle("", isOn: Binding(get: { rule.enabled }, set: { on in
@@ -179,27 +236,19 @@ struct RulesRows: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.displayName(for: rule, projects: state.projects, language: lang))
                     .lineLimit(2)
-                    .foregroundStyle(rule.enabled ? .primary : .secondary)
-                HStack(spacing: 6) {
-                    Text(Self.hits(rule.hits))
-                    if rule.autoAddMail {
-                        Text("·")
-                        Label(L("rules.autoBadge"), systemImage: "tray.and.arrow.down").labelStyle(.titleAndIcon)
-                    }
-                    if !rule.enabled {
-                        Text("·")
-                        Text(L("rules.off"))
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                    .foregroundStyle(rule.enabled ? Brand.color.text : Brand.color.text2)
+                Text(caption(rule))
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            Spacer(minLength: 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             Menu {
                 Button(L("rules.edit")) { editing = RuleEditorItem(rule: rule, isNew: false) }
                 Button(L("rules.duplicate")) { duplicate(rule) }
                 if let i = store.rules.firstIndex(where: { $0.id == rule.id }), store.rules.count > 1 {
-                    // Drag also works; these keep reordering possible from the keyboard and inside Ajustes.
+                    // Drag also works; these keep reordering possible from the keyboard.
                     Divider()
                     Button(L("rules.moveUp")) { attempt { try store.move(fromOffsets: IndexSet(integer: i), toOffset: i - 1) } }
                         .disabled(i == 0)
@@ -209,15 +258,28 @@ struct RulesRows: View {
                 Divider()
                 Button(L("rules.delete"), role: .destructive) { delete(rule) }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Image(systemName: "ellipsis.circle").foregroundStyle(Brand.color.text2)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .fixedSize()
+            .frame(width: 28)
             .help(L("rules.more"))
         }
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { editing = RuleEditorItem(rule: rule, isNew: false) }
+    }
+
+    /// "→ 🚀 Atlas · 12 veces · Agrega automáticamente" (the destination only for named rules: generated names say it).
+    private func caption(_ rule: RoutingRule) -> String {
+        var parts: [String] = []
+        if !rule.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            parts.append("→ " + RoutingStore.projectLabel(rule.projectSlug, projects: state.projects, language: lang))
+        }
+        parts.append(Self.hits(rule.hits))
+        if rule.autoAddMail { parts.append(L("rules.autoBadge")) }
+        if !rule.enabled { parts.append(L("rules.off")) }
+        return parts.joined(separator: " · ")
     }
 
     /// "Aún sin usar" · "1 vez" · "12 veces".
@@ -252,12 +314,13 @@ struct RulesRows: View {
         copy.hits = 0
         attempt {
             try store.add(copy)
+            // Only a copy that is really in the store opens in the editor.
+            editing = RuleEditorItem(rule: copy, isNew: false)
             if let from = store.rules.firstIndex(where: { $0.id == copy.id }),
                let original = store.rules.firstIndex(where: { $0.id == rule.id }) {
                 try store.move(fromOffsets: IndexSet(integer: from), toOffset: original + 1)
             }
         }
-        editing = RuleEditorItem(rule: copy, isNew: false)
     }
 
     private func delete(_ rule: RoutingRule) {
@@ -265,6 +328,12 @@ struct RulesRows: View {
         attempt {
             try store.remove(id: rule.id)
             deleted = (rule, index)
+        }
+        // "Regla eliminada · Deshacer" lasts a few seconds (a later deletion replaces it).
+        let id = rule.id
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(6))
+            if deleted?.rule.id == id { deleted = nil }
         }
     }
 

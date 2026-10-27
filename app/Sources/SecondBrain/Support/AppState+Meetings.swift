@@ -39,8 +39,57 @@ extension AppState {
         let parts = path.split(separator: "/")
         guard parts.count > 2, parts[0] == "projects" else { return false }
         pendingPage = path
+        pendingProjectTab = .content
         selection = .project(String(parts[1]))
         return true
+    }
+
+    // MARK: v0.5 navigation (CONTRACT §15.2)
+
+    /// Opens any vault page where it lives: a project page inside its project (Contenido tab), a people page in
+    /// Personas, a global page (index.md, log.md…) pushed inside Inicio.
+    func open(path: String) {
+        if openProjectPage(path) { return }
+        if path.hasPrefix("people/") {
+            pendingPage = path
+            selection = .people
+            return
+        }
+        selection = .home
+        homeRoute = .page(path)
+    }
+
+    /// A source from a list (Recientes, ⌘K): its wiki page once learned, else its project (or Sin asignar).
+    func open(source: SourceRecord) {
+        if source.status == .done, let path = engine.pagePath(forSourceId: source.id) {
+            open(path: path)
+        } else if let slug = source.projectSlug, project(slug) != nil {
+            pendingProjectTab = .content
+            selection = .project(slug)
+        } else {
+            selection = .home
+            homeRoute = .inbox
+        }
+    }
+
+    /// "Preguntar: «…»" (⌘K): the whole brain in Inicio, or one project's Preguntar tab.
+    func ask(_ question: String, projectSlug: String? = nil) {
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        if let projectSlug, project(projectSlug) != nil {
+            pendingQuestion = q
+            pendingProjectTab = .ask
+            selection = .project(projectSlug)
+        } else {
+            selection = .home
+            homeRoute = .ask(q)
+        }
+    }
+
+    /// The project being viewed, if any (⌥ in ⌘K asks it; "Grabar" from the window records into it).
+    var currentProjectSlug: String? {
+        if case .project(let slug) = selection { return slug }
+        return nil
     }
 
     /// "Ver resumen ✓": the meeting page Claude wrote (else the transcript).

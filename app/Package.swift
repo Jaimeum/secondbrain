@@ -39,7 +39,7 @@ let package = Package(
                 "BrainCore", "Recorder", "Transcription",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
-            resources: [.copy("Resources/web"), .process("Resources/Localization")]
+            resources: [.copy("Resources/web"), .copy("Resources/Brand"), .process("Resources/Localization")]
         ),
         .executableTarget(
             name: "sb",

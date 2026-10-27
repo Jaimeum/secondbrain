@@ -1,188 +1,197 @@
 import BrainCore
 import SwiftUI
 
+/// Inicio · Reuniones · Correo · Pendientes · Personas, then Proyectos (CONTRACT §15.2). Header: the brand and the ⌘K
+/// search; footer: the one recording control and the queue line.
 struct SidebarView: View {
     @Environment(AppState.self) private var state
     @Binding var showNewProject: Bool
+    @ViewState private var editing: Project?
 
     var body: some View {
-        @Bindable var state = state
-        List(selection: $state.selection) {
+        List(selection: selection) {
             Section {
-                Label(L("sidebar.brain"), systemImage: "brain.head.profile")
-                    .tag(SidebarItem.brain)
-                Label(L("mytasks.title"), systemImage: "checklist")
+                item(L("home.title"), symbol: "house").tag(SidebarItem.home)
+                    // Re-clicking the selected row doesn't go through the selection binding: pop Inicio to its root.
+                    .simultaneousGesture(TapGesture().onEnded {
+                        if state.selection?.normalized == .home { state.homePopToken += 1 }
+                    })
+                item(L("sidebar.meetings"), symbol: "calendar").tag(SidebarItem.meetings)
+                item(L("sidebar.mail"), symbol: "envelope").tag(SidebarItem.mail)
+                item(L("tasks.title"), symbol: "checklist")
                     .badge(overdueBadge)
-                    .tag(SidebarItem.myTasks)
                     .help(state.overdueCount > 0 ? L("mytasks.overdueHelp", state.overdueCount) : "")
-                Label(L("inbox.title"), systemImage: "tray")
-                    .badge(state.inboxCount)
-                    .tag(SidebarItem.inbox)
-                Label(L("sidebar.mail"), systemImage: "envelope")
-                    .tag(SidebarItem.mail)
-                Label(L("sidebar.meetings"), systemImage: "calendar")
-                    .tag(SidebarItem.meetings)
-                Label(L("sidebar.people"), systemImage: "person.2")
-                    .tag(SidebarItem.people)
-                Label(L("tpl.title"), systemImage: "doc.richtext")
-                    .tag(SidebarItem.templates)
+                    .tag(SidebarItem.tasks)
+                item(L("sidebar.people"), symbol: "person.2").tag(SidebarItem.people)
             }
 
-            Section(L("sidebar.projects")) {
+            Section {
                 ForEach(state.projects) { project in
                     ProjectRow(project: project, inProgress: state.inProgressCount(project.slug))
                         .tag(SidebarItem.project(project.slug))
                         .contextMenu {
+                            Button(L("project.edit")) { editing = project }
                             Button(L("email.addEllipsis")) { state.requestEmail(projectSlug: project.slug) }
                         }
                 }
                 Button {
                     showNewProject = true
                 } label: {
-                    Label(L("sidebar.newProject"), systemImage: "plus")
-                        .foregroundStyle(.secondary)
+                    Label {
+                        Text(L("sidebar.newProject")).lineLimit(1)
+                    } icon: {
+                        Image(systemName: "plus").foregroundStyle(Brand.color.text2)
+                    }
+                    .foregroundStyle(Brand.color.text2)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .listItemTint(Brand.color.text2)
+            } header: {
+                Text(L("sidebar.projects"))
+                    .font(Brand.font(11, .semibold))
+                    .foregroundStyle(Brand.color.text2)
             }
         }
         .listStyle(.sidebar)
-        .contextMenu {
-            Button(L("email.addEllipsis")) { state.requestEmail() }
+        .scrollContentBackground(.hidden)
+        .background(Brand.color.bg)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            SidebarHeader()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SidebarFooter()
         }
+        .sheet(item: $editing) { project in
+            NewProjectSheet(editing: project)
+        }
     }
-}
 
-private extension SidebarView {
-    /// Red count of my overdue tasks (a plain badge can't be tinted, so it's text).
-    var overdueBadge: Text? {
+    /// Selection through `SidebarItem.normalized`, so an alias set elsewhere (`.myTasks`, `.brain`) still highlights
+    /// its row. Clicking "Inicio" while on Inicio goes back to its root (from a page, the timeline, the graph…).
+    private var selection: Binding<SidebarItem?> {
+        Binding(get: { state.selection?.normalized ?? state.selection }, set: { item in
+            if item == .home, state.selection?.normalized == .home { state.homePopToken += 1 }
+            state.selection = item
+        })
+    }
+
+    /// The icon has a fixed tint: the sidebar list's own tint follows vibrancy and goes dark olive on the dark `bg`.
+    private func item(_ title: String, symbol: String) -> some View {
+        Label {
+            Text(title).lineLimit(1)
+        } icon: {
+            Image(systemName: symbol).foregroundStyle(Brand.color.text2)
+        }
+        .listItemTint(Brand.color.text2)
+    }
+
+    /// Count of my overdue tasks in the warning tone (a plain badge can't be tinted, so it's text).
+    private var overdueBadge: Text? {
         guard state.overdueCount > 0 else { return nil }
-        return Text("\(state.overdueCount)").foregroundStyle(.red)
+        return Text("\(state.overdueCount)").foregroundStyle(Brand.color.warning)
     }
 }
 
+/// Brand mark + wordmark, and the "Buscar o preguntar… ⌘K" button that opens the palette. The mark pulses calmly
+/// when something was learned (motion spec C).
+private struct SidebarHeader: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            BrandLogo(size: 20)
+                .brandPulse(trigger: state.historyRevision)
+                .padding(.leading, 4)
+            Button {
+                state.searchPresented = true
+            } label: {
+                // The whole placeholder with "⌘K"; then "⌘K" stays and the placeholder truncates; only very narrow
+                // drops the hint (it is also in the tooltip).
+                ViewThatFits(in: .horizontal) {
+                    searchLabel(shortcut: true)
+                    searchLabel(shortcut: true, truncates: true)
+                    searchLabel(shortcut: false, truncates: true)
+                }
+                .font(Brand.body)
+                .padding(.horizontal, 6)
+                .frame(height: 28)
+                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+                    .strokeBorder(Brand.color.line, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L("search.placeholder") + "  ⌘K")
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .background(Brand.color.bg)
+    }
+
+    private func searchLabel(shortcut: Bool, truncates: Bool = false) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass").foregroundStyle(Brand.color.text3)
+            Text(L("search.placeholder"))
+                .foregroundStyle(Brand.color.text3)
+                .lineLimit(1)
+                .fixedSize(horizontal: !truncates, vertical: false)
+            Spacer(minLength: 2)
+            if shortcut {
+                // The same key chip as Inicio's search field.
+                Text(verbatim: "⌘K")
+                    .font(Brand.font(10, .medium))
+                    .foregroundStyle(Brand.color.text3)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .fixedSize()
+            }
+        }
+    }
+}
+
+/// Same icon column as the items above: the project's emoji is the label's icon.
 private struct ProjectRow: View {
     let project: Project
     let inProgress: Int
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(project.emoji).font(.system(size: 15))
-            Text(project.name).lineLimit(1)
-            Spacer(minLength: 4)
-            if inProgress > 0 {
-                HStack(spacing: 4) {
-                    ProgressView().controlSize(.mini)
-                    Text("\(inProgress)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                }
-                .help(L("sidebar.inProgress", inProgress))
-            }
-        }
-    }
-}
-
-private struct SidebarFooter: View {
-    @Environment(AppState.self) private var state
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            MeetingBanner()   // MARK: v0.3 meetings
-            QueueStatusLine()
-            RecordButton(large: true)
-            if let warning = state.recorderWarning {
-                Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-            }
-            if let error = state.recordingError {
-                Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(12)
-        .background(.bar)
-    }
-}
-
-/// "Transcribing… 42%", "Learning from the meeting…", "Waiting for Claude until 15:40".
-/// No TimelineView here: an empty TimelineView still takes a slot in the surrounding stack (an extra blank gap in the
-/// menu bar and the sidebar footer). The clock comes from `MeetingsModel.now`, which ticks every 20 s.
-struct QueueStatusLine: View {
-    @Environment(AppState.self) private var state
-
-    var body: some View {
-        content(now: MeetingsModel.shared.now)
-    }
-
-    @ViewBuilder private func content(now: Date) -> some View {
-        if let status = state.queueStatus(now: now) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    if status.waiting {
-                        Image(systemName: "hourglass").foregroundStyle(.orange)
-                    } else {
-                        ProgressView().controlSize(.mini)
-                    }
-                    Text(status.text)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                if let progress = status.progress {
-                    ProgressView(value: progress).controlSize(.small)
-                }
-            }
-        }
-    }
-}
-
-struct RecordButton: View {
-    @Environment(AppState.self) private var state
-    var large = false
-
-    /// The meeting banner above already offers "Grabar" for the meeting on now: this one becomes the plain secondary
-    /// "Grabar otra cosa" (one primary action, CONTRACT §12.7).
-    private var meetingOffered: Bool {
-        !state.isRecording && !state.isRecorderBusy && MeetingBanner.recordableNow(state: state, now: MeetingsModel.shared.now) != nil
-    }
-
-    var body: some View {
-        if meetingOffered {
-            button.buttonStyle(.bordered).controlSize(.large)
-        } else {
-            button.buttonStyle(.borderedProminent)
-                .tint(state.isRecording ? .red : .accentColor)
-                .controlSize(.large)
-        }
-    }
-
-    private var button: some View {
-        Button {
-            // From the main window, a new recording goes to the project being viewed.
-            if large, !state.isRecording, case .project(let slug) = state.selection {
-                state.recordingProjectSlug = slug
-            }
-            state.toggleRecording()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: state.isRecording ? "stop.fill" : "record.circle")
-                    .font(.system(size: large ? 15 : 13, weight: .semibold))
-                if let since = state.recordingSince {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(L("record.stopWithTime", Fmt.duration(context.date.timeIntervalSince(since))))
+        Label {
+            HStack(spacing: 6) {
+                Text(project.name).lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 4)
+                if inProgress > 0 {
+                    HStack(spacing: 4) {
+                        BrandLoader(size: 12)
+                        Text("\(inProgress)")
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.text2)
                             .monospacedDigit()
                     }
-                } else if state.isRecorderBusy {
-                    Text(state.recorder.state == .starting ? L("record.starting") : L("record.stopping"))
-                } else {
-                    Text(meetingOffered ? L("record.somethingElse") : L("record.start"))
+                    .help(L("sidebar.inProgress", inProgress))
                 }
             }
-            .font(.system(size: large ? 14 : 13, weight: .semibold))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, large ? 9 : 7)
+        } icon: {
+            Text(project.emoji).font(Brand.font(13))
         }
-        .disabled(state.isRecorderBusy)
-        .help(state.config.hotkeyEnabled ? L("record.hotkeyHint") : "")
+    }
+}
+
+/// ≤ 96 pt: the recording control and, under it, the queue line.
+private struct SidebarFooter: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            RecordControl(placement: .sidebar)
+            QueueStatusLine(showsProgressBar: false)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Brand.color.bg)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+        }
     }
 }

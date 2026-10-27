@@ -2,13 +2,15 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// "Prepararme" (CONTRACT §12.7): first, instant cards from the vault (no Claude) — each attendee with the last meeting
-/// they were in and their open tasks, my tasks in the project, the last decision. Then "Preparar con Claude" streams
-/// Quiénes / Pendientes abiertos / Para preguntar + agenda, which stays visible (also while recording). Below, a folded
-/// free chat "Pregúntame algo más…".
+/// "Prepararme" (CONTRACT §12.7, §15): first, instant cards from the vault (no Claude) — each attendee with the last
+/// meeting they were in and their open tasks, my tasks in the project, the last decision. Then "Preparar con Claude"
+/// streams Quiénes / Pendientes abiertos / Para preguntar + agenda, which stays visible (also while recording). Below, a
+/// folded free chat "Pregúntame algo más…". Back and the meeting's actions stay pinned above the scroll.
 struct MeetingPrepView: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
+    /// false next to the hero card, which already holds this meeting's Grabar / Unirme (§15.2: one Grabar on screen).
+    var showsActions = true
     var onClose: (() -> Void)? = nil
     /// A page outside any project (people, global) to show in place; project pages open in their project.
     var onShowPage: (String) -> Void = { _ in }
@@ -19,8 +21,10 @@ struct MeetingPrepView: View {
     @ViewState private var showMore = false
     @ViewState private var showReconnect = false
 
-    init(event: CalendarEvent, onClose: (() -> Void)? = nil, onShowPage: @escaping (String) -> Void = { _ in }) {
+    init(event: CalendarEvent, showsActions: Bool = true, onClose: (() -> Void)? = nil,
+         onShowPage: @escaping (String) -> Void = { _ in }) {
         self.event = event
+        self.showsActions = showsActions
         self.onClose = onClose
         self.onShowPage = onShowPage
         let models = MeetingPrepCache.models(for: event.id)
@@ -44,40 +48,75 @@ struct MeetingPrepView: View {
                 claudeSection
                 freeChat
             }
-            .padding(22)
+            .padding(Brand.spacing.content)
             .frame(maxWidth: 720, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .safeAreaInset(edge: .top, spacing: 0) { toolbar }
+        .background(Brand.color.surface)
         .task(id: "\(event.id)|\(projectSlug ?? "")|\(state.vaultRevision)") { await load() }
         .sheet(isPresented: $showReconnect) { ReconnectClaudeSheet() }
     }
 
     // MARK: Header
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// Pinned: Atrás on the left, the meeting's action + Unirme on the right (icon-only when tight). Nothing pinned
+    /// when there is neither (a prep next to the hero, pushed from the list: the stack's back is the way out).
+    @ViewBuilder private var toolbar: some View {
+        if onClose != nil || showsActions { toolbarBar }
+    }
+
+    private var toolbarBar: some View {
+        let action = MeetingActionButton(event: event, showsPrepare: false, onPrepare: {}, onShowPage: onShowPage).fixedSize()   // fixed only inside ViewThatFits candidates: it measures true widths
+        let join = MeetingJoinButton(event: event).fixedSize()
+        return VStack(spacing: 0) {
             HStack(spacing: 10) {
                 if let onClose {
                     Button(action: onClose) {
                         Label(L("prep.back"), systemImage: "chevron.left")
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
+                    .font(Brand.callout)
+                    .foregroundStyle(Brand.color.accent)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                    .keyboardShortcut(.cancelAction)
                 }
-                Spacer()
-                MeetingActionButton(event: event, showsPrepare: false, onPrepare: {}, onShowPage: onShowPage)
-                if let join = event.joinURL, JoinLink.isSafe(join) {
-                    Button { NSWorkspace.shared.open(join) } label: { Label(L("meetings.join"), systemImage: "video.fill") }
+                Spacer(minLength: 8)
+                if showsActions {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { action; join }
+                        HStack(spacing: 8) { action; join }.labelStyle(.iconOnly)
+                    }
                 }
             }
-            Text(L("prep.title", event.title))
-                .font(.title2.weight(.semibold))
+            .padding(.horizontal, Brand.spacing.content)
+            .frame(minHeight: 48)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+        }
+        .background(Brand.color.surface)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("prep.eyebrow"))
+                .font(Brand.font(11, .semibold))
+                .tracking(0.6)
+                .textCase(.uppercase)
+                .foregroundStyle(Brand.color.accent)
+                .lineLimit(1)
+            Text(event.title)
+                .font(Brand.title)
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                Label(MeetingTimes.when(event), systemImage: "calendar")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                MeetingProjectChip(event: event, placement: .prep)
-            }
+            Label(MeetingTimes.when(event), systemImage: "calendar")
+                .font(Brand.body)
+                .foregroundStyle(Brand.color.text2)
+                .lineLimit(2)
+            MeetingProjectChip(event: event, placement: .prep, showsOffer: false)
+                .padding(.top, 2)
+            MeetingRuleOfferLine(event: event, placement: .prep)   // v0.4 rules: its own full-width row
         }
     }
 
@@ -92,93 +131,118 @@ struct MeetingPrepView: View {
                     FlowLayout(spacing: 6) {
                         ForEach(data.attendees) { a in
                             HStack(spacing: 6) {
-                                InitialsCircle(address: EmailAddress(name: a.name, email: a.email), size: 20)
-                                Text(a.name).font(.callout).lineLimit(1)
+                                InitialsCircle(address: EmailAddress(name: a.name, email: a.email), size: 20,
+                                               ring: Brand.color.cardAlt)
+                                Text(a.name)
+                                    .font(Brand.body)
+                                    .foregroundStyle(Brand.color.text)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                             }
                             .padding(.leading, 3)
                             .padding(.trailing, 10)
                             .padding(.vertical, 3)
-                            .background(Color.primary.opacity(0.05), in: Capsule())
+                            .background(Capsule().fill(Brand.color.cardAlt))
                         }
                     }
                 }
                 Label(L(data.attendees.isEmpty ? "prep.knowNothing" : "prep.knowNoOne"), systemImage: "leaf")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else if let data {
             VStack(alignment: .leading, spacing: 12) {
                 if !data.attendees.isEmpty {
                     sectionTitle(L("prep.who"), symbol: "person.2")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 10, alignment: .top)], alignment: .leading, spacing: 10) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10, alignment: .top)],
+                              alignment: .leading, spacing: 10) {
                         ForEach(data.attendees) { attendeeCard($0) }
                     }
                 }
                 if !data.myTasks.isEmpty {
-                    card {
+                    BrandCard {
                         VStack(alignment: .leading, spacing: 6) {
                             Label(L("prep.myTasks", state.projectName(data.projectSlug)), systemImage: "checklist")
-                                .font(.subheadline.weight(.semibold))
+                                .font(Brand.callout)
+                                .foregroundStyle(Brand.color.text)
+                                .lineLimit(2)
                             ForEach(data.myTasks.prefix(5)) { taskLine($0) }
                             if data.myTasks.count > 5 {
-                                Text(L("prep.more", data.myTasks.count - 5)).font(.caption).foregroundStyle(.secondary)
+                                Text(L("prep.more", data.myTasks.count - 5)).font(Brand.caption).foregroundStyle(Brand.color.text2)
                             }
                         }
                     }
                 }
                 if let decision = data.lastDecision {
-                    card {
+                    BrandCard {
                         VStack(alignment: .leading, spacing: 4) {
                             Label(L("prep.lastDecision"), systemImage: "checkmark.seal")
-                                .font(.subheadline.weight(.semibold))
+                                .font(Brand.callout)
+                                .foregroundStyle(Brand.color.text)
                             Button { open(decision.path) } label: {
                                 Text(decision.title).multilineTextAlignment(.leading)
                             }
-                            .buttonStyle(.link)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Brand.color.accent)
                             if let date = decision.date {
-                                Text(Fmt.relativeDay(date).meetingCapitalized).font(.caption).foregroundStyle(.secondary)
+                                Text(Fmt.relativeDay(date).meetingCapitalized).font(Brand.caption).foregroundStyle(Brand.color.text2)
                             }
                         }
                     }
                 }
             }
         } else {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text(L("prep.loading")).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 10) {
+                BrandLoader(size: 20)
+                Text(L("prep.loading"))
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     private func attendeeCard(_ a: MeetingPrepData.Attendee) -> some View {
-        card {
+        BrandCard {
             HStack(alignment: .top, spacing: 10) {
                 InitialsCircle(address: EmailAddress(name: a.name, email: a.email), size: 32)
                 VStack(alignment: .leading, spacing: 4) {
-                    if let path = a.personPath {
-                        Button(a.name) { open(path) }
-                            .buttonStyle(.link)
-                            .font(.body.weight(.medium))
-                            .help(L("meetings.openPerson"))
-                    } else {
-                        Text(a.name).font(.body.weight(.medium))
+                    Group {
+                        if let path = a.personPath {
+                            PersonLinkButton(name: a.name) { open(path) }
+                        } else {
+                            Text(a.name).foregroundStyle(Brand.color.text)
+                        }
                     }
+                    .font(Brand.font(13, .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     if let last = a.lastMeeting {
                         Button { open(last.path) } label: {
                             Text(L("prep.lastTime", last.title, last.date.map { Fmt.relativeDay($0) } ?? "—"))
-                                .font(.caption)
+                                .font(Brand.caption)
                                 .multilineTextAlignment(.leading)
+                                .lineLimit(3)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Brand.color.accent)
                     } else {
+                        // No fixedSize: inside a grid cell it measures at a narrower width than it is placed at and
+                        // wraps early; a flexible frame lets the caption use the card's whole text column.
                         Text(a.personPath == nil ? L("prep.unknownPerson") : L("prep.firstMeeting"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.text2)
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if !a.openTasks.isEmpty {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(L("prep.theirTasks", a.openTasks.count)).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            Text(L("prep.theirTasks", a.openTasks.count))
+                                .font(Brand.font(11, .semibold))
+                                .foregroundStyle(Brand.color.text2)
+                                .lineLimit(1)
                             ForEach(a.openTasks.prefix(3)) { taskLine($0, small: true) }
                         }
                         .padding(.top, 2)
@@ -186,32 +250,34 @@ struct MeetingPrepView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private func taskLine(_ task: TaskItem, small: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "circle").font(.system(size: small ? 7 : 9)).foregroundStyle(.secondary)
-            Text(task.text).lineLimit(2)
+            Image(systemName: "circle")
+                .font(Brand.font(small ? 7 : 9))
+                .foregroundStyle(Brand.color.text3)
+            Text(task.text)
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(2)
             if let due = task.due {
-                Text("📅 " + Fmt.relativeDay(due))
-                    .foregroundStyle(task.isOverdue ? Color.red : .secondary)
-                    .fixedSize()
+                Label(Fmt.relativeDay(due), systemImage: "calendar")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(task.isOverdue ? Brand.color.danger : Brand.color.text2)
+                    .lineLimit(1)
+                    .layoutPriority(1)
             }
         }
-        .font(small ? .caption : .callout)
+        .font(small ? Brand.caption : Brand.body)
     }
 
     private func sectionTitle(_ text: String, symbol: String) -> some View {
-        Label(text, systemImage: symbol).font(.headline)
-    }
-
-    private func card(@ViewBuilder _ content: () -> some View) -> some View {
-        content()
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
+        Label(text, systemImage: symbol)
+            .font(Brand.section)
+            .foregroundStyle(Brand.color.text)
+            .lineLimit(1)
     }
 
     // MARK: Claude
@@ -219,28 +285,32 @@ struct MeetingPrepView: View {
     @ViewBuilder private var claudeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let answer = prep.messages.last(where: { $0.role == .assistant }) {
-                HStack {
-                    sectionTitle(L("prep.withClaude"), symbol: "sparkles")
-                    Spacer()
+                HStack(spacing: 8) {
+                    sectionTitle(L("prep.briefing"), symbol: "sparkles")
+                    Spacer(minLength: 8)
                     if !prep.isAsking {
                         Button { askClaude() } label: { Label(L("prep.again"), systemImage: "arrow.clockwise") }
-                            .buttonStyle(.borderless)
-                            .controlSize(.small)
+                            .buttonStyle(.plain)
+                            .font(Brand.callout)
+                            .foregroundStyle(Brand.color.accent)
+                            .lineLimit(1)
                     }
                 }
                 MessageView(message: answer, baseRelPath: basePath, onOpenPage: open,
                             onSave: { save(answer, in: prep) }, onReconnect: { showReconnect = true })
                     .padding(14)
-                    .background(Color.accentColor.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                    .background(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).fill(Brand.color.accentSoft))
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Button { askClaude() } label: {
                         Label(L("prep.withClaudeButton"), systemImage: "sparkles")
-                            .padding(.horizontal, 6)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.brandPrimary)
                     .controlSize(.large)
-                    Text(L("prep.withClaudeHint")).font(.caption).foregroundStyle(.secondary)
+                    Text(L("prep.withClaudeHint"))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -268,20 +338,24 @@ struct MeetingPrepView: View {
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField(L("prep.askPlaceholder"), text: $chat.draft, axis: .vertical)
                         .textFieldStyle(.plain)
+                        .font(Brand.body)
                         .lineLimit(1...4)
                         .padding(8)
-                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                        .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).fill(Brand.color.card))
+                        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+                            .strokeBorder(Brand.color.line, lineWidth: 1))
                         .onSubmit { chat.ask(engine: state.engine, projectSlug: projectSlug) }
                     if chat.isAsking {
-                        Button { chat.stop() } label: { Image(systemName: "stop.circle.fill").font(.system(size: 22)) }
+                        Button { chat.stop() } label: { Image(systemName: "stop.circle.fill").font(Brand.font(22)) }
                             .buttonStyle(.plain)
+                            .foregroundStyle(Brand.color.text2)
                             .help(L("chat.stop"))
                     } else {
                         Button { chat.ask(engine: state.engine, projectSlug: projectSlug) } label: {
-                            Image(systemName: "arrow.up.circle.fill").font(.system(size: 22))
+                            Image(systemName: "arrow.up.circle.fill").font(Brand.font(22))
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Brand.color.accent)
                         .disabled(chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
@@ -289,9 +363,11 @@ struct MeetingPrepView: View {
             .padding(.top, 8)
         } label: {
             Label(L("prep.askMore"), systemImage: "bubble.left.and.text.bubble.right")
-                .font(.callout.weight(.medium))
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(1)
                 .contentShape(Rectangle())
-                .onTapGesture { withAnimation { showMore.toggle() } }
+                .onTapGesture { withAnimation(Brand.motion.animation(fast: true)) { showMore.toggle() } }
         }
     }
 
@@ -328,7 +404,8 @@ enum MeetingPrepCache {
     }
 }
 
-/// Left-aligned rows that wrap (attendee chips; v0.4 github: branch chips in ReposView).
+/// Left-aligned rows that wrap (attendee chips; v0.4 github: branch chips in ReposView). A subview wider than the row
+/// is proposed the row's width, so a long chip truncates instead of overflowing.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 6
 
@@ -344,7 +421,7 @@ struct FlowLayout: Layout {
         for row in arrange(width: bounds.width, subviews: subviews) {
             var x = bounds.minX
             for i in row.indices {
-                let size = subviews[i].sizeThatFits(.unspecified)
+                let size = clampedSize(subviews[i], width: bounds.width)
                 subviews[i].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
@@ -352,11 +429,19 @@ struct FlowLayout: Layout {
         }
     }
 
+    /// The subview's ideal size, its width capped at `width` (height re-measured at that width).
+    private func clampedSize(_ subview: LayoutSubview, width: CGFloat) -> CGSize {
+        let ideal = subview.sizeThatFits(.unspecified)
+        guard width.isFinite, ideal.width > width else { return ideal }
+        let fitted = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+        return CGSize(width: min(fitted.width, width), height: fitted.height)
+    }
+
     private func arrange(width: CGFloat, subviews: Subviews) -> [(indices: [Int], width: CGFloat, height: CGFloat)] {
         var rows: [(indices: [Int], width: CGFloat, height: CGFloat)] = []
         var current: (indices: [Int], width: CGFloat, height: CGFloat) = ([], 0, 0)
         for i in subviews.indices {
-            let size = subviews[i].sizeThatFits(.unspecified)
+            let size = clampedSize(subviews[i], width: width)
             let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
             if needed > width, !current.indices.isEmpty {
                 rows.append(current)

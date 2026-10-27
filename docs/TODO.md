@@ -52,23 +52,53 @@ Cuando haya usuarios: Google Cloud → Google Auth Platform → **Centro de veri
 `calendar.readonly` solo pide la verificación normal; `gmail.readonly` es permiso restringido y pide además una
 auditoría de seguridad externa (CASA, de pago). Alternativa si pesa: publicar solo con calendario y dejar Gmail para después.
 
-## 3. Probar la v0.4.0
+## 3. Probar la v0.5 en vivo
 
-- Abrir la app y probar a mano la pestaña **Código**, Ajustes → GitHub (conectar con `gh`, token y Device Flow) y las **Reglas**.
-  Hasta ahora solo se revisaron capturas con datos demo (`SB_DEMO_GITHUB=1`).
-- Contra GitHub real (solo se probó `Jaimeum/secondbrain` con `main`): seguir dos ramas a la vez, force-push / rebase
-  (rama "reescrita"), rama borrada ("ya no existe") y cambios en PRs e issues entre dos sincronizaciones.
-  Hoy esos casos solo los cubre `sb github selftest` (sin red).
+Las capturas (`SB_SNAPSHOT_DIR`, `SB_SNAPSHOT_WINDOW=1`) cubren el layout a 920×620 y 1100×720 en claro y oscuro, pero
+no lo que se mueve, se arrastra o depende de AppKit. Revisar a mano con la app compilada:
 
-## 4. GitHub: mejoras pequeñas (v0.4.0)
+- [ ] **Barra de herramientas del proyecto:** menú **+ Agregar** (Grabar aquí · Pegar correo · Nueva nota · Agregar
+      archivos… · Pegar enlace…), **Historial** (abre la hoja del proyecto) y **⋯** (Formato por defecto ▸ ·
+      Repositorios… · Mostrar en Finder). Que se pliegue en ⋯ al angostar la ventana.
+- [ ] **Una sola columna** en Correo y Reuniones: con el detalle por debajo de 620/700 pt, lista y lector/detalle pasan a
+      una columna (push) y se puede volver atrás sin perder la selección.
+- [ ] **Arrastrar reglas** para reordenarlas (Ajustes → Reglas y la hoja *Reglas…* del menú ⋯ de Correo y Reuniones);
+      el orden se guarda y la primera que coincide gana.
+- [ ] **Animación de arranque** (1.6 s, una vez por lanzamiento; no al cambiar de cerebro) y con *Reducir movimiento*
+      activado (solo fade).
+- [ ] **Icono de la barra de menús al grabar:** símbolo + punto `record`; vuelve al template al detener; se ve bien con
+      barra de menús clara y oscura.
+- [ ] **⌘K con teclado:** abre desde cualquier pantalla (no sobre una hoja), ↑↓ ↩ esc, ⌘↩ pregunta, ⌥ pregunta al
+      proyecto actual; foco en el campo al abrir.
+- [ ] **Ajustes abre en la pestaña pedida** (Reglas…, Formatos, GitHub, Cuentas desde avisos y desde ⌘K), también si
+      la ventana de Ajustes ya estaba abierta en otra pestaña.
+- [ ] **Modo oscuro de la tira de pestañas de Ajustes** (iconos y etiqueta seleccionada legibles).
+- [ ] Pendiente de v0.4: GitHub real (dos ramas a la vez, force-push / rebase, rama borrada, cambios de PRs e issues
+      entre dos sincronizaciones) y conectar con `gh`, token y Device Flow. Hoy solo lo cubre `sb github selftest`.
+
+## 4. Diferido de v0.5
+
+- Oferta de regla en Correo: el dominio sigue en negritas y queda un comentario viejo sobre el contraste de `text2` (`RuleOfferBar.swift`).
+
+- Búsqueda de texto completo en ⌘K (hoy: títulos, nombres y metadatos).
+- Animación D "conexión encontrada" (`docs/brand/05_motion/`).
+- Exportes Rive / Lottie de las animaciones de marca.
+- Limpieza de strings sin uso en `Localizable.strings` (es/en).
+- Caché de títulos de página en `VaultStore` (hoy los chips de origen resuelven títulos en cada carga).
+- "Mis pendientes (n)" en Reuniones → Anteriores (si no quedó en 0.5.0).
+- Conteo de coincidencias por regla en Ajustes → Reglas.
+- Revisión de contraste restante: `text3` en texto informativo (no llega a AA; debería quedar solo en placeholders).
+- Tests de UI (hoy: capturas + selftests de BrainCore).
+
+## 5. GitHub: mejoras pequeñas (v0.4.0)
 
 - `sb github status` no marca los repos cuyo proyecto ya no existe.
-- "Abrir Ajustes" desde la pestaña Código abre Ajustes pero no lleva a la sección GitHub.
+- "Abrir Ajustes" desde la hoja Repositorios… debe llevar a Ajustes → GitHub (verificar en vivo; ver §3).
 - La CLI no tiene comando para cambiar las ramas seguidas (hoy: `sb github remove` + `add`, o "Elegir ramas" en la app).
 - El Device Flow pide el scope `repo`, que da escritura (GitHub no ofrece uno de solo lectura para repos privados en
   OAuth Apps). La app solo hace GET; quien prefiera mínimo privilegio puede usar un token fine-grained de solo lectura.
 
-## 5. Menores conocidos (v0.3.1)
+## 6. Menores conocidos (v0.3.1)
 
 - Outlook: los correos de "Elementos eliminados" no se filtran al importar un hilo.
 - El `index.md` del vault template tiene una frase en inglés (viene de v0.1).

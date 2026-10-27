@@ -1,0 +1,50 @@
+{
+  "brand": "secondbrain",
+  "platform": "desktop",
+  "master_symbol": "03 - Red organica / four asymmetric lobes with organic central aperture",
+  "palette": {
+    "ivory": "#F5F0E8",
+    "cream": "#FAF7F1",
+    "sand": "#E9E0D4",
+    "sage": "#818979",
+    "olive": "#475243",
+    "mid": "#AEB5A4",
+    "forest": "#303B32",
+    "ink": "#232B25",
+    "line": "#DAD3C9",
+    "fog": "#CCD0C3",
+    "white": "#FFFFFF",
+    "text2": "#6F766D",
+    "dark": "#202721",
+    "dark2": "#30382F"
+  },
+  "typography": {
+    "primary": "Inter",
+    "weights": [
+      400,
+      500,
+      600,
+      700
+    ],
+    "fallback": [
+      "Arial",
+      "system-ui"
+    ]
+  },
+  "spacing_base_px": 4,
+  "radii": {
+    "control": 10,
+    "card": 16,
+    "app_icon": 229
+  },
+  "icon_sizes": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    4096
+  ]
+}

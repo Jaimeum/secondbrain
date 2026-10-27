@@ -2,38 +2,88 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// Ajustes → Cuentas (CONTRACT §12.3, §12.7): connected accounts, connect buttons (Microsoft · Google · Mac Calendar),
-/// help for organizations, and the advanced client-id fields. Embedded in `SettingsView`'s Form.
-struct AccountsSection: View {
+/// Ajustes → Cuentas (CONTRACT §12.3, §12.7, §15.2): connected accounts with avatar tokens, "Conectar otra cuenta ▾"
+/// once one exists, the read-only promise and the help link; plus the Claude account. The OAuth client ids live in
+/// Avanzado.
+struct AccountsSettingsPage: View {
     @Environment(AppState.self) private var state
     @ViewState private var connector = AccountConnector()
     @ViewState private var help: OrgHelpRequest?
+    @ViewState private var pendingDisconnect: ConnectedAccount?
+    @ViewState private var showReconnect = false
+    @ViewState private var claudeConnected: Bool?
 
     var body: some View {
-        Section {
-            let store = state.engine.accounts
-            if store.accounts.isEmpty {
-                Text(L("accounts.none")).foregroundStyle(.secondary)
-            }
-            ForEach(store.accounts) { account in
-                AccountRow(account: account, needsSignIn: store.needsSignIn.contains(account.id),
-                           onReconnect: { connector.start(account.provider, state: state) }) {
-                    do { try state.disconnectAccount(account.id) } catch { connector.error = FriendlyError.message(error) }
+        let store = state.engine.accounts
+        SettingsPage {
+            SettingsGroup(title: L("settings.group.mailCalendar")) {
+                if store.accounts.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(L("accounts.none"))
+                            .foregroundStyle(Brand.color.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ConnectAccountControls(connector: connector, help: $help, context: .settings)
+                    }
+                    .padding(14)
+                } else {
+                    ForEach(Array(store.accounts.enumerated()), id: \.element.id) { index, account in
+                        if index > 0 { SettingsDivider(inset: 52) }
+                        AccountRow(account: account, needsSignIn: store.needsSignIn.contains(account.id),
+                                   onReconnect: { connector.start(account.provider, state: state) },
+                                   onDisconnect: { pendingDisconnect = account })
+                    }
+                    SettingsDivider()
+                    ConnectAccountControls(connector: connector, help: $help, context: .settings, compact: true)
+                        .padding(14)
+                }
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(L("readonly.promise"), systemImage: "lock.shield")
+                    Button(L("accounts.troubleConnecting")) { help = OrgHelpRequest(provider: nil) }
+                        .buttonStyle(.settingsLink)
                 }
             }
-            ConnectAccountControls(connector: connector, help: $help, context: .settings)
-            AdvancedOAuthFields()
-        } header: {
-            Text(L("accounts.section"))
-        } footer: {
-            HStack {
-                Label(L("accounts.footer"), systemImage: "lock.shield").foregroundStyle(.secondary)
-                Spacer()
-                Button(L("accounts.troubleConnecting")) { help = OrgHelpRequest(provider: nil) }
-                    .buttonStyle(.link)
+
+            SettingsGroup(title: L("settings.claude")) {
+                SettingsRow(title: L("claude.reconnectTitle"), detail: claudeStatus) {
+                    Button(L("chat.reconnect")) { showReconnect = true }
+                        .buttonStyle(.brandSecondary)
+                }
             }
         }
         .sheet(item: $help) { request in OrgAccessHelpSheet(provider: request.provider) }
+        .sheet(isPresented: $showReconnect, onDismiss: refreshClaude) { ReconnectClaudeSheet() }
+        .confirmationDialog(L("settings.disconnect.confirm", pendingDisconnect.map(Self.name) ?? ""),
+                            isPresented: Binding(get: { pendingDisconnect != nil }, set: { if !$0 { pendingDisconnect = nil } })) {
+            Button(L("accounts.disconnect"), role: .destructive) {
+                if let account = pendingDisconnect {
+                    do {
+                        try state.disconnectAccount(account.id)
+                        connector.clearStatus()   // "✓ Conectado: …" must not outlive the account
+                    } catch {
+                        connector.error = FriendlyError.message(error)
+                    }
+                }
+                pendingDisconnect = nil
+            }
+        } message: {
+            Text(L("settings.disconnect.message"))
+        }
+        .task { refreshClaude() }
+    }
+
+    /// "Conectada" only when the app holds the token. Without it Claude may still work through the CLI's own login,
+    /// so nothing is claimed (checking for real costs a Claude call).
+    private var claudeStatus: String? {
+        claudeConnected == true ? L("settings.claude.connected") : nil
+    }
+
+    private func refreshClaude() {
+        claudeConnected = ClaudeSetup.loadToken() != nil
+    }
+
+    static func name(_ account: ConnectedAccount) -> String {
+        account.provider == .local ? L("accounts.macCalendar") : account.email
     }
 }
 
@@ -76,8 +126,9 @@ final class AccountConnector {
     /// The Mac Calendar permission was refused: offer System Settings.
     private(set) var calendarDenied = false
     private(set) var connectingLocal = false
-    /// Last account connected here ("✓ Conectado: ana@contoso.com").
+    /// Last account connected here ("✓ Conectado: ana@contoso.com"); fades after a few seconds.
     private(set) var lastConnected: ConnectedAccount?
+    @ObservationIgnored private var fadeTask: Task<Void, Never>?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var browserURL: URL?
 
@@ -103,7 +154,8 @@ final class AccountConnector {
                     Task { @MainActor in self?.browserURL = url }
                 }
                 guard let self, !Task.isCancelled else { return }
-                lastConnected = account
+                didConnect(account)
+                OwnerAddresses.merge(state: state)   // "Mis direcciones de correo" includes the new account
                 flow = nil
             } catch {
                 guard let self, !Task.isCancelled, flow != nil else { return }
@@ -127,6 +179,23 @@ final class AccountConnector {
 
     func retry() { flow?.phase = .trust }
 
+    /// Forgets the inline result (after a disconnect, or once the success line has been read).
+    func clearStatus() {
+        fadeTask?.cancel()
+        lastConnected = nil
+        error = nil
+    }
+
+    private func didConnect(_ account: ConnectedAccount) {
+        lastConnected = account
+        fadeTask?.cancel()
+        fadeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard let self, !Task.isCancelled, lastConnected?.id == account.id else { return }
+            withAnimation(Brand.motion.animation()) { self.lastConnected = nil }
+        }
+    }
+
     static func phase(for error: Error) -> ConnectPhase {
         switch error {
         case AccountError.notConfigured: return .blocked(.notRegistered)
@@ -141,7 +210,7 @@ final class AccountConnector {
         Task {
             defer { connectingLocal = false }
             do {
-                lastConnected = try await state.connectAccount(.local) { _ in }
+                didConnect(try await state.connectAccount(.local) { _ in })
             } catch {
                 self.error = FriendlyError.message(error)
                 calendarDenied = !state.engine.accounts.isDemo && LocalCalendarProvider.isDenied
@@ -165,31 +234,55 @@ extension AppState {
 }
 
 /// The connect buttons and the connect sheet. The single entry point other views use (Correo, Reuniones, Ajustes,
-/// onboarding): it runs trust → browser → result → blocked fork.
+/// onboarding): it runs trust → browser → result → blocked fork. `compact`: one "Conectar otra cuenta ▾" menu (Ajustes,
+/// once an account exists).
 struct ConnectAccountControls: View {
     @Environment(AppState.self) private var state
     let connector: AccountConnector
     @Binding var help: OrgHelpRequest?
     var centered = false
     var context: ConnectContext = .settings
+    var compact = false
+
+    private var includeMacCalendar: Bool { context.offersMacCalendar && !state.engine.accounts.hasLocalCalendar }
 
     var body: some View {
         VStack(alignment: centered ? .center : .leading, spacing: 10) {
-            ConnectAccountButtons(includeMacCalendar: context.offersMacCalendar && !state.engine.accounts.hasLocalCalendar,
-                                  busyLocal: connector.connectingLocal, centered: centered,
-                                  macCalendarFirst: context == .meetings) { connector.start($0, state: state) }
-            if let account = connector.lastConnected, connector.error == nil {
+            if compact {
+                Menu {
+                    Button(L("accounts.connectMicrosoft")) { connector.start(.microsoft, state: state) }
+                    Button(L("accounts.connectGoogle")) { connector.start(.google, state: state) }
+                    if includeMacCalendar {
+                        Button(L("accounts.useMacCalendar")) { connector.start(.local, state: state) }
+                    }
+                } label: {
+                    SettingsMenuLabel(title: L("settings.addAccount"), symbol: "plus")
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .fixedSize()
+                .disabled(connector.connectingLocal)
+            } else {
+                ConnectAccountButtons(includeMacCalendar: includeMacCalendar, busyLocal: connector.connectingLocal,
+                                      centered: centered, macCalendarFirst: context == .meetings) { connector.start($0, state: state) }
+            }
+            // Only while that account is still connected (a disconnect elsewhere must not leave "✓ Conectado").
+            if let account = connector.lastConnected, connector.error == nil,
+               state.engine.accounts.accounts.contains(where: { $0.id == account.id }) {
                 Label(L("accounts.connected", account.provider == .local ? L("accounts.macCalendar") : account.email),
-                      systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                      systemImage: "checkmark.circle")
+                    .foregroundStyle(Brand.color.success)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
             if let error = connector.error {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Brand.color.warning)
                     .multilineTextAlignment(centered ? .center : .leading)
                     .fixedSize(horizontal: false, vertical: true)
                 if connector.calendarDenied {
                     Button(L("accounts.openCalendarSettings")) { MacCalendarSettings.open() }
+                        .buttonStyle(.brandSecondary)
                 }
             }
         }
@@ -225,21 +318,27 @@ struct ConnectAccountsEmptyState: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: symbol)
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text(title).font(.title3.weight(.semibold))
-            Text(message)
-                .foregroundStyle(.secondary)
+                .font(Brand.font(36))
+                .foregroundStyle(Brand.color.text3)
+            Text(title)
+                .font(Brand.section)
+                .foregroundStyle(Brand.color.text)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(message)
+                .foregroundStyle(Brand.color.text2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 400)
             ConnectAccountControls(connector: connector, help: $help, centered: true, context: resolvedContext)
                 .padding(.top, 4)
             if let secondaryTitle, let secondaryAction {
-                Button(secondaryTitle, action: secondaryAction).buttonStyle(.link)
+                Button(secondaryTitle, action: secondaryAction)
+                    .buttonStyle(.settingsLink)
             }
-            Label(L("accounts.footer"), systemImage: "lock.shield")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Label(L("readonly.promise"), systemImage: "lock.shield")
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text2)
                 .padding(.top, 6)
         }
         .padding(40)
@@ -266,12 +365,12 @@ struct ConnectAccountButtons: View {
         if macCalendarFirst && includeMacCalendar {
             VStack(alignment: centered ? .center : .leading, spacing: 10) {
                 macCalendarButton
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.brandPrimary)
                     .controlSize(.large)
-                Text(L("accounts.orConnect")).font(.callout).foregroundStyle(.secondary)
+                Text(L("accounts.orConnect")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) { oauthButtons }
-                    VStack(alignment: centered ? .center : .leading, spacing: 8) { oauthButtons }
+                    HStack(spacing: 10) { oauthButtons(primaryFirst: false) }
+                    VStack(alignment: centered ? .center : .leading, spacing: 8) { oauthButtons(primaryFirst: false) }
                 }
             }
         } else {
@@ -281,27 +380,35 @@ struct ConnectAccountButtons: View {
 
     private var allButtons: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { oauthButtons; macCalendarButton }
+            HStack(spacing: 10) { oauthButtons(primaryFirst: true); macCalendarButton.buttonStyle(.brandSecondary) }
             VStack(alignment: centered ? .center : .leading, spacing: 8) {
-                HStack(spacing: 10) { oauthButtons }
-                macCalendarButton
+                HStack(spacing: 10) { oauthButtons(primaryFirst: true) }
+                macCalendarButton.buttonStyle(.brandSecondary)
             }
-            VStack(alignment: centered ? .center : .leading, spacing: 8) { oauthButtons; macCalendarButton }
+            VStack(alignment: centered ? .center : .leading, spacing: 8) {
+                oauthButtons(primaryFirst: true)
+                macCalendarButton.buttonStyle(.brandSecondary)
+            }
         }
     }
 
-    @ViewBuilder private var oauthButtons: some View {
-        ForEach([AccountProvider.microsoft, .google], id: \.self) { provider in
-            Button {
-                onConnect(provider)
-            } label: {
-                // The same "M" / "G" badges as the account rows and the trust sheet (envelopes mean "add an email").
-                HStack(spacing: 6) {
-                    ProviderBadge(provider: provider, size: 16)
-                    Text(L(provider == .microsoft ? "accounts.connectMicrosoft" : "accounts.connectGoogle"))
-                }
+    /// `primaryFirst`: the first button is the screen's one primary action (unless the Mac calendar already is).
+    @ViewBuilder private func oauthButtons(primaryFirst: Bool) -> some View {
+        oauthButton(.microsoft, primary: primaryFirst)
+        oauthButton(.google, primary: false)
+    }
+
+    @ViewBuilder private func oauthButton(_ provider: AccountProvider, primary: Bool) -> some View {
+        let button = Button {
+            onConnect(provider)
+        } label: {
+            // The same "M" / "G" tokens as the account rows and the trust sheet, on a `card` disc so they stay
+            // visible on the button's own fill.
+            ButtonContent(text: L(provider == .microsoft ? "accounts.connectMicrosoft" : "accounts.connectGoogle")) {
+                ProviderBadge(provider: provider, size: 16, onFill: true)
             }
         }
+        if primary { button.buttonStyle(.brandPrimary) } else { button.buttonStyle(.brandSecondary) }
     }
 
     @ViewBuilder private var macCalendarButton: some View {
@@ -309,13 +416,28 @@ struct ConnectAccountButtons: View {
             Button {
                 onConnect(.local)
             } label: {
-                if busyLocal {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L("accounts.useMacCalendar")) }
-                } else {
-                    Label(L("accounts.useMacCalendar"), systemImage: AccountProvider.local.symbol)
+                // Same anatomy as the OAuth buttons (16 pt icon box), so the three labels share one baseline.
+                ButtonContent(text: L("accounts.useMacCalendar")) {
+                    if busyLocal {
+                        BrandLoader(size: 14)
+                    } else {
+                        Image(systemName: AccountProvider.local.symbol).imageScale(.medium)
+                    }
                 }
             }
             .disabled(busyLocal)
+        }
+    }
+
+    private struct ButtonContent<Icon: View>: View {
+        let text: String
+        @ViewBuilder var icon: Icon
+
+        var body: some View {
+            HStack(spacing: 6) {
+                icon.frame(width: 16, height: 16)
+                Text(text)
+            }
         }
     }
 }
@@ -327,47 +449,58 @@ private struct AccountRow: View {
     var onDisconnect: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            ProviderBadge(provider: account.provider)
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(spacing: 12) {
+            ProviderBadge(provider: account.provider, size: 28)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(account.provider == .local ? L("accounts.macCalendar") : account.email)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Group {
                     if needsSignIn {
-                        Text(L("accounts.needsSignIn")).foregroundStyle(.orange)
+                        Text(L("accounts.needsSignIn")).foregroundStyle(Brand.color.warning)
                     } else if account.provider == .local {
                         Text(L("accounts.macCalendar.detail"))
                     } else {
                         Text(account.displayName.map { "\($0) · \(account.provider.displayName)" } ?? account.provider.displayName)
                     }
                 }
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text2)
+                .lineLimit(1)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
             if needsSignIn {
-                Button(L("accounts.signInAgain"), action: onReconnect).buttonStyle(.borderedProminent)
+                Button(L("accounts.signInAgain"), action: onReconnect).buttonStyle(.brandPrimary)
             }
-            Button(L("accounts.disconnect"), role: .destructive, action: onDisconnect)
+            Button(L("accounts.disconnect") + "…", action: onDisconnect).buttonStyle(.brandSecondary)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }
 
-/// Round initial (or calendar glyph) with the provider's color (no trademarked logos bundled).
+/// Avatar token for an account: `cardAlt` circle with the provider's initial (or a calendar glyph) in `text2`. No
+/// trademarked logos, no provider colors (CONTRACT §15.1).
 struct ProviderBadge: View {
     let provider: AccountProvider
     var size: CGFloat = 26
+    /// Inside a button (whose fill is `cardAlt` or `accent`): a `card` disc with a hairline, so the token keeps its shape.
+    var onFill = false
 
     var body: some View {
         Group {
             switch provider {
             case .local:
-                Image(systemName: "calendar").font(.system(size: size * 0.48, weight: .semibold))
+                Image(systemName: "calendar").font(Brand.font(size * 0.46, .medium))
             case .microsoft, .google:
-                Text(provider == .microsoft ? "M" : "G").font(.system(size: size * 0.5, weight: .bold, design: .rounded))
+                Text(verbatim: provider == .microsoft ? "M" : "G").font(Brand.font(size * 0.46, .semibold))
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Brand.avatar.initials)
         .frame(width: size, height: size)
-        .background(provider.tint, in: Circle())
+        .background(onFill ? Brand.color.card : Brand.avatar.background, in: Circle())
+        .overlay { if onFill { Circle().strokeBorder(Brand.color.line, lineWidth: 1) } }
         .accessibilityLabel(provider == .local ? L("accounts.macCalendar") : provider.displayName)
     }
 }
@@ -380,33 +513,38 @@ extension AccountProvider {
         }
     }
 
-    var tint: Color {
-        switch self {
-        case .microsoft: Color(red: 0.0, green: 0.47, blue: 0.84)
-        case .google: Color(red: 0.92, green: 0.26, blue: 0.21)
-        case .local: Color(red: 0.98, green: 0.45, blue: 0.16)
-        }
-    }
+    /// Kept for source compatibility: every provider uses the calm avatar tone now.
+    var tint: Color { Brand.color.sage }
 
     /// "Microsoft 365" / "Google" / "Calendario de la Mac" in the UI language.
     var localizedName: String { self == .local ? L("accounts.macCalendar") : displayName }
 }
 
-/// "Avanzado" (folded): the user's own OAuth client ids (§12.3 "Soy técnico").
-private struct AdvancedOAuthFields: View {
+/// Ajustes → Avanzado: the user's own OAuth client ids (§12.3 "Soy técnico") for Microsoft, Google and GitHub.
+struct AdvancedOAuthFields: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        DisclosureGroup(L("accounts.advanced")) {
-            Text(L("accounts.advanced.hint")).font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            TextField(L("accounts.msClientId"), text: field(\.microsoftClientId))
-            TextField(L("accounts.googleClientId"), text: field(\.googleClientId))
-            SecureField(L("accounts.googleClientSecret"), text: field(\.googleClientSecret))
+        VStack(alignment: .leading, spacing: 10) {
+            field(L("accounts.msClientId"), text: binding(\.microsoftClientId))
+            field(L("accounts.googleClientId"), text: binding(\.googleClientId))
+            field(L("accounts.googleClientSecret"), text: binding(\.googleClientSecret), secure: true)
+            field(L("github.clientId"), text: binding(\.githubClientId))
         }
     }
 
-    private func field(_ keyPath: WritableKeyPath<OAuthAppRegistration, String?>) -> Binding<String> {
+    private func field(_ title: String, text: Binding<String>, secure: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(Brand.caption).foregroundStyle(Brand.color.text2)
+            Group {
+                if secure { SecureField("", text: text) } else { TextField("", text: text) }
+            }
+            .textFieldStyle(.roundedBorder)
+            .font(Brand.mono)
+        }
+    }
+
+    private func binding(_ keyPath: WritableKeyPath<OAuthAppRegistration, String?>) -> Binding<String> {
         Binding(get: { state.config.oauth[keyPath: keyPath] ?? "" }, set: { value in
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             state.update { $0.oauth[keyPath: keyPath] = trimmed.isEmpty ? nil : trimmed }

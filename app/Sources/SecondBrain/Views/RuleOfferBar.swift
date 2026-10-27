@@ -2,7 +2,7 @@ import BrainCore
 import SwiftUI
 
 // v0.4 "Aprender de la asignación manual" (CONTRACT §14.3): after the user puts something in a project by hand, one
-// quiet line offers the rule that would do it next time: «¿Todo lo de @acme.com a 🚀 Acme de ahora en adelante?»
+// quiet line offers the rule that would do it next time: «¿Mandar siempre lo de @acme.com a 🚀 Acme?» (§15.4)
 // · Sí, siempre · Solo esta vez. Shared by Correo, "Agregar correo" and Sin asignar.
 
 /// The offer on screen: asking for 10 s, then "Regla creada · Deshacer" for 6 s. One mechanism for every place that
@@ -15,7 +15,7 @@ final class RuleOffer {
     struct Current: Identifiable, Equatable {
         let id = UUID()
         var rule: RoutingRule
-        /// «¿Todo lo de **@acme.com** a 🚀 Acme de ahora en adelante?» (who in bold).
+        /// «¿Mandar siempre lo de **@acme.com** a 🚀 Acme?» (who in bold).
         var question: AttributedString
         var phase: Phase = .asking
     }
@@ -91,9 +91,9 @@ final class RuleOffer {
         }
     }
 
-    /// The question, worded after the rule's first field and what was assigned: mail «¿Todo lo de **@acme.com** a
-    /// 🚀 Acme de ahora en adelante?», meeting «¿Las reuniones que organiza **ana@acme.com** a 🚀 Acme de ahora en
-    /// adelante?». Who goes in bold; neither value is read as Markdown.
+    /// The question, worded after the rule's first field and what was assigned (§15.4): mail «¿Mandar siempre lo de
+    /// **@acme.com** a 🚀 Acme?», meeting «¿Las reuniones que organiza **ana@acme.com** a 🚀 Acme…?». Who goes in
+    /// bold; neither value is read as Markdown.
     static func question(for rule: RoutingRule, projectLabel: String, kind: RoutingSubject.Kind) -> AttributedString {
         guard let condition = rule.conditions.first else { return AttributedString(projectLabel) }
         let value = condition.value.trimmingCharacters(in: .whitespaces)
@@ -107,8 +107,11 @@ final class RuleOffer {
         case (.mail, .attendeeEmail), (.mail, .attendeeDomain): key = "rules.offer.with"
         case (.mail, _): key = "rules.offer.from"
         }
-        // "☁️ Migración a la nube" stays on one line: the project reads as one name.
-        let label = projectLabel.replacingOccurrences(of: " ", with: "\u{00A0}")
+        // "☁️ Migración a la nube" stays on one line (the project reads as one name); a very long name is shortened so
+        // it can never overflow the line.
+        let short = projectLabel.count > 32
+            ? String(projectLabel.prefix(31)).trimmingCharacters(in: .whitespaces) + "…" : projectLabel
+        let label = short.replacingOccurrences(of: " ", with: "\u{00A0}")
         let marker = "\u{1}"
         var out = AttributedString()
         let parts = L(key, marker, label).components(separatedBy: marker)
@@ -124,8 +127,9 @@ final class RuleOffer {
     }
 }
 
-/// The offer line. Renders nothing when there is no offer. `compact` (under a meeting's chip): question and buttons on
-/// one line when they fit, else the buttons below; otherwise the buttons sit on the right of a wrapping question.
+/// The offer line. Renders nothing when there is no offer. Question and buttons on one line when they fit, else the
+/// question wraps and the buttons go below it (§15.3: nothing fixed-size next to variable text). `compact` (under a
+/// meeting's chip) only tightens the padding.
 struct RuleOfferBar: View {
     @Environment(AppState.self) private var state
     let offer: RuleOffer
@@ -136,67 +140,72 @@ struct RuleOfferBar: View {
             Group {
                 switch current.phase {
                 case .asking:
-                    if compact {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 8) { icon; question(current); buttons }
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(alignment: .firstTextBaseline, spacing: 8) { icon; question(current) }
-                                buttons
-                            }
-                        }
-                    } else {
-                        HStack(spacing: 10) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
                             icon
-                            question(current).lineLimit(3).layoutPriority(1)
+                            question(current).lineLimit(1)
                             Spacer(minLength: 8)
+                            buttons
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                icon
+                                question(current)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                             buttons
                         }
                     }
                 case .created:
                     HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        Text(L("rules.offer.created"))
-                        Text("·").foregroundStyle(.tertiary)
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.color.success)
+                        Text(L("rules.offer.created")).foregroundStyle(Brand.color.text).lineLimit(1)
+                        Text(verbatim: "·").foregroundStyle(Brand.color.text3)
                         Button(L("rules.offer.undo")) { offer.undo(state: state) }
-                            .buttonStyle(.link)
-                            .font(.callout.weight(.medium))
+                            .buttonStyle(.plain)
+                            .font(Brand.callout)
+                            .foregroundStyle(Brand.color.accent)
                         Spacer(minLength: 0)
                     }
                 case .failed(let message):
-                    HStack {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange).lineLimit(2)
-                        Spacer(minLength: 0)
-                    }
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Brand.color.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .font(.callout)
+            .font(Brand.body)
             .padding(.horizontal, compact ? 10 : 12)
-            .padding(.vertical, compact ? 7 : 8)
+            .padding(.vertical, compact ? 7 : 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: compact ? 8 : 10))
-            .overlay(RoundedRectangle(cornerRadius: compact ? 8 : 10).strokeBorder(Color.accentColor.opacity(0.25)))
-            .transition(compact ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+            .transition(.opacity)
         }
     }
 
     private var icon: some View {
-        Image(systemName: "arrow.triangle.branch").foregroundStyle(Color.accentColor)
+        Image(systemName: "arrow.triangle.branch").foregroundStyle(Brand.color.accent)
     }
 
     private func question(_ current: RuleOffer.Current) -> some View {
-        Text(current.question).fixedSize(horizontal: false, vertical: true)
+        Text(current.question).foregroundStyle(Brand.color.text)
     }
 
+    /// Two short, fixed labels: side by side, or stacked when even that doesn't fit.
     private var buttons: some View {
-        HStack(spacing: 8) {
-            Button(L("rules.offer.always")) { offer.accept(state: state) }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            Button(L("rules.offer.once")) { offer.dismiss() }
-                .controlSize(.small)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { always; once }.fixedSize()
+            VStack(alignment: .leading, spacing: 6) { always; once }
         }
-        .fixedSize()
+    }
+
+    private var always: some View {
+        Button(L("rules.offer.always")) { offer.accept(state: state) }.buttonStyle(.brandPrimary)
+    }
+
+    private var once: some View {
+        Button(L("rules.offer.once")) { offer.dismiss() }.buttonStyle(.brandSecondary)
     }
 }
 
@@ -217,22 +226,27 @@ func ruleLabel(_ rule: RoutingRule) -> String {
 }
 
 /// "Va a 🚀 Acme" chip for a mail the rules (or the default project) would send somewhere — a destination, not a
-/// place it is already in ("✓ en el cerebro" says that) — same look as Reuniones' chip.
+/// place it is already in ("En el cerebro" says that). Truncates instead of overflowing a narrow list.
 struct RoutedProjectChip: View {
     let label: String
     let help: String
 
+    /// BrandChip's neutral look (cardAlt capsule, text2 symbol) with the label in `text`: text2 on cardAlt measures
+    /// 3.6:1 at 11 pt, under AA.
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "arrow.right").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.right")
+                .imageScale(.small)
+                .foregroundStyle(Brand.color.text2)
             Text(L("rules.mail.chip", label))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(Brand.color.text)
         }
-        .font(.caption.weight(.medium))
-        .lineLimit(1)
+        .font(Brand.font(11, .medium))
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(Color.accentColor.opacity(0.14), in: Capsule())
-        .fixedSize()
+        .background(Capsule().fill(Brand.color.cardAlt))
         .help(help)
     }
 }

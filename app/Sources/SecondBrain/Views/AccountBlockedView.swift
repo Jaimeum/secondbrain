@@ -4,7 +4,8 @@ import SwiftUI
 
 /// "Bloqueo por organización = bifurcación, no error" (CONTRACT §12.7): what happened in one line and the ways
 /// forward — ask IT (mail draft), see how to enable it, paste an email meanwhile, and in Reuniones the Mac Calendar.
-/// Also the "SecondBrain aún no está registrada" variant when no client id is configured.
+/// Also the "aún no disponible" variant when no client id is configured: one plain sentence, the Mac Calendar and
+/// pasting first, the technical way only behind a link.
 struct AccountBlockedView: View {
     @Environment(AppState.self) private var state
     let provider: AccountProvider
@@ -24,17 +25,16 @@ struct AccountBlockedView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: reason == .consent ? "building.2" : "key.horizontal")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(.orange)
-                    .frame(width: 44, height: 44)
-                    .background(Color.orange.opacity(0.13), in: RoundedRectangle(cornerRadius: 11))
+                SheetIconTile(symbol: reason == .consent ? "building.2" : "clock",
+                              tone: Brand.color.warning, background: Brand.color.warningSoft, size: 44)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(reason == .consent ? L("accounts.blocked.title") : L("accounts.notRegistered.title", provider.displayName))
-                        .font(.title3.weight(.semibold))
+                        .font(Brand.section)
+                        .foregroundStyle(Brand.color.text)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(reason == .consent ? L("accounts.blocked.message", provider.displayName) : L("accounts.notRegistered.message", provider.displayName))
-                        .foregroundStyle(.secondary)
+                    Text(reason == .consent ? L("accounts.blocked.message", provider.displayName)
+                                            : L("accounts.notRegistered.plain", provider.displayName))
+                        .foregroundStyle(Brand.color.text2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -46,10 +46,10 @@ struct AccountBlockedView: View {
                                prominent: true) {
                         OrgHelpText.openMailDraft(provider: provider, clientId: clientId)
                     }
-                }
-                ForkButton(symbol: "questionmark.circle", title: L("accounts.howToEnable"),
-                           detail: reason == .consent ? L("accounts.blocked.howDetail") : L("accounts.notRegistered.howDetail")) {
-                    help = OrgHelpRequest(provider: provider)
+                    ForkButton(symbol: "questionmark.circle", title: L("accounts.howToEnable"),
+                               detail: L("accounts.blocked.howDetail")) {
+                        help = OrgHelpRequest(provider: provider)
+                    }
                 }
                 if offersMacCalendar, let onUseMacCalendar {
                     ForkButton(symbol: "calendar", title: L("accounts.useMacCalendar"), detail: L("accounts.blocked.macCalendarDetail"),
@@ -60,15 +60,25 @@ struct AccountBlockedView: View {
                 }
             }
 
-            if let onClose {
-                HStack {
-                    Spacer()
-                    Button(L("common.close"), action: onClose).keyboardShortcut(.cancelAction)
+            HStack(spacing: 8) {
+                if reason == .notRegistered {
+                    // The technical way (own registration) stays one click away, never in the main path.
+                    Button(L("accounts.notRegistered.technical")) { help = OrgHelpRequest(provider: provider) }
+                        .buttonStyle(.settingsLink)
+                        .font(Brand.caption)
                 }
-                .padding(.top, 18)
+                Spacer()
+                if let onClose {
+                    Button(L("common.close"), action: onClose)
+                        .buttonStyle(.brandSecondary)
+                        .keyboardShortcut(.cancelAction)
+                }
             }
+            .padding(.top, 18)
         }
         .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Brand.color.surface)
         .sheet(item: $help) { request in OrgAccessHelpSheet(provider: request.provider) }
     }
 
@@ -93,26 +103,35 @@ private struct ForkButton: View {
     @ViewState private var hovering = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(prominent ? Color.white : Color.accentColor)
+                    .font(Brand.font(14, .medium))
+                    .foregroundStyle(prominent ? Brand.color.onAccent : Brand.color.accent)
                     .frame(width: 30, height: 30)
-                    .background(prominent ? Color.accentColor : Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    .background(prominent ? Brand.color.accent : Brand.color.accentSoft,
+                                in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                // The text takes every point up to the chevron (a Spacer would split the width with it).
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.body.weight(.medium)).foregroundStyle(.primary)
-                    Text(detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(title).font(Brand.callout).foregroundStyle(Brand.color.text)
+                    Text(detail)
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                Image(systemName: "chevron.right").font(Brand.font(11, .semibold)).foregroundStyle(Brand.color.text3)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .contentShape(Rectangle())
-            .background(Color.primary.opacity(hovering ? 0.07 : 0.04), in: RoundedRectangle(cornerRadius: 10))
+            .contentShape(shape)
+            .background(shape.fill(hovering ? Brand.color.cardAlt : Brand.color.card))
+            .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
     }
 }

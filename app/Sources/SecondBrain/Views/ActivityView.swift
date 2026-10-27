@@ -1,7 +1,7 @@
 import BrainCore
 import SwiftUI
 
-/// "Actividad": every change Claude made to the wiki, what it changed, and a way back.
+/// "Historial": every change Claude made to the brain, what it changed (by page title), and one way back per change.
 struct ActivityView: View {
     @Environment(AppState.self) private var state
     let projectSlug: String?
@@ -9,6 +9,8 @@ struct ActivityView: View {
 
     @ViewState private var entries: [HistoryEntry] = []
     @ViewState private var summaries: [String: String] = [:]
+    @ViewState private var titles: [String: String] = [:]
+    @ViewState private var loaded = false
     @ViewState private var diffTarget: DiffTarget?
     @ViewState private var pendingUndo: HistoryEntry?
     @ViewState private var conflict: (entry: HistoryEntry, paths: [String])?
@@ -16,21 +18,30 @@ struct ActivityView: View {
 
     var body: some View {
         Group {
-            if entries.isEmpty {
+            if !loaded {
+                BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if entries.isEmpty {
                 EmptyStateView(symbol: "clock.arrow.circlepath", title: L("activity.emptyTitle"), message: L("activity.emptyMessage"))
             } else {
-                List {
-                    ForEach(entries) { entry in
-                        HistoryRow(entry: entry,
-                                   summary: summaries[entry.id],
-                                   onDiff: { diffTarget = DiffTarget(entry: entry, path: $0) },
-                                   onOpen: onOpenPage,
-                                   onUndo: { pendingUndo = entry })
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: Brand.spacing.s) {
+                        ForEach(entries) { entry in
+                            HistoryRow(entry: entry,
+                                       summary: summaries[entry.id],
+                                       showProject: projectSlug == nil,
+                                       title: title(of:),
+                                       onDiff: { diffTarget = DiffTarget(entry: entry, path: $0, title: title(of: $0)) },
+                                       onOpen: onOpenPage,
+                                       onUndo: { pendingUndo = entry })
+                        }
                     }
+                    .padding(Brand.spacing.content)
+                    .frame(maxWidth: 820)
+                    .frame(maxWidth: .infinity)
                 }
-                .listStyle(.inset)
             }
         }
+        .background(Brand.color.surface)
         .task(id: state.historyRevision) { await reload() }
         .sheet(item: $diffTarget) { target in
             DiffSheet(target: target)
@@ -50,7 +61,7 @@ struct ActivityView: View {
             }
             Button(L("common.cancel"), role: .cancel) { conflict = nil }
         } message: {
-            Text(L("activity.conflictMessage", conflict?.paths.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ") ?? ""))
+            Text(L("activity.conflictMessage", conflict?.paths.map { title(of: $0) }.joined(separator: ", ") ?? ""))
         }
         .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button(L("common.ok")) { error = nil }
@@ -59,22 +70,35 @@ struct ActivityView: View {
         }
     }
 
-    /// Reads every history entry and its summary from disk: off the main thread.
+    private func title(of path: String) -> String { titles[path] ?? WikiGrouping.humanize(path) }
+
+    /// Reads every history entry, its summary and the changed pages' titles from disk: off the main thread.
     private func reload() async {
         guard state.engineStarted else { return }
         let history = state.engine.history
+        let vault = state.engine.vault
         let slug = projectSlug
-        let (loaded, texts) = await Task.detached { () -> ([HistoryEntry], [String: String]) in
+        let (list, texts, names) = await Task.detached { () -> ([HistoryEntry], [String: String], [String: String]) in
             let list = history.entries()
                 .filter { slug == nil || $0.projectSlug == slug }
                 .sorted { $0.createdAt > $1.createdAt }
             var texts: [String: String] = [:]
-            for entry in list { texts[entry.id] = history.summary(entryId: entry.id) }
-            return (list, texts)
+            var names: [String: String] = [:]
+            for entry in list {
+                texts[entry.id] = history.summary(entryId: entry.id)
+                for change in entry.changes where names[change.path] == nil && change.change != .deleted {
+                    if FileManager.default.fileExists(atPath: vault.url(for: change.path).path) {
+                        names[change.path] = vault.title(of: change.path)
+                    }
+                }
+            }
+            return (list, texts, names)
         }.value
         guard !Task.isCancelled, history === state.engine.history else { return }
-        entries = loaded
+        entries = list
         summaries = texts
+        titles = names
+        loaded = true
     }
 
     private func undo(_ entry: HistoryEntry, force: Bool) {
@@ -90,15 +114,64 @@ struct ActivityView: View {
     }
 }
 
+/// "Historial" as a sheet (project toolbar, Inicio): a header with "Revisar mi cerebro" and Cerrar over `ActivityView`.
+struct ActivitySheet: View {
+    @Environment(AppState.self) private var state
+    @Environment(\.dismiss) private var dismiss
+    let projectSlug: String?
+    var onOpenPage: (String) -> Void
+
+    /// A review of this scope is queued or running (the engine's jobs): the button waits, its label never changes.
+    private var reviewing: Bool {
+        state.engine.jobs.contains { $0.kind == .lint && $0.projectSlug == projectSlug && ($0.status == .queued || $0.status == .running) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: Brand.spacing.m) {
+                Text(L("project.history"))
+                    .font(Brand.title)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: Brand.spacing.s)
+                if reviewing { BrandLoader(size: 14) }
+                Button {
+                    state.engine.lint(projectSlug: projectSlug)
+                } label: {
+                    Label(L("chat.lint"), systemImage: "stethoscope")
+                        .lineLimit(1)
+                }
+                .buttonStyle(.brandSecondary)
+                .disabled(reviewing || !state.engineStarted)
+                .help(reviewing ? L("chat.lintQueued") : L("chat.lintHelp"))
+                Button(L("common.close")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, Brand.spacing.content)
+            .padding(.vertical, Brand.spacing.l)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            ActivityView(projectSlug: projectSlug, onOpenPage: onOpenPage)
+        }
+        .frame(minWidth: 560, idealWidth: 680, minHeight: 420, idealHeight: 520)
+        .background(Brand.color.surface)
+    }
+}
+
 struct DiffTarget: Identifiable {
     let entry: HistoryEntry
     let path: String
+    var title: String? = nil
     var id: String { entry.id + "|" + path }
 }
 
 private struct HistoryRow: View {
+    @Environment(AppState.self) private var state
     let entry: HistoryEntry
     let summary: String?
+    let showProject: Bool
+    var title: (String) -> String
     var onDiff: (String) -> Void
     var onOpen: (String) -> Void
     var onUndo: () -> Void
@@ -106,43 +179,82 @@ private struct HistoryRow: View {
     @ViewState private var expanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Image(systemName: symbol).foregroundStyle(Color.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.title).font(.body.weight(.semibold))
-                    Text("\(Fmt.relative(entry.createdAt)) · \(L("activity.pagesChanged", entry.changes.count))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if entry.undone {
-                    Text(L("activity.undone"))
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Color.secondary.opacity(0.15), in: Capsule())
-                } else {
-                    Button(L("activity.undo"), action: onUndo).controlSize(.small)
-                }
-            }
-            if let summary, !summary.isEmpty {
-                MarkdownText(markdown: summary)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            DisclosureGroup(isExpanded: $expanded) {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(entry.changes, id: \.path) { change in
-                        ChangeRow(change: change, onDiff: { onDiff(change.path) }, onOpen: { onOpen(change.path) })
+        BrandCard(padding: Brand.spacing.l) {
+            VStack(alignment: .leading, spacing: Brand.spacing.s) {
+                HStack(alignment: .firstTextBaseline, spacing: Brand.spacing.s) {
+                    Image(systemName: symbol)
+                        .foregroundStyle(Brand.color.accent)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.title)
+                            .font(Brand.callout)
+                            .foregroundStyle(Brand.color.text)
+                            .lineLimit(2)
+                        HStack(spacing: 6) {
+                            Text("\(Fmt.relative(entry.createdAt)) · \(L("activity.pagesChanged", entry.changes.count))")
+                                .font(Brand.caption)
+                                .foregroundStyle(Brand.color.text2)
+                                .lineLimit(1)
+                            if showProject, let project = state.project(entry.projectSlug) {
+                                BrandChip(text: "\(project.emoji) \(project.name)")
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if entry.undone {
+                        BrandChip(text: L("activity.undone"))
+                    } else {
+                        // Undo is one step away (⋯ or right-click), not a button on every card.
+                        Menu {
+                            Button(L("activity.undo"), role: .destructive, action: onUndo)
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundStyle(Brand.color.text2)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help(L("project.more"))
+                        .accessibilityLabel(Text(L("project.more")))
                     }
                 }
-                .padding(.top, 4)
-            } label: {
-                Text(L("activity.showFiles")).font(.callout)
+                if let summary, !summary.isEmpty {
+                    MarkdownText(markdown: summary)
+                        .font(Brand.body)
+                        .foregroundStyle(Brand.color.text2)
+                        .padding(.leading, 26)
+                }
+                Button {
+                    withAnimation(Brand.motion.animation(fast: true)) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.right")
+                            .font(Brand.font(10, .semibold))
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                        Text(L("activity.showFiles"))
+                    }
+                    .font(Brand.font(12, .medium))
+                    .foregroundStyle(Brand.color.accent)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 26)
+                if expanded {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(entry.changes, id: \.path) { change in
+                            ChangeRow(change: change, title: title(change.path),
+                                      onDiff: { onDiff(change.path) }, onOpen: { onOpen(change.path) })
+                        }
+                    }
+                    .padding(.leading, 20)
+                    .transition(.opacity)
+                }
             }
         }
-        .padding(.vertical, 8)
         .opacity(entry.undone ? 0.6 : 1)
+        .contextMenu {
+            if !entry.undone { Button(L("activity.undo"), role: .destructive, action: onUndo) }
+        }
     }
 
     private var symbol: String {
@@ -159,39 +271,63 @@ private struct HistoryRow: View {
     }
 }
 
+/// One changed page: click opens it (unless deleted); "Ver cambios" shows the diff.
 private struct ChangeRow: View {
     let change: FileChange
+    let title: String
     var onDiff: () -> Void
     var onOpen: () -> Void
 
+    @ViewState private var hovering = false
+
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon).foregroundStyle(color).frame(width: 16)
-            Text(((change.path as NSString).lastPathComponent as NSString).deletingPathExtension)
+        HStack(spacing: Brand.spacing.s) {
+            Image(systemName: icon)
+                .font(Brand.font(12))
+                .foregroundStyle(color)
+                .frame(width: 16)
+                .help(label)
+            Text(title)
+                .font(Brand.body)
+                .foregroundStyle(change.change == .deleted ? Brand.color.text2 : Brand.color.text)
                 .lineLimit(1)
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Spacer()
-            Button(L("activity.viewChanges"), action: onDiff).buttonStyle(.borderless).controlSize(.small)
-            if change.change != .deleted {
-                Button(L("activity.open"), action: onOpen).buttonStyle(.borderless).controlSize(.small)
-            }
+                .truncationMode(.middle)
+                .help(title)
+            Text(label)
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text2)
+                .lineLimit(1)
+                .layoutPriority(-1)
+            Spacer(minLength: Brand.spacing.s)
+            Button(L("activity.viewChanges"), action: onDiff)
+                .buttonStyle(.borderless)
+                .font(Brand.font(12, .medium))
+                .foregroundStyle(Brand.color.accent)
+                .lineLimit(1)
+                .fixedSize()
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+            .fill(hovering && change.change != .deleted ? Brand.color.cardAlt.opacity(0.55) : Color.clear))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture { if change.change != .deleted { onOpen() } }
     }
 
     private var icon: String {
         switch change.change {
-        case .added: "plus.circle.fill"
-        case .modified: "pencil.circle.fill"
-        case .deleted: "minus.circle.fill"
+        case .added: "plus.circle"
+        case .modified: "pencil.circle"
+        case .deleted: "minus.circle"
         }
     }
 
     private var color: Color {
         switch change.change {
-        case .added: .green
-        case .modified: .blue
-        case .deleted: .red
+        case .added: Brand.color.success
+        case .modified: Brand.color.text2
+        case .deleted: Brand.color.danger
         }
     }
 
@@ -212,35 +348,48 @@ struct DiffSheet: View {
     @ViewState private var sideBySide = true
     @ViewState private var rows: [LineDiff.Row?] = []
     @ViewState private var lines: [LineDiff.Line] = []
+    @ViewState private var width: CGFloat = 900
+
+    /// Side by side needs room; below this the sheet shows one column.
+    private var showsSideBySide: Bool { sideBySide && width >= 760 }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: Brand.spacing.m) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(((target.path as NSString).lastPathComponent as NSString).deletingPathExtension).font(.headline)
-                    Text(target.entry.title).font(.caption).foregroundStyle(.secondary)
+                    Text(target.title ?? WikiGrouping.humanize(target.path))
+                        .font(Brand.section)
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(target.entry.title)
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                Spacer()
-                Picker("", selection: $sideBySide) {
-                    Text(L("diff.sideBySide")).tag(true)
-                    Text(L("diff.unified")).tag(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if width >= 760 {
+                    BrandSegmentedControl(options: [(true, L("diff.sideBySide")), (false, L("diff.unified"))],
+                                          selection: $sideBySide)
+                        .frame(width: 240)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                Button(L("common.close")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L("common.close")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
             }
-            .padding(14)
-            Divider()
+            .padding(.horizontal, Brand.spacing.content)
+            .padding(.vertical, Brand.spacing.m)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             ScrollView([.vertical]) {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    if sideBySide {
+                    if showsSideBySide {
                         HStack(spacing: 0) {
                             Text(L("diff.before")).frame(maxWidth: .infinity, alignment: .leading)
                             Text(L("diff.after")).frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .font(Brand.font(11, .semibold))
+                        .foregroundStyle(Brand.color.text2)
                         .padding(.horizontal, 8).padding(.vertical, 6)
                         ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                             if let row {
@@ -258,16 +407,22 @@ struct DiffSheet: View {
                         }
                     }
                 }
-                .font(.system(size: 12, design: .monospaced))
+                .font(Brand.mono)
             }
+            .background(Brand.color.card)
         }
-        .frame(minWidth: 900, idealWidth: 1100, minHeight: 560, idealHeight: 720)
+        .frame(minWidth: 720, idealWidth: 900, minHeight: 420, idealHeight: 520)
+        .background(Brand.color.surface)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .task { await load() }
     }
 
     private var gap: some View {
-        Text("⋯").foregroundStyle(.tertiary).frame(maxWidth: .infinity).padding(.vertical, 3)
-            .background(Color.primary.opacity(0.03))
+        Image(systemName: "ellipsis")
+            .foregroundStyle(Brand.color.text3)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 3)
+            .background(Brand.color.cardAlt.opacity(0.5))
     }
 
     /// Reading both versions and diffing a long page can take a while: off the main thread.
@@ -292,12 +447,13 @@ private struct DiffCell: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text(number.map(String.init) ?? "")
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Brand.color.text3)
                 .frame(width: 36, alignment: .trailing)
             if showSign {
-                Text(sign).foregroundStyle(.secondary).frame(width: 10)
+                Text(sign).foregroundStyle(Brand.color.text2).frame(width: 10)
             }
             Text(line?.text ?? "")
+                .foregroundStyle(Brand.color.text)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -318,10 +474,10 @@ private struct DiffCell: View {
 
     private var background: Color {
         switch line?.kind {
-        case .added: .green.opacity(0.14)
-        case .removed: .red.opacity(0.13)
+        case .added: Brand.color.accentSoft
+        case .removed: Brand.color.recordSoft
         case .same: .clear
-        case nil: .primary.opacity(0.03)
+        case nil: Brand.color.cardAlt.opacity(0.5)
         }
     }
 }

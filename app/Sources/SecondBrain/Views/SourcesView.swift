@@ -3,189 +3,48 @@ import BrainCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// "Fuentes" (`tab.sources`): everything the project learned from, with status, and ways to add more.
+/// Everything a project learned from, with status (v0.5: the add bar moved to the project's "+ Agregar" menu, and
+/// the Contenido tab lists sources by date; this list stays as a component and for snapshots).
 struct SourcesView: View {
     @Environment(AppState.self) private var state
     let projectSlug: String
     var onOpen: (String) -> Void
 
-    @ViewState private var linkText = ""
-    @ViewState private var isAddingLink = false
-    @ViewState private var showNote = false
-    @ViewState private var dropTargeted = false
-    @ViewState private var error: String?
-    @ViewState private var pendingDelete: SourceRecord?
-    @ViewState private var importing = 0
-    @ViewState private var sheet: SourceSheet?
-    @ViewState private var filesToImport: ImportBatch?
-    @AppStorage("sources.sortByAdded") private var sortByAdded = false
+    @ViewState private var actions = SourceActionsState()
 
     private var sources: [SourceRecord] {
-        state.engine.sources.filter { $0.projectSlug == projectSlug }
-            .sorted { sortByAdded ? $0.createdAt > $1.createdAt : $0.timelineDate > $1.timelineDate }
+        state.engine.sources.filter { $0.projectSlug == projectSlug }.sorted { $0.timelineDate > $1.timelineDate }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            addBar
-            Divider()
+        Group {
             if sources.isEmpty {
                 EmptyStateView(symbol: "tray.and.arrow.down", title: L("sources.emptyTitle"), message: L("sources.emptyMessage"))
             } else {
-                List {
-                    ForEach(sources) { source in
-                        SourceRow(source: source, sortByAdded: sortByAdded, onOpen: onOpen, onDelete: { pendingDelete = source },
-                                  onError: { error = $0 }, onSheet: { sheet = $0 })
-                    }
-                }
-                .listStyle(.inset)
-            }
-        }
-        .overlay {
-            if dropTargeted {
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
-                    .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
-                    .overlay {
-                        VStack(spacing: 6) {
-                            Label(L("sources.dropHere"), systemImage: "arrow.down.doc").font(.title3.weight(.semibold))
-                            Text(L("sources.dropHint")).font(.callout).foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(sources) { source in
+                            SourceRow(source: source, onOpen: onOpen, actions: $actions)
                         }
                     }
-                    .padding(10)
-                    .allowsHitTesting(false)
-            }
-        }
-        .dropDestination(for: URL.self) { urls, _ in
-            importURLs(urls)
-            return !urls.isEmpty
-        } isTargeted: { dropTargeted = $0 }
-        .sheet(isPresented: $showNote) {
-            NoteSheet(projectSlug: projectSlug)
-        }
-        .sheet(item: $sheet) { $0.view(onOpen: onOpen) }
-        .sheet(item: $filesToImport) { batch in
-            ImportFilesSheet(urls: batch.urls, projectSlug: projectSlug)
-        }
-        .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-            Button(L("common.ok")) { error = nil }
-        } message: {
-            Text(error ?? "")
-        }
-        .confirmationDialog(L("sources.deleteConfirm", pendingDelete?.title ?? ""),
-                            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })) {
-            Button(L("sources.delete"), role: .destructive) {
-                if let source = pendingDelete {
-                    do { try state.engine.delete(sourceId: source.id) } catch { self.error = L("sources.deleteFailed") }
-                }
-                pendingDelete = nil
-            }
-        } message: {
-            Text(L("sources.deleteMessage"))
-        }
-    }
-
-    private var addBar: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "link").foregroundStyle(.secondary)
-                TextField(L("sources.linkPlaceholder"), text: $linkText)
-                    .textFieldStyle(.plain)
-                    .onSubmit(addLink)
-                if isAddingLink {
-                    ProgressView().controlSize(.small)
-                } else if !linkText.isEmpty {
-                    Button(L("sources.addLink"), action: addLink).buttonStyle(.borderless)
+                    .padding(Brand.spacing.m)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-
-            if importing > 0 {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text(L("sources.importing")).font(.callout).foregroundStyle(.secondary)
-                }
-                .fixedSize()
-            }
-            Button { state.requestEmail(projectSlug: projectSlug) } label: {
-                Label(L("email.add"), systemImage: "envelope.badge")
-            }
-            .help(L("email.addHelp"))
-            Button { showNote = true } label: { Label(L("sources.newNote"), systemImage: "square.and.pencil") }
-            Button(action: chooseFiles) { Label(L("sources.addFiles"), systemImage: "doc.badge.plus") }
-                .help(L("sources.addFilesHelp"))
-            Menu {
-                Picker("", selection: $sortByAdded) {
-                    Text(L("sources.sortEvent")).tag(false)
-                    Text(L("sources.sortAdded")).tag(true)
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-            }
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help(L("sources.sortHelp"))
         }
-        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Brand.color.surface)
+        .sourceDropTarget(projectSlug: projectSlug)
+        .sourceActions($actions, onOpen: onOpen)
     }
+}
 
-    private func addLink() {
-        let text = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        let normalized = text.contains("://") ? text : "https://" + text
-        guard let url = URL(string: normalized), url.host != nil else {
-            error = L("sources.badLink")
-            return
-        }
-        isAddingLink = true
-        Task {
-            do {
-                try await state.engine.importURL(url, projectSlug: projectSlug)
-                linkText = ""
-            } catch {
-                self.error = L("sources.linkFailed")
-            }
-            isAddingLink = false
-        }
-    }
+// MARK: - Shared source actions (sheets, delete, errors)
 
-    private func chooseFiles() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.prompt = L("sources.addFiles")
-        panel.message = L("sources.panelMessage")
-        if panel.runModal() == .OK, !panel.urls.isEmpty { filesToImport = ImportBatch(urls: panel.urls) }
-    }
-
-    /// Files (documents, audio, video) and links. Extraction and copying run off the main thread; audio and
-    /// video become meetings that show up below and get transcribed by the queue.
-    private func importURLs(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
-        importing += 1
-        Task {
-            defer { importing -= 1 }
-            var failed: [String] = []
-            for url in urls {
-                do {
-                    if url.isFileURL {
-                        try await state.engine.importFileAsync(url, projectSlug: projectSlug)
-                    } else {
-                        try await state.engine.importURL(url, projectSlug: projectSlug)
-                    }
-                } catch let engineError as EngineError {
-                    failed.append(engineError.errorDescription ?? L("sources.importFailed", url.lastPathComponent))
-                } catch {
-                    failed.append(url.isFileURL ? L("sources.importFailed", url.lastPathComponent) : L("sources.linkFailed"))
-                }
-            }
-            if !failed.isEmpty { self.error = failed.joined(separator: "\n") }
-        }
-    }
+/// What a list of sources is presenting: one sheet, one delete confirmation, one error.
+struct SourceActionsState {
+    var sheet: SourceSheet?
+    var pendingDelete: SourceRecord?
+    var error: String?
 }
 
 /// The sheets a source row can open (one presenter for the whole list).
@@ -213,123 +72,77 @@ enum SourceSheet: Identifiable {
     }
 }
 
-struct ImportBatch: Identifiable {
-    let id = UUID()
-    let urls: [URL]
+private struct SourceActionsModifier: ViewModifier {
+    @Environment(AppState.self) private var state
+    @Binding var actions: SourceActionsState
+    var onOpen: (String) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $actions.sheet) { $0.view(onOpen: onOpen) }
+            .alert(L("common.oops"), isPresented: Binding(get: { actions.error != nil }, set: { if !$0 { actions.error = nil } })) {
+                Button(L("common.ok")) { actions.error = nil }
+            } message: {
+                Text(actions.error ?? "")
+            }
+            .confirmationDialog(L("sources.deleteConfirm", actions.pendingDelete?.title ?? ""),
+                                isPresented: Binding(get: { actions.pendingDelete != nil },
+                                                     set: { if !$0 { actions.pendingDelete = nil } })) {
+                Button(L("sources.delete"), role: .destructive) {
+                    if let source = actions.pendingDelete {
+                        do { try state.engine.delete(sourceId: source.id) } catch { actions.error = L("sources.deleteFailed") }
+                    }
+                    actions.pendingDelete = nil
+                }
+            } message: {
+                Text(L("sources.deleteMessage"))
+            }
+    }
 }
 
-struct SourceRow: View {
+extension View {
+    /// Presents the sheets, delete confirmation and errors that `SourceMenuItems` / `SourceRow` request.
+    func sourceActions(_ actions: Binding<SourceActionsState>, onOpen: @escaping (String) -> Void) -> some View {
+        modifier(SourceActionsModifier(actions: actions, onOpen: onOpen))
+    }
+
+    /// The whole view accepts dropped files and links for a project (nil = Sin asignar), with a calm overlay.
+    func sourceDropTarget(projectSlug: String?) -> some View {
+        modifier(SourceDropModifier(projectSlug: projectSlug))
+    }
+}
+
+/// A source's actions. `trimmed` = the Contenido row menu (CONTRACT §15.2): pendientes y acuerdos · exportar ·
+/// cambiar fecha · reaprender · mover · Finder · eliminar (reintentar only when it failed).
+struct SourceMenuItems: View {
     @Environment(AppState.self) private var state
     let source: SourceRecord
-    var sortByAdded = false
+    var trimmed = false
     var onOpen: (String) -> Void
-    var onDelete: () -> Void
-    var onError: (String) -> Void
-    var onSheet: (SourceSheet) -> Void = { _ in }
+    @Binding var actions: SourceActionsState
 
-    private var isEmail: Bool { source.kind == .email }
     private var canHaveTasks: Bool { source.kind == .meeting || source.kind == .email }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: source.kind.symbol)
-                .font(.system(size: 15))
-                .foregroundStyle(isEmail ? Color.accentColor : .secondary)
-                .frame(width: 30, height: 30)
-                .background((isEmail ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.05)),
-                            in: RoundedRectangle(cornerRadius: 7))
-                .help(source.kind.label)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(source.title + (source.calendarEventId != nil ? " 📅" : "")).font(.body.weight(.medium)).lineLimit(2)   // v0.3: from a calendar event
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
-                if source.addedLater {
-                    Label(L("sources.addedLater"), systemImage: "clock.arrow.circlepath")
-                        .font(.caption2).foregroundStyle(.orange)
-                }
-                if source.status == .failed {
-                    HStack(spacing: 8) {
-                        Text(failureText).font(.caption).foregroundStyle(.red)
-                        Button(L("sources.retry")) { state.engine.retry(sourceId: source.id) }
-                            .controlSize(.small)
-                    }
-                }
-                if source.status.isInProgress, let progress = source.progress {
-                    ProgressView(value: progress).controlSize(.small).frame(maxWidth: 260)
-                }
-            }
-            Spacer(minLength: 8)
-            StatusPill(status: source.status, progress: source.progress)
-            actionsMenu
+        if !trimmed, source.status == .done {
+            Button(L("sources.openSummary")) { SourceOpener.openSummary(source, state: state, onOpen: onOpen) }
         }
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2, perform: openSummary)
-        .contextMenu { menuItems }
-    }
-
-    /// "Reunión: 26 oct, 15:30 · Agregada: hoy 10:02 · 45 min".
-    private var subtitle: String {
-        var parts = [source.datesLine]
-        if let d = source.durationSeconds, d > 0 { parts.append(Fmt.shortDuration(d)) }
-        if let template = state.template(source.templateId), source.templateId != TemplateInfo.standardId {
-            parts.append(L("sources.withFormat", template.name))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// The summary page when Claude already wrote it, else the raw transcript/text.
-    private func openSummary() {
-        let vault = state.engine.vault, src = source
-        Task {
-            let page = await Task.detached { SourcePages.summaryPage(for: src, vault: vault) }.value
-            if let path = page ?? src.rawPath { onOpen(path) }
-        }
-    }
-
-    private var failureText: String {
-        source.kind == .meeting && source.rawPath == nil ? L("sources.failedTranscribe") : L("sources.failedLearn")
-    }
-
-    private var actionsMenu: some View {
-        Menu { menuItems } label: { Image(systemName: "ellipsis.circle") }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-    }
-
-    @ViewBuilder private var menuItems: some View {
-        if source.status == .done {
-            Button(L("sources.openSummary"), action: openSummary)
-        }
-        if isEmail, let thread = source.threadKey {
-            Button(L("thread.view")) { onSheet(.thread(thread)) }
-        }
-        if canHaveTasks, source.status == .done {
-            Button(L("srctasks.title")) { onSheet(.tasks(source)) }
-        }
-        if source.status != .recording {
-            Button(L("export.buttonEllipsis")) { onSheet(.export(source)) }
-                .disabled(source.rawPath == nil)
-        }
-        Divider()
-        if source.status != .recording {
-            Button(L("dates.change")) { onSheet(.date(source)) }
-        }
-        if canHaveTasks, source.status == .done, source.projectSlug != nil {
-            Button(L("reformat.menu")) { onSheet(.reformat(source)) }
-        }
-        Divider()
-        if let raw = source.rawPath {
-            Button(isEmail ? L("sources.openEmail") : (source.kind == .meeting ? L("sources.openTranscript") : L("sources.openOriginal"))) {
-                onOpen(raw)
-            }
-            Button(L("wiki.showInFinder")) {
-                NSWorkspace.shared.activateFileViewerSelecting([state.engine.vault.url(for: raw)])
-            }
+        if !trimmed, source.kind == .email, let thread = source.threadKey {
+            Button(L("thread.view")) { actions.sheet = .thread(thread) }
         }
         if source.status == .failed {
             Button(L("sources.retry")) { state.engine.retry(sourceId: source.id) }
+        }
+        if canHaveTasks, source.status == .done {
+            Button(L("srctasks.title")) { actions.sheet = .tasks(source) }
+        }
+        if source.status != .recording {
+            Button(L("export.buttonEllipsis")) { actions.sheet = .export(source) }
+                .disabled(source.rawPath == nil)
+            Button(L("dates.change")) { actions.sheet = .date(source) }
+        }
+        if !trimmed, canHaveTasks, source.status == .done, source.projectSlug != nil {
+            Button(L("reformat.menu")) { actions.sheet = .reformat(source) }
         }
         if source.status == .done, source.historyId == nil, source.error == nil, source.rawPath != nil {
             Button(L("sources.relearn")) { state.engine.retry(sourceId: source.id) }
@@ -339,14 +152,261 @@ struct SourceRow: View {
                 ForEach(state.projects.filter { $0.slug != source.projectSlug }) { project in
                     Button("\(project.emoji) \(project.name)") {
                         do { try state.engine.assign(sourceId: source.id, to: project.slug) } catch {
-                            onError((error as? EngineError)?.errorDescription ?? L("sources.moveFailed"))
+                            actions.error = (error as? EngineError)?.errorDescription ?? L("sources.moveFailed")
                         }
                     }
                 }
             }
-            Divider()
-            Button(L("sources.delete"), role: .destructive, action: onDelete)
         }
+        if let raw = source.rawPath {
+            Divider()
+            if !trimmed {
+                Button(source.kind == .email ? L("sources.openEmail")
+                       : (source.kind == .meeting ? L("sources.openTranscript") : L("sources.openOriginal"))) {
+                    onOpen(raw)
+                }
+            }
+            Button(L("wiki.showInFinder")) {
+                NSWorkspace.shared.activateFileViewerSelecting([state.engine.vault.url(for: raw)])
+            }
+        }
+        if source.status != .recording {
+            Divider()
+            Button(L("sources.delete"), role: .destructive) { actions.pendingDelete = source }
+        }
+    }
+}
+
+@MainActor
+enum SourceOpener {
+    /// The summary page when Claude already wrote it, else the raw transcript/text.
+    static func openSummary(_ source: SourceRecord, state: AppState, onOpen: @escaping (String) -> Void) {
+        let vault = state.engine.vault
+        Task {
+            let page = await Task.detached { SourcePages.summaryPage(for: source, vault: vault) }.value
+            if let path = page ?? source.rawPath { onOpen(path) }
+        }
+    }
+}
+
+struct ImportBatch: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+}
+
+// MARK: - Importing (drop, files, links)
+
+@MainActor
+enum SourceImport {
+    /// "Agregar archivos…": the open panel. Returns nil when cancelled.
+    static func chooseFiles() -> ImportBatch? {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.prompt = L("sources.addFiles")
+        panel.message = L("sources.panelMessage")
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return nil }
+        return ImportBatch(urls: panel.urls)
+    }
+
+    /// Files (documents, audio, video) and links. Extraction and copying run off the main thread; audio and
+    /// video become meetings that get transcribed by the queue. Returns the failures, one line each.
+    static func importURLs(_ urls: [URL], projectSlug: String?, state: AppState) async -> [String] {
+        var failed: [String] = []
+        for url in urls {
+            do {
+                if url.isFileURL {
+                    try await state.engine.importFileAsync(url, projectSlug: projectSlug)
+                } else {
+                    try await state.engine.importURL(url, projectSlug: projectSlug)
+                }
+            } catch let engineError as EngineError {
+                failed.append(engineError.errorDescription ?? L("sources.importFailed", url.lastPathComponent))
+            } catch {
+                failed.append(url.isFileURL ? L("sources.importFailed", url.lastPathComponent) : L("sources.linkFailed"))
+            }
+        }
+        return failed
+    }
+}
+
+private struct SourceDropModifier: ViewModifier {
+    @Environment(AppState.self) private var state
+    let projectSlug: String?
+
+    @ViewState private var targeted = false
+    @ViewState private var importing = 0
+    @ViewState private var error: String?
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if targeted {
+                    let shape = RoundedRectangle(cornerRadius: Brand.radius.sheet, style: .continuous)
+                    shape
+                        .strokeBorder(Brand.color.accent, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                        .background(Brand.color.accentSoft, in: shape)
+                        .overlay {
+                            VStack(spacing: 6) {
+                                Label(L("sources.dropHere"), systemImage: "arrow.down.doc")
+                                    .font(Brand.section)
+                                    .foregroundStyle(Brand.color.text)
+                                Text(L("sources.dropHint"))
+                                    .font(Brand.body)
+                                    .foregroundStyle(Brand.color.text2)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(Brand.spacing.xl)
+                        }
+                        .padding(Brand.spacing.s)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if importing > 0 {
+                    BrandLoader(size: 16, text: L("sources.importing"))
+                        .padding(.horizontal, Brand.spacing.m)
+                        .padding(.vertical, Brand.spacing.s)
+                        .background(Capsule().fill(Brand.color.card))
+                        .overlay(Capsule().strokeBorder(Brand.color.line))
+                        .brandOverlayShadow()
+                        .padding(Brand.spacing.l)
+                        .transition(.opacity)
+                }
+            }
+            .animation(Brand.motion.fast, value: targeted)
+            .animation(Brand.motion.fast, value: importing)
+            .dropDestination(for: URL.self) { urls, _ in
+                guard !urls.isEmpty else { return false }
+                importing += 1
+                Task {
+                    let failed = await SourceImport.importURLs(urls, projectSlug: projectSlug, state: state)
+                    importing -= 1
+                    if !failed.isEmpty { error = failed.joined(separator: "\n") }
+                }
+                return true
+            } isTargeted: { targeted = $0 }
+            .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+                Button(L("common.ok")) { error = nil }
+            } message: {
+                Text(error ?? "")
+            }
+    }
+}
+
+// MARK: - Rows
+
+struct SourceRow: View {
+    @Environment(AppState.self) private var state
+    let source: SourceRecord
+    var onOpen: (String) -> Void
+    @Binding var actions: SourceActionsState
+
+    @ViewState private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Brand.spacing.m) {
+            SourceKindIcon(kind: source.kind)
+                .help(source.kind.label)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(source.title)
+                        .font(Brand.callout)
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(2)
+                    if source.calendarEventId != nil {
+                        Image(systemName: "calendar")
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.text3)
+                            .help(L("content.fromCalendar"))
+                    }
+                }
+                HStack(spacing: 6) {
+                    Text(subtitle)
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(source.datesLine)
+                    if source.addedLater {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.text3)
+                            .help(L("sources.addedLater") + " · " + source.datesLine)
+                    }
+                }
+                if source.status == .failed {
+                    HStack(spacing: 8) {
+                        Text(SourceRow.failureText(source))
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.danger)
+                            .lineLimit(2)
+                        Button(L("sources.retry")) { state.engine.retry(sourceId: source.id) }
+                            .buttonStyle(.borderless)
+                            .font(Brand.font(11, .medium))
+                            .foregroundStyle(Brand.color.accent)
+                            .lineLimit(1)
+                    }
+                }
+                if source.status.isInProgress, let progress = source.progress {
+                    ProgressView(value: progress).controlSize(.small).frame(maxWidth: 260).tint(Brand.color.accent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+
+            if source.status != .done {
+                StatusPill(status: source.status, progress: source.progress)
+            }
+            Menu {
+                SourceMenuItems(source: source, onOpen: onOpen, actions: $actions)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .foregroundStyle(Brand.color.text2)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help(L("project.more"))
+        }
+        .padding(.horizontal, Brand.spacing.m)
+        .padding(.vertical, Brand.spacing.s)
+        .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+            .fill(hovering ? Brand.color.cardAlt.opacity(0.6) : Color.clear))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture { SourceOpener.openSummary(source, state: state, onOpen: onOpen) }
+        .contextMenu { SourceMenuItems(source: source, onOpen: onOpen, actions: $actions) }
+    }
+
+    /// "26 oct, 15:30 · 45 min · formato Entrevista" (the "added" date lives in the tooltip).
+    private var subtitle: String {
+        var parts = [Fmt.dayTime(source.timelineDate)]
+        if let d = source.durationSeconds, d > 0 { parts.append(Fmt.shortDuration(d)) }
+        if let template = state.template(source.templateId), source.templateId != TemplateInfo.standardId {
+            parts.append(L("sources.withFormat", template.name))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func failureText(_ source: SourceRecord) -> String {
+        source.kind == .meeting && source.rawPath == nil ? L("sources.failedTranscribe") : L("sources.failedLearn")
+    }
+}
+
+/// The kind of a source in a soft tile (`cardAlt`, `text2`).
+struct SourceKindIcon: View {
+    let kind: SourceKind
+    var size: CGFloat = 28
+
+    var body: some View {
+        Image(systemName: kind.symbol)
+            .font(Brand.font(size * 0.46))
+            .foregroundStyle(Brand.color.text2)
+            .frame(width: size, height: size)
+            .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
     }
 }
 
@@ -357,23 +417,47 @@ struct StatusPill: View {
     var body: some View {
         HStack(spacing: 4) {
             if status == .recording {
-                Circle().fill(.red).frame(width: 6, height: 6)
+                BrandRecordingDot(size: 6)
             }
             Text(text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .monospacedDigit()
         }
-        .font(.caption.weight(.medium))
-        .foregroundStyle(status.color)
+        .font(Brand.font(11, .medium))
+        .foregroundStyle(foreground)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(status.color.opacity(0.12), in: Capsule())
-        .fixedSize()
+        .background(background, in: Capsule())
+        .layoutPriority(1)
     }
 
     private var text: String {
         if status.isInProgress, status != .queued, let progress { return "\(status.label) \(Fmt.percent(progress))" }
         return status.label
     }
+
+    private var foreground: Color {
+        switch status {
+        case .recording: Brand.color.record
+        case .queued: Brand.color.text2
+        case .transcribing, .ingesting, .done: Brand.color.accent
+        case .needsProject: Brand.color.warning
+        case .failed: Brand.color.danger
+        }
+    }
+
+    private var background: Color {
+        switch status {
+        case .recording: Brand.color.recordSoft
+        case .needsProject: Brand.color.warningSoft
+        case .transcribing, .ingesting, .done: Brand.color.accentSoft
+        case .queued, .failed: Brand.color.cardAlt
+        }
+    }
 }
+
+// MARK: - Sheets
 
 struct NoteSheet: View {
     @Environment(AppState.self) private var state
@@ -387,30 +471,51 @@ struct NoteSheet: View {
     @ViewState private var opened = Date()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(L("note.title")).font(.title2.weight(.semibold))
-            Text(L("note.hint")).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: Brand.spacing.m) {
+            Text(L("note.title"))
+                .font(Brand.title)
+                .foregroundStyle(Brand.color.text)
+            Text(projectSlug == nil ? L("note.hintInbox") : L("note.hint"))
+                .font(Brand.body)
+                .foregroundStyle(Brand.color.text2)
+                .fixedSize(horizontal: false, vertical: true)
             TextField(L("note.titlePlaceholder"), text: $title)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.large)
+                .brandTextField()
             TextEditor(text: $text)
-                .font(.body)
-                .frame(minHeight: 220)
-                .padding(6)
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                .font(Brand.body)
+                .scrollContentBackground(.hidden)
+                .padding(Brand.spacing.s)
+                .frame(minHeight: 140, maxHeight: .infinity)
+                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text(L("content.notePlaceholder"))
+                            .font(Brand.body)
+                            .foregroundStyle(Brand.color.text3)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, Brand.spacing.s)
+                            .allowsHitTesting(false)
+                    }
+                }
             WhenField(date: $when, hint: L("when.noteHint"))
-            if let error { Text(error).foregroundStyle(.red).font(.callout) }
-            HStack {
+            if let error {
+                Text(error).font(Brand.body).foregroundStyle(Brand.color.danger)
+            }
+            HStack(spacing: Brand.spacing.s) {
                 Spacer()
-                Button(L("common.cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L("common.cancel")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
                 Button(L("note.save"), action: save)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(24)
-        .frame(width: 560)
+        .padding(Brand.spacing.xxl)
+        .frame(minWidth: 480, idealWidth: 560, minHeight: 420, idealHeight: 500)
+        .background(Brand.color.surface)
     }
 
     private func save() {
@@ -423,6 +528,74 @@ struct NoteSheet: View {
             dismiss()
         } catch {
             self.error = L("note.failed")
+        }
+    }
+}
+
+/// "Pegar enlace…": a web page for the project to read (the link field that used to live in Fuentes).
+struct PasteLinkSheet: View {
+    @Environment(AppState.self) private var state
+    @Environment(\.dismiss) private var dismiss
+    let projectSlug: String?
+
+    @ViewState private var linkText = ""
+    @ViewState private var busy = false
+    @ViewState private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Brand.spacing.m) {
+            Text(L("content.linkTitle"))
+                .font(Brand.title)
+                .foregroundStyle(Brand.color.text)
+            Text(L("content.linkHint"))
+                .font(Brand.body)
+                .foregroundStyle(Brand.color.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField(L("sources.linkPlaceholder"), text: $linkText)
+                .brandTextField()
+                .onSubmit(add)
+            if let error {
+                Text(error)
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.danger)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: Brand.spacing.s) {
+                if busy { BrandLoader(size: 16) }
+                Spacer()
+                Button(L("common.cancel")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
+                Button(L("sources.addLink"), action: add)
+                    .buttonStyle(.brandPrimary)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(busy || linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(Brand.spacing.xxl)
+        .frame(minWidth: 420, idealWidth: 480, maxHeight: 520)
+        .background(Brand.color.surface)
+    }
+
+    private func add() {
+        let text = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !busy else { return }
+        let normalized = text.contains("://") ? text : "https://" + text
+        guard let url = URL(string: normalized), url.host != nil else {
+            error = L("sources.badLink")
+            return
+        }
+        busy = true
+        error = nil
+        Task {
+            do {
+                try await state.engine.importURL(url, projectSlug: projectSlug)
+                dismiss()
+            } catch {
+                self.error = L("sources.linkFailed")
+            }
+            busy = false
         }
     }
 }
@@ -444,24 +617,52 @@ struct ImportFilesSheet: View {
     @ViewState private var error: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(urls.count == 1 ? L("import.titleOne") : L("import.titleMany", urls.count)).font(.title2.weight(.semibold))
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(spacing: 0) {
+            ScrollView {
+                form
+                    .padding(Brand.spacing.xxl)
+            }
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            buttons
+                .padding(.horizontal, Brand.spacing.xxl)
+                .padding(.vertical, Brand.spacing.l)
+        }
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 320, idealHeight: 460)
+        .background(Brand.color.surface)
+        .task { await inspect() }
+    }
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: Brand.spacing.l) {
+            Text(urls.count == 1 ? L("import.titleOne") : L("import.titleMany", urls.count))
+                .font(Brand.title)
+                .foregroundStyle(Brand.color.text)
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(urls.prefix(6), id: \.self) { url in
                     HStack(spacing: 8) {
-                        Image(systemName: media.contains(url) ? "waveform" : "doc.text").foregroundStyle(.secondary).frame(width: 18)
-                        Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle)
-                        Spacer()
-                        if let d = fileDates[url] { Text(Fmt.dayTime(d)).font(.caption).foregroundStyle(.secondary) }
+                        Image(systemName: media.contains(url) ? "waveform" : "doc.text")
+                            .foregroundStyle(Brand.color.text2)
+                            .frame(width: 18)
+                        Text(url.lastPathComponent)
+                            .foregroundStyle(Brand.color.text)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        if let d = fileDates[url] {
+                            Text(Fmt.dayTime(d)).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                        }
                     }
                 }
-                if urls.count > 6 { Text(L("import.andMore", urls.count - 6)).font(.caption).foregroundStyle(.secondary) }
+                if urls.count > 6 {
+                    Text(L("import.andMore", urls.count - 6)).font(Brand.caption).foregroundStyle(Brand.color.text2)
+                }
             }
-            .padding(10)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            .padding(Brand.spacing.m)
+            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(L("when.title")).font(.headline)
+            VStack(alignment: .leading, spacing: Brand.spacing.s) {
+                Text(L("when.title")).font(Brand.section).foregroundStyle(Brand.color.text)
                 Picker("", selection: $useFileDate) {
                     Text(L("import.fileDate")).tag(true)
                     Text(L("import.otherDate")).tag(false)
@@ -470,27 +671,40 @@ struct ImportFilesSheet: View {
                 .labelsHidden()
                 if !useFileDate {
                     DatePicker("", selection: $when, displayedComponents: [.date, .hourAndMinute])
-                        .labelsHidden().fixedSize().padding(.leading, 20)
+                        .labelsHidden()
+                        .padding(.leading, 20)
                 }
-                Text(L("import.dateHint")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(L("import.dateHint"))
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if !media.isEmpty {
                 TemplatePicker(scope: .meeting, selection: $templateId, projectSlug: projectSlug)
             }
-            if let error { Text(error).foregroundStyle(.red).font(.callout).fixedSize(horizontal: false, vertical: true) }
-            HStack {
-                Spacer()
-                if busy { ProgressView().controlSize(.small) }
-                Button(L("common.cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(L("import.go"), action: run)
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(busy)
+            if let error {
+                Text(error)
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.danger)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(24)
-        .frame(width: 520)
-        .task { await inspect() }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var buttons: some View {
+        HStack(spacing: Brand.spacing.s) {
+            if busy { BrandLoader(size: 16) }
+            Spacer()
+            Button(L("common.cancel")) { dismiss() }
+                .buttonStyle(.brandSecondary)
+                .keyboardShortcut(.cancelAction)
+            Button(L("import.go"), action: run)
+                .buttonStyle(.brandPrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(busy)
+        }
     }
 
     private func inspect() async {
@@ -528,7 +742,27 @@ struct ImportFilesSheet: View {
                 }
             }
             busy = false
-            if failed.isEmpty { dismiss() } else { error = failed.joined(separator: "\n") }
+            if failed.isEmpty {
+                dismiss()
+            } else {
+                // At most three reasons, then "y N más" (the sheet never grows past the window).
+                var lines = Array(failed.prefix(3))
+                if failed.count > 3 { lines.append(L("import.andMore", failed.count - 3)) }
+                error = lines.joined(separator: "\n")
+            }
         }
+    }
+}
+
+private extension View {
+    /// A one-line field in the brand style (card fill, hairline, control radius), like the chat input: never the
+    /// AppKit bezel next to a brand-styled editor.
+    func brandTextField() -> some View {
+        textFieldStyle(.plain)
+            .font(Brand.body)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
     }
 }

@@ -2,60 +2,118 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// Sidebar "Reuniones" (CONTRACT §12.5, §12.7): the agenda of every connected calendar with a hero "Ahora / Siguiente"
-/// card, one action per meeting that changes with time, and the detail (or "Prepararme") on the right.
+/// Sidebar "Reuniones" (CONTRACT §12.7, §15.2): segments Hoy · Próximas · Anteriores. Hoy has the hero "Ahora /
+/// Siguiente" card; Próximas is grouped by day; Anteriores lists the meetings the brain knows (no calendar needed). The
+/// detail (or "Prepararme") sits on the right, or is pushed when the screen is narrower than `singleColumnBelow`.
 struct MeetingsView: View {
     @Environment(AppState.self) private var state
-    @ViewState private var segment: MeetingSegment = .today
+    @ViewState private var segment: MeetingSegment
+    /// The event the user picked (click, keyboard, Inicio/⌘K). The default-to-hero fallback is never stored here.
     @ViewState private var selectedId: String?
     @ViewState private var prepEventId: String?
+    /// Prep was opened from the list (hero or row), not from the detail: in single-column mode the stack's back
+    /// returns to the list and the prep shows no second "Atrás".
+    @ViewState private var prepFromList = false
     @ViewState private var pageSheet: VaultPageItem?
+    /// Single-column mode: the event whose detail is pushed.
+    @ViewState private var pushedId: String?
+    @ViewState private var isNarrow = false
+    /// The header loader shows only when a refresh takes longer than a moment (no flicker on every visit).
+    @ViewState private var showsLoader = false
+    @FocusState private var agendaFocused: Bool
 
-    init(initialSegment: MeetingSegment = .today) {
-        _segment = ViewState(initialValue: initialSegment)
+    /// Below this width list and detail become one column with push (§15.2).
+    static let singleColumnBelow: CGFloat = 700
+    /// One leading inset for the segment picker, the agenda and Anteriores, so their edges line up.
+    private static let inset: CGFloat = 16
+
+    /// `initialSegment` nil = where the user last was (coming back after "Ver resumen" keeps Anteriores).
+    init(initialSegment: MeetingSegment? = nil) {
+        _segment = ViewState(initialValue: initialSegment ?? MeetingsModel.shared.lastSegment)
     }
 
     private var model: MeetingsModel { MeetingsModel.shared }
+    private var hasAccounts: Bool { !state.engine.accounts.accounts.isEmpty }
+    private var isLoaded: Bool { model.isLoaded(state: state) }
 
     var body: some View {
-        Group {
-            if state.engine.accounts.accounts.isEmpty {
-                ConnectAccountsEmptyState(symbol: "calendar", title: L("meetings.empty.title"),
-                                          message: L("meetings.empty.message"), context: .meetings)
-            } else {
-                content
+        GeometryReader { geo in
+            let narrow = geo.size.width < Self.singleColumnBelow
+            Group {
+                if narrow {
+                    NavigationStack {
+                        agenda
+                            .navigationDestination(item: $pushedId) { id in pushedDetail(id) }
+                    }
+                } else {
+                    split(width: geo.size.width)
+                }
+            }
+            .onChange(of: narrow, initial: true) { _, nowNarrow in
+                isNarrow = nowNarrow
+                // The pushed page is always the meeting the user picked, never an old push from an earlier narrow spell.
+                pushedId = nowNarrow ? selectedId : nil
             }
         }
+        .background(Brand.color.surface)
         .navigationTitle(L("meetings.title"))
-        .navigationSubtitle(L("meetings.subtitle"))
         .toolbar {
-            ToolbarItem { RulesToolbarButton() }   // MARK: v0.4 rules
             ToolbarItem(placement: .primaryAction) {
                 Button { model.refresh(state: state) } label: {
                     Label(L("meetings.refresh"), systemImage: "arrow.clockwise")
                 }
                 .help(L("meetings.refresh"))
-                .disabled(state.engine.accounts.accounts.isEmpty)
+                .disabled(!hasAccounts)
             }
+            // §14.4 + §15.2: "Reglas…" in the ⋯ menu, the same place as in Correo (also in Ajustes › Reglas and ⌘K).
+            ToolbarItem(placement: .primaryAction) { ToolbarMoreMenu() }
         }
         .task(id: state.accountsRevision) {
             // Fresh on every visit; the loop keeps it fresh every 15 minutes after that.
             if model.isRunning { model.refresh(state: state) } else { model.start(state: state) }
         }
+        .task(id: model.isLoading) {
+            guard model.isLoading else { showsLoader = false; return }
+            try? await Task.sleep(for: .milliseconds(400))
+            if !Task.isCancelled { showsLoader = model.isLoading }
+        }
+        .task(id: "\(segment == .past)|\(state.vaultRevision)|\(state.tasksRevision)|\(state.engineStarted)") {
+            if segment == .past { model.loadPast(state: state) }
+        }
         .onChange(of: state.vaultRevision) { model.reloadPeople(state: state) }
+        .onChange(of: segment) { segmentChanged() }
+        .onChange(of: pushedId) { _, id in
+            // Popped with the stack's back: the next tap on that row opens its detail, not the old prep.
+            if id == nil, isNarrow { prepEventId = nil; prepFromList = false; selectedId = nil }
+        }
+        .onAppear { consumePendingEvent() }
+        .onChange(of: state.pendingEventId) { consumePendingEvent() }
+        .onChange(of: model.loadedOnce) { consumePendingEvent() }
         .sheet(item: $pageSheet) { VaultPageSheet(path: $0.path) }
     }
 
-    private var content: some View {
-        GeometryReader { geo in
+    // MARK: Layout
+
+    @ViewBuilder private func split(width: CGFloat) -> some View {
+        if showsDetailColumn {
             HStack(spacing: 0) {
                 agenda
-                    .frame(width: max(380, min(580, geo.size.width * 0.55)))
-                Divider()
+                    .frame(width: min(520, max(320, (width * 0.46).rounded())))
+                Rectangle().fill(Brand.color.line).frame(width: 1)
                 detailPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        } else {
+            // Nothing to pick (Anteriores, no calendar, empty agenda): one full-width column, one empty state.
+            agenda
         }
+    }
+
+    /// Two columns while loading (the split never jumps when events land) and whenever there is an event to show.
+    private var showsDetailColumn: Bool {
+        guard segment != .past, hasAccounts else { return false }
+        guard isLoaded else { return true }
+        return !visibleEvents(now: Date()).isEmpty
     }
 
     // MARK: Agenda
@@ -68,107 +126,309 @@ struct MeetingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .fixedSize()
-                Spacer()
-                if model.isLoading { ProgressView().controlSize(.small) }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            MeetingOverrunBanner()
-            if !model.accountErrors.isEmpty || model.error != nil {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(model.accountErrors.keys.sorted(), id: \.self) { key in
-                        softError(model.accountErrors[key] ?? "")
-                    }
-                    if let error = model.error { softError(error) }
+                .frame(maxWidth: 340)
+                Spacer(minLength: 8)
+                if showsLoader && segment != .past {
+                    BrandLoader(size: 16)
+                        .help(L("meetings.loading"))
+                        .transition(.opacity)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
             }
-            Divider()
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                list(now: context.date)
+            .padding(.horizontal, Self.inset)
+            .padding(.vertical, 10)
+            .animation(Brand.motion.fast, value: showsLoader)
+            if segment != .past {
+                MeetingOverrunBanner()
+                if !model.accountErrors.isEmpty || model.error != nil {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(model.accountErrors.keys.sorted(), id: \.self) { key in
+                            softError(model.accountErrors[key] ?? "")
+                        }
+                        if let error = model.error { softError(error) }
+                    }
+                    .padding(.horizontal, Self.inset)
+                    .padding(.bottom, 8)
+                }
+            }
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            if segment == .past {
+                pastList
+            } else if !hasAccounts {
+                ConnectAccountsEmptyState(symbol: "calendar", title: L("meetings.empty.title"),
+                                          message: L("meetings.empty.message"), context: .meetings)
+            } else {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    list(now: context.date)
+                }
             }
         }
+        .background(Brand.color.surface)
     }
 
     private func softError(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.triangle")
-            .font(.caption)
-            .foregroundStyle(.orange)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Label {
+            Text(text).foregroundStyle(Brand.color.text2)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle").foregroundStyle(Brand.color.warning)
+        }
+        .font(Brand.caption)
+        .lineLimit(2)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder private func list(now: Date) -> some View {
+    /// A titled run of rows under the hero (or a day of Próximas).
+    private struct AgendaSection: Identifiable {
+        let id: String
+        let title: String?
+        let events: [CalendarEvent]
+    }
+
+    /// What the agenda column lists, in display order (the keyboard walks the same order).
+    private struct AgendaLayout {
+        var hero: (event: CalendarEvent, isNow: Bool)?
+        var sections: [AgendaSection] = []
+        /// Hoy: nothing left after now ("Nada más en la agenda de hoy.").
+        var nothingMoreToday = false
+
+        var isEmpty: Bool { hero == nil && sections.allSatisfy(\.events.isEmpty) }
+        var order: [CalendarEvent] { (hero.map { [$0.event] } ?? []) + sections.flatMap(\.events) }
+    }
+
+    /// Hoy: hero, then what is still ahead ("Resto del día"), then what already ended ("Antes, hoy", newest first).
+    /// Próximas: one section per day.
+    private func layout(now: Date) -> AgendaLayout {
         let hero = segment == .today ? model.hero(now: now) : nil
         // The hero card already shows its meeting: the list below holds the rest.
         let days = model.days(in: segment, now: now)
             .map { (day: $0.day, events: $0.events.filter { $0.id != hero?.event.id }) }
             .filter { !$0.events.isEmpty }
-        if !model.loadedOnce {
-            VStack(spacing: 10) {
-                ProgressView()
-                Text(L("meetings.loading")).foregroundStyle(.secondary)
+        var out = AgendaLayout(hero: hero)
+        if segment == .today {
+            let rows = days.flatMap(\.events)
+            let later = rows.filter { $0.end >= now }
+            let earlier = Array(rows.filter { $0.end < now }.reversed())
+            out.nothingMoreToday = later.isEmpty && !(hero == nil && earlier.isEmpty)
+            if !later.isEmpty {
+                let titled = hero != nil || !earlier.isEmpty
+                out.sections.append(AgendaSection(id: "later", title: titled ? L("meetings.restOfToday") : nil, events: later))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if days.isEmpty && hero == nil {
-            EmptyStateView(symbol: "calendar", title: L("meetings.nothing.title"), message: L("meetings.nothing.message"))
+            if !earlier.isEmpty {
+                out.sections.append(AgendaSection(id: "earlier", title: L("meetings.earlierToday"), events: earlier))
+            }
         } else {
+            out.sections = days.map { AgendaSection(id: "\($0.day.timeIntervalSinceReferenceDate)",
+                                                    title: MeetingTimes.dayTitle($0.day), events: $0.events) }
+        }
+        return out
+    }
+
+    @ViewBuilder private func list(now: Date) -> some View {
+        let layout = layout(now: now)
+        // Single column: only what the user picked is highlighted (the pushed page is the "selection").
+        let selected = isNarrow ? selectedId : selectedEvent(now: now)?.id
+        Group {
+            if layout.isEmpty {
+                if isLoaded {
+                    emptyAgenda(now: now)
+                } else {
+                    BrandLoader(size: 28, text: L("meetings.loading"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            if let hero = layout.hero {
+                                MeetingHeroCard(event: hero.event, isNow: hero.isNow, isSelected: selected == hero.event.id,
+                                                onSelect: { select(hero.event) }, onPrepare: { prepare(hero.event, fromList: true) },
+                                                onShowPage: { pageSheet = VaultPageItem(path: $0) })
+                                    .padding(.bottom, 10)
+                                    .id(hero.event.id)
+                            }
+                            if layout.nothingMoreToday {
+                                Text(L("meetings.nothingMoreToday"))
+                                    .font(Brand.body)
+                                    .foregroundStyle(Brand.color.text2)
+                                    .padding(.vertical, 8)
+                                    .padding(.leading, 4)
+                            }
+                            ForEach(layout.sections) { section in
+                                if let title = section.title { dayHeader(title) }
+                                ForEach(section.events) { row($0, selected: selected).id($0.id) }
+                            }
+                        }
+                        .padding(.horizontal, Self.inset)
+                        .padding(.vertical, 12)
+                    }
+                    .focusable()
+                    .focused($agendaFocused)
+                    .focusEffectDisabled()
+                    .onKeyPress(.downArrow) { moveSelection(by: 1, now: now, proxy: proxy) }
+                    .onKeyPress(.upArrow) { moveSelection(by: -1, now: now, proxy: proxy) }
+                    .onKeyPress(.return) {
+                        guard isNarrow, let id = selectedId, isVisible(id, now: now) else { return .ignored }
+                        pushedId = id
+                        return .handled
+                    }
+                }
+            }
+        }
+        .transition(.opacity)
+        .animation(Brand.motion.fast, value: layout.isEmpty)
+    }
+
+    private func row(_ event: CalendarEvent, selected: String?) -> some View {
+        MeetingCard(event: event, isSelected: selected == event.id,
+                    onSelect: { select(event) }, onPrepare: { prepare(event, fromList: true) },
+                    onShowPage: { pageSheet = VaultPageItem(path: $0) })
+    }
+
+    private func dayHeader(_ text: String) -> some View {
+        Text(text)
+            .font(Brand.font(12, .semibold))
+            .foregroundStyle(Brand.color.text2)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.top, 10)
+            .padding(.bottom, 2)
+            .padding(.leading, 4)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder private func emptyAgenda(now: Date) -> some View {
+        if segment == .today, !model.events(in: .upcoming, now: now).isEmpty {
+            EmptyStateView(symbol: "calendar", title: L("meetings.nothingToday"), message: "",
+                           actionTitle: L("meetings.seeUpcoming"), action: { segment = .upcoming })
+        } else {
+            EmptyStateView(symbol: "calendar", title: L("meetings.nothing.title"), message: L("meetings.nothing.message"))
+        }
+    }
+
+    // MARK: Anteriores
+
+    @ViewBuilder private var pastList: some View {
+        let items = model.pastItems(state: state)
+        if items.isEmpty {
+            if model.pastLoaded || !state.engineStarted {
+                EmptyStateView(symbol: "waveform", title: L("meetings.past.empty.title"), message: L("meetings.past.empty.message"))
+            } else {
+                BrandLoader(size: 28, text: L("meetings.loading"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else {
+            let cal = Calendar.current
+            let groups = Dictionary(grouping: items) { cal.startOfDay(for: $0.date) }
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    if let hero {
-                        MeetingHeroCard(event: hero.event, isNow: hero.isNow, isSelected: selectedEvent(now: now)?.id == hero.event.id,
-                                        onSelect: { select(hero.event) }, onPrepare: { prepare(hero.event) },
-                                        onShowPage: { pageSheet = VaultPageItem(path: $0) })
-                            .padding(.bottom, 10)
-                    }
-                    if days.isEmpty {
-                        Text(L("meetings.nothingMoreToday"))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 8)
-                    }
-                    ForEach(days, id: \.day) { group in
-                        Text(dayTitle(group.day))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 8)
-                            .padding(.leading, 4)
-                        ForEach(group.events) { event in
-                            MeetingCard(event: event, isSelected: selectedEvent(now: now)?.id == event.id,
-                                        onSelect: { select(event) }, onPrepare: { prepare(event) },
-                                        onShowPage: { pageSheet = VaultPageItem(path: $0) })
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(groups.keys.sorted(by: >), id: \.self) { day in
+                        dayHeader(MeetingTimes.dayTitle(day))
+                        ForEach(groups[day] ?? []) { item in
+                            PastMeetingRow(item: item) { openSummary(item) }
                         }
                     }
                 }
-                .padding(14)
+                .padding(.horizontal, Self.inset)
+                .padding(.vertical, 12)
+                // Readable width, but the same leading edge as the segment picker above.
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    private func dayTitle(_ day: Date) -> String {
-        let long = Fmt.weekdayLong(day)
-        switch Fmt.daysFromToday(day) {
-        case 0: return L("date.today").capitalized + " · " + long
-        case 1: return L("date.tomorrow").capitalized + " · " + long
-        default: return long.prefix(1).uppercased() + long.dropFirst()
+    /// "Ver resumen": the meeting page, read in place (Reuniones and its scroll stay; the sheet offers "Abrir en el
+    /// proyecto").
+    private func openSummary(_ item: PastMeetingItem) {
+        switch item {
+        case .page(let entry):
+            if let path = entry.pagePath { pageSheet = VaultPageItem(path: path) }
+        case .source(let source, _):
+            if let path = state.engine.pagePath(forSourceId: source.id) { pageSheet = VaultPageItem(path: path); return }
+            let vault = state.engine.vault
+            Task {
+                let page = await Task.detached { SourcePages.summaryPage(for: source, vault: vault) }.value
+                if let path = page ?? source.rawPath { pageSheet = VaultPageItem(path: path) }
+            }
         }
     }
 
-    private func select(_ event: CalendarEvent) {
-        if selectedId != event.id { prepEventId = nil }
-        selectedId = event.id
+    // MARK: Selection
+
+    /// The events listed in the current segment (hero included).
+    private func visibleEvents(now: Date) -> [CalendarEvent] {
+        guard segment != .past else { return [] }
+        var list = model.events(in: segment, now: now)
+        if segment == .today, let hero = model.hero(now: now)?.event, !list.contains(where: { $0.id == hero.id }) {
+            list.insert(hero, at: 0)
+        }
+        return list
     }
 
-    private func prepare(_ event: CalendarEvent) {
+    private func isVisible(_ id: String?, now: Date) -> Bool {
+        guard let id else { return false }
+        return visibleEvents(now: now).contains { $0.matches(id) }
+    }
+
+    /// Click on a row or the hero: select it (and push it when single-column; the wide layout ignores `pushedId`).
+    private func select(_ event: CalendarEvent) {
+        if selectedId != event.id { prepEventId = nil; prepFromList = false }
+        selectedId = event.id
+        agendaFocused = true
+        if isNarrow { pushedId = event.id }
+    }
+
+    /// "Prepararme": from the hero or a row (`fromList`), or from the detail of the selected meeting.
+    private func prepare(_ event: CalendarEvent, fromList: Bool) {
         selectedId = event.id
         prepEventId = event.id
+        prepFromList = fromList
+        if isNarrow { pushedId = event.id }
     }
 
-    /// The chosen event; by default the hero (now / next), else the first one.
+    /// ↑ / ↓ walk the agenda in display order (hero first); ↩ opens the row when single-column.
+    private func moveSelection(by step: Int, now: Date, proxy: ScrollViewProxy) -> KeyPress.Result {
+        let order = layout(now: now).order
+        guard !order.isEmpty else { return .ignored }
+        let current = (isNarrow ? selectedId : selectedEvent(now: now)?.id).flatMap { id in order.firstIndex { $0.id == id } }
+        let next = current.map { min(max($0 + step, 0), order.count - 1) } ?? (step > 0 ? 0 : order.count - 1)
+        let event = order[next]
+        if selectedId != event.id { prepEventId = nil; prepFromList = false }
+        selectedId = event.id
+        withAnimation(Brand.motion.fast) { proxy.scrollTo(event.id) }
+        return .handled
+    }
+
+    /// The chosen event if it is listed; by default the hero (now / next), else the first one.
     private func selectedEvent(now: Date) -> CalendarEvent? {
-        model.event(id: selectedId) ?? model.hero(now: now)?.event ?? model.events(in: segment, now: now).first
+        if isVisible(selectedId, now: now), let event = model.event(id: selectedId) { return event }
+        if segment == .today, let hero = model.hero(now: now) { return hero.event }
+        return model.events(in: segment, now: now).first
+    }
+
+    /// A selection that isn't in the new segment's list is cleared (§15.2); the segment is remembered for next time.
+    private func segmentChanged() {
+        model.lastSegment = segment
+        let now = Date()
+        if !isVisible(selectedId, now: now) { selectedId = nil; prepEventId = nil; prepFromList = false }
+        if !isVisible(pushedId, now: now) { pushedId = nil }
+    }
+
+    /// Inicio / ⌘K asked for an event: switch to its segment and select it (pushed when single-column: `pushedId` is set
+    /// either way, since `isNarrow` may not be known yet on a fresh view). With `pendingEventPrepare` (Inicio's "Prepararme")
+    /// it opens on the prep, not the plain detail.
+    private func consumePendingEvent() {
+        guard let id = state.pendingEventId, model.loadedOnce else { return }
+        state.pendingEventId = nil
+        let wantsPrep = state.pendingEventPrepare
+        state.pendingEventPrepare = false
+        guard let event = model.event(id: id) else { return }
+        let now = Date()
+        let target: MeetingSegment = MeetingSegment.today.contains(event, now: now) ? .today : .upcoming
+        if segment != target { segment = target }
+        selectedId = event.id
+        prepEventId = wantsPrep ? event.id : nil
+        prepFromList = wantsPrep
+        pushedId = event.id
     }
 
     // MARK: Detail
@@ -176,25 +436,51 @@ struct MeetingsView: View {
     @ViewBuilder private var detailPane: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             if let event = selectedEvent(now: context.date) {
-                if prepEventId == event.id {
-                    MeetingPrepView(event: event, onClose: { prepEventId = nil },
-                                    onShowPage: { pageSheet = VaultPageItem(path: $0) })
-                        .id(event.id)
-                } else {
-                    MeetingDetail(event: event, onPrepare: { prepare(event) },
-                                  onShowPage: { pageSheet = VaultPageItem(path: $0) })
-                        .id(event.id)
-                }
-            } else if model.loadedOnce {
+                eventDetail(event, isHero: segment == .today && model.hero(now: context.date)?.event.id == event.id,
+                            prepClose: { prepEventId = nil; prepFromList = false })
+            } else if isLoaded {
+                EmptyStateView(symbol: "calendar.badge.clock", title: L("meetings.pick"), message: "")
+            } else {
+                // Loading: the column keeps its place, quietly (the list shows the loader).
+                Color.clear
+            }
+        }
+        .background(Brand.color.surface)
+    }
+
+    /// Single column: the pushed detail never sits next to the hero, so it keeps its actions. A prep opened from the
+    /// list has one back control (the stack's); a prep opened from the pushed detail goes back to that detail.
+    @ViewBuilder private func pushedDetail(_ id: String) -> some View {
+        Group {
+            if let event = model.event(id: id) {
+                eventDetail(event, isHero: false,
+                            prepClose: prepFromList ? nil : { prepEventId = nil })
+            } else {
                 EmptyStateView(symbol: "calendar.badge.clock", title: L("meetings.pick"), message: "")
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Brand.color.surface)
+    }
+
+    @ViewBuilder private func eventDetail(_ event: CalendarEvent, isHero: Bool, prepClose: (() -> Void)?) -> some View {
+        if prepEventId == event.id {
+            // Next to the hero, the hero keeps the one Grabar / Unirme (§15.2): the prep shows none of its own.
+            MeetingPrepView(event: event, showsActions: !isHero, onClose: prepClose,
+                            onShowPage: { pageSheet = VaultPageItem(path: $0) })
+                .id(event.id)
+        } else {
+            // The hero already holds this meeting's Grabar / Unirme: one visible record button (§15.2).
+            MeetingDetail(event: event, showsActions: !isHero, onPrepare: { prepare(event, fromList: false) },
+                          onShowPage: { pageSheet = VaultPageItem(path: $0) })
+                .id(event.id)
         }
     }
 }
 
 // MARK: - Hero
 
-/// "Ahora / Siguiente" at the top of Hoy, with a live countdown and the meeting's one action.
+/// "Ahora / Siguiente" at the top of Hoy (and on Inicio), with a live countdown and the meeting's one action.
 struct MeetingHeroCard: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
@@ -204,53 +490,90 @@ struct MeetingHeroCard: View {
     var onPrepare: () -> Void
     var onShowPage: (String) -> Void
 
-    private var tint: Color { isNow ? .red : .accentColor }
-
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
+        let recording = event.matches(state.recordingEventId)
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
+                // The red lives in the dot (beating only while recording); the word stays in text for contrast (AA).
+                if recording {
+                    BrandRecordingDot(size: 7)
+                } else if isNow {
+                    Circle().fill(Brand.color.record).frame(width: 6, height: 6).accessibilityHidden(true)
+                }
                 Text(isNow ? L("meetings.now") : L("meetings.next"))
-                    .font(.caption.weight(.heavy))
-                    .tracking(0.8)
-                    .foregroundStyle(tint)
+                    .font(Brand.font(11, .semibold))
+                    .tracking(0.6)
+                    .textCase(.uppercase)
+                    .foregroundStyle(isNow ? Brand.color.text : Brand.color.accent)
+                    .lineLimit(1)
+                    .layoutPriority(2)
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(MeetingTimes.countdown(event, now: context.date))
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                Spacer()
-                MeetingProjectChip(event: event, placement: .hero, showsOffer: false)
-            }
-            MeetingRuleOfferLine(event: event, placement: .hero)   // v0.4 rules
-            Text(event.title)
-                .font(.title3.weight(.semibold))
-                .lineLimit(2)
-            HStack(spacing: 12) {
-                Label(MeetingTimes.range(event), systemImage: "clock")
-                if let place = event.location, !place.isEmpty {
-                    Label(place, systemImage: event.joinURL != nil ? "video" : "mappin.and.ellipse").lineLimit(1)
-                }
-            }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            HStack(spacing: 10) {
-                MeetingActionButton(event: event, large: true, onPrepare: onPrepare, onShowPage: onShowPage)
-                if let join = event.joinURL, JoinLink.isSafe(join) {
-                    Button { NSWorkspace.shared.open(join) } label: {
-                        Label(L("meetings.join"), systemImage: "video.fill")
+                    ViewThatFits(in: .horizontal) {
+                        Text(MeetingTimes.countdown(event, now: context.date))
+                        Text(MeetingTimes.countdownShort(event, now: context.date))
                     }
-                    .controlSize(.large)
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .lineLimit(1)
+                    .monospacedDigit()
                 }
-                Spacer(minLength: 8)
-                AttendeeInitials(attendees: MeetingsModel.shared.others(in: event), size: 26)
+                .layoutPriority(1)
+                Spacer(minLength: 0)
             }
+            Text(event.title)
+                .font(Brand.font(17, .semibold))
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(2)
+            MeetingProjectChip(event: event, placement: .hero, showsOffer: false)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { timeLabel; placeLabel }
+                VStack(alignment: .leading, spacing: 4) { timeLabel; placeLabel }
+            }
+            .font(Brand.body)
+            .foregroundStyle(Brand.color.text2)
+            actionRow
+            MeetingRuleOfferLine(event: event, placement: .hero)   // v0.4 rules: under the actions, never above the title
         }
         .padding(16)
-        .background(tint.opacity(isSelected ? 0.12 : 0.07), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(tint.opacity(0.3), lineWidth: 1))
-        .contentShape(RoundedRectangle(cornerRadius: 14))
+        .background(shape.fill(isNow ? Brand.color.recordSoft : Brand.color.card))
+        .overlay(shape.strokeBorder(isSelected ? Brand.color.accent : Brand.color.line, lineWidth: isSelected ? 1.5 : 1))
+        .contentShape(shape)
         .onTapGesture(perform: onSelect)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var timeLabel: some View {
+        Label(MeetingTimes.range(event), systemImage: "clock")
+            .lineLimit(1)
+            .layoutPriority(1)
+    }
+
+    @ViewBuilder private var placeLabel: some View {
+        if let place = MeetingPlace.visible(event) {
+            Label(place, systemImage: MeetingPlace.symbol(place))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+
+    /// Action + Unirme + initials; drops the initials, then stacks, then goes icon-only (§15.3).
+    private var actionRow: some View {
+        let others = MeetingsModel.shared.others(in: event)
+        let action = MeetingActionButton(event: event, large: true, onPrepare: onPrepare, onShowPage: onShowPage).fixedSize()   // fixed only inside ViewThatFits candidates: it measures true widths
+        let join = MeetingJoinButton(event: event, large: true).fixedSize()
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                action; join
+                Spacer(minLength: 8)
+                // Rings match the card: recordSoft is translucent over the agenda's surface, so it is drawn the same way.
+                AttendeeInitials(attendees: others, size: 26, ring: isNow ? Brand.color.surface : Brand.color.card,
+                                 ringTint: isNow ? Brand.color.recordSoft : nil)
+            }
+            HStack(spacing: 8) { action; join; Spacer(minLength: 0) }
+            VStack(alignment: .leading, spacing: 8) { action; join }
+            HStack(spacing: 8) { action; join; Spacer(minLength: 0) }.labelStyle(.iconOnly)
+        }
     }
 }
 
@@ -268,10 +591,26 @@ enum MeetingTimes {
         e.isAllDay ? L("meetings.allDay") : "\(Fmt.time(e.start)) – \(Fmt.time(e.end))"
     }
 
-    /// "hoy 10:20 – 11:20 · 1 h 0 min" / "mañana · todo el día".
+    /// "hoy 10:20 – 11:20 · 1 h" / "mañana · todo el día".
     static func when(_ e: CalendarEvent) -> String {
         if e.isAllDay { return Fmt.relativeDay(e.start).meetingCapitalized + " · " + L("meetings.allDay").lowercased() }
         return Fmt.dayTime(e.start).meetingCapitalized + " – " + Fmt.time(e.end) + " · " + duration(e.end.timeIntervalSince(e.start))
+    }
+
+    /// "10:20 – 11:20 · 1 h" (or "Todo el día").
+    static func timeAndDuration(_ e: CalendarEvent) -> String {
+        e.isAllDay ? L("meetings.allDay") : range(e) + " · " + duration(e.end.timeIntervalSince(e.start))
+    }
+
+    /// "Hoy · martes, 27 de octubre", "Mañana · …", "Ayer · …", else "Jueves, 29 de octubre".
+    static func dayTitle(_ day: Date) -> String {
+        let long = Fmt.weekdayLong(day)
+        switch Fmt.daysFromToday(day) {
+        case 0: return L("date.today").meetingCapitalized + " · " + long
+        case 1: return L("date.tomorrow").meetingCapitalized + " · " + long
+        case -1: return L("date.yesterday").meetingCapitalized + " · " + long
+        default: return long.meetingCapitalized
+        }
     }
 
     /// "empieza en 12 min" · "empezó hace 3 min · quedan 47 min" · "terminó hace 2 min" · "mañana 9:30".
@@ -287,6 +626,12 @@ enum MeetingTimes {
         }
         return L("meetings.endedAgo", duration(now.timeIntervalSince(e.end)))
     }
+
+    /// `countdown` without the "· quedan …" clause, for tight rows.
+    static func countdownShort(_ e: CalendarEvent, now: Date) -> String {
+        if now >= e.start, now <= e.end { return L("meetings.startedAgo", duration(now.timeIntervalSince(e.start))) }
+        return countdown(e, now: now)
+    }
 }
 
 extension String {
@@ -296,9 +641,11 @@ extension String {
 // MARK: - Detail
 
 /// Right pane: when, who (names open their people page), the invitation notes, Unirme and the meeting's action.
+/// `showsActions` is false when the hero card next to it already shows them.
 struct MeetingDetail: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
+    var showsActions = true
     var onPrepare: () -> Void
     var onShowPage: (String) -> Void
 
@@ -306,49 +653,52 @@ struct MeetingDetail: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(event.title).font(.title2.weight(.semibold)).textSelection(.enabled)
-                    Label(MeetingTimes.when(event), systemImage: "calendar")
-                        .foregroundStyle(.secondary)
-                    if let place = event.location, !place.isEmpty {
-                        Label(place, systemImage: event.joinURL != nil ? "video" : "mappin.and.ellipse")
-                            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(event.title)
+                        .font(Brand.title)
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(3)
+                        .textSelection(.enabled)
+                        .padding(.bottom, 2)
+                    Label(MeetingTimes.dayTitle(event.start), systemImage: "calendar")
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if !event.isAllDay {
+                        Label(MeetingTimes.timeAndDuration(event), systemImage: "clock")
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
-                    MeetingProjectChip(event: event, placement: .detail).padding(.top, 2)
-                }
-
-                HStack(spacing: 10) {
-                    MeetingActionButton(event: event, large: true, onPrepare: onPrepare, onShowPage: onShowPage)
-                    if let join = event.joinURL, JoinLink.isSafe(join) {
-                        Button { NSWorkspace.shared.open(join) } label: {
-                            Label(L("meetings.join"), systemImage: "video.fill")
-                        }
-                        .controlSize(.large)
-                    }
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
-                        let phase = model.phase(of: event, state: state, now: context.date)
-                        if phase == .recordable || phase == .recording {
-                            Button(action: onPrepare) { Label(L("meetings.prepare"), systemImage: "sparkles") }
-                                .buttonStyle(.link)
-                        }
+                    if let place = MeetingPlace.visible(event) {
+                        Label(place, systemImage: MeetingPlace.symbol(place))
+                            .lineLimit(2)
                     }
                 }
+                .font(Brand.body)
+                .foregroundStyle(Brand.color.text2)
 
-                section(L("meetings.who")) {
-                    let people = event.attendees
+                MeetingProjectChip(event: event, placement: .detail)
+
+                actions
+
+                VStack(alignment: .leading, spacing: 10) {
+                    let people = sortedAttendees
+                    BrandSectionHeader(title: L("meetings.who"), count: people.isEmpty ? nil : people.count)
                     if people.isEmpty {
-                        Text(L("meetings.noAttendees")).foregroundStyle(.secondary)
+                        Text(L("meetings.noAttendees")).font(Brand.body).foregroundStyle(Brand.color.text2)
                     } else {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 10) {
                             ForEach(Array(people.enumerated()), id: \.offset) { _, person in attendeeRow(person) }
                         }
                     }
                 }
 
                 if let notes = event.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
-                    section(L("meetings.notes")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        BrandSectionHeader(title: L("meetings.notes"))
                         LinkedText(text: notes)
+                            .font(Brand.body)
+                            .foregroundStyle(Brand.color.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -357,44 +707,122 @@ struct MeetingDetail: View {
                     Link(destination: web) {
                         Label(L("meetings.openInCalendar"), systemImage: "arrow.up.forward.square")
                     }
-                    .font(.callout)
+                    .font(Brand.callout)
+                    .foregroundStyle(Brand.color.accent)
                 }
             }
-            .padding(22)
+            .padding(Brand.spacing.content)
             .frame(maxWidth: 640, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Brand.color.surface)
+    }
+
+    /// Grabar · Unirme · Prepararme as a row, else a column, else icons only.
+    private var actions: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let phase = model.phase(of: event, state: state, now: context.date)
+            let prepLink = phase == .recordable || phase == .recording
+            if showsActions {
+                let action = MeetingActionButton(event: event, large: true, onPrepare: onPrepare, onShowPage: onShowPage).fixedSize()   // fixed only inside ViewThatFits candidates: it measures true widths
+                let join = MeetingJoinButton(event: event, large: true).fixedSize()
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { action; join; if prepLink { prepareLink.fixedSize() } }
+                    VStack(alignment: .leading, spacing: 8) { action; join; if prepLink { prepareLink.fixedSize() } }
+                    HStack(spacing: 8) { action; join; if prepLink { prepareLink.fixedSize() } }.labelStyle(.iconOnly)
+                }
+            } else if prepLink {
+                prepareLink
+            }
+        }
+    }
+
+    private var prepareLink: some View {
+        Button(action: onPrepare) { Label(L("meetings.prepare"), systemImage: "sparkles") }
+            .buttonStyle(.plain)
+            .font(Brand.callout)
+            .foregroundStyle(Brand.color.accent)
+            .lineLimit(1)
+            .help(L("meetings.prepare"))
+    }
+
+    /// Everyone, me last.
+    private var sortedAttendees: [EmailAddress] {
+        let all = event.attendees
+        return all.filter { !isMe($0) } + all.filter(isMe)
+    }
+
+    private func isMe(_ a: EmailAddress) -> Bool { a.email.map { model.myEmails.contains($0.lowercased()) } ?? false }
+
+    private func attendeeRow(_ a: EmailAddress) -> some View {
+        let path = model.personPath(for: a)
+        let isOrganizer = a.email != nil && a.email?.lowercased() == event.organizer?.email?.lowercased()
+        let name = a.name ?? a.display
+        let nameView = Group {
+            if let path {
+                PersonLinkButton(name: name) { onShowPage(path) }
+            } else {
+                Text(name).foregroundStyle(Brand.color.text)
+            }
+        }
+        .font(Brand.font(13, .medium))
+        .lineLimit(1)
+        .truncationMode(.tail)
+        let roles = roleChips(me: isMe(a), organizer: isOrganizer)
+        return HStack(alignment: .top, spacing: 10) {
+            InitialsCircle(address: a, size: 28, ring: Brand.color.surface)
+            VStack(alignment: .leading, spacing: 2) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { nameView; roles }
+                    VStack(alignment: .leading, spacing: 3) {
+                        nameView
+                        HStack(spacing: 4) { roles }
+                    }
+                }
+                if let email = a.email, a.name != nil {
+                    Text(email)
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            content()
-        }
+    @ViewBuilder private func roleChips(me: Bool, organizer: Bool) -> some View {
+        if me { BrandChip(text: L("meetings.role.you")) }
+        if organizer { BrandChip(text: L("meetings.role.organizer")) }
     }
+}
 
-    private func attendeeRow(_ a: EmailAddress) -> some View {
-        let path = model.personPath(for: a)
-        let isMe = a.email.map { model.myEmails.contains($0.lowercased()) } ?? false
-        let isOrganizer = a.email != nil && a.email?.lowercased() == event.organizer?.email?.lowercased()
-        return HStack(spacing: 10) {
-            InitialsCircle(address: a, size: 26)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    if let path {
-                        Button(a.name ?? a.display) { onShowPage(path) }
-                            .buttonStyle(.link)
-                            .help(L("meetings.openPerson"))
-                    } else {
-                        Text(a.name ?? a.display)
-                    }
-                    if isMe { Text(L("meetings.you")).font(.caption).foregroundStyle(.secondary) }
-                    if isOrganizer { Text(L("meetings.organizer")).font(.caption).foregroundStyle(.secondary) }
-                }
-                if let email = a.email, a.name != nil {
-                    Text(email).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                }
+/// A name that opens what I know about the person: text color like any name, plus a small ↗ and an underline on
+/// hover, so it reads as a link without looking disabled (dark) or invisible (light).
+struct PersonLinkButton: View {
+    let name: String
+    var action: () -> Void
+
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(name)
+                    .underline(hovering)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Image(systemName: "arrow.up.right")
+                    .imageScale(.small)
+                    .foregroundStyle(hovering ? Brand.color.accent : Brand.color.text3)
+                    .accessibilityHidden(true)
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(L("meetings.openPerson"))
     }
 }

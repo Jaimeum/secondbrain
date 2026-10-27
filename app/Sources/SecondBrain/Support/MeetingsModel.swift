@@ -2,27 +2,32 @@ import BrainCore
 import Foundation
 import Observation
 
-/// "Hoy · Esta semana · Próximas" (CONTRACT §12.5).
+/// "Hoy · Próximas · Anteriores" (CONTRACT §15.2). Hoy = today's events; Próximas = from tomorrow to the horizon,
+/// grouped by day; Anteriores = meetings the brain knows (recordings and the vault timeline), which need no calendar.
 enum MeetingSegment: Hashable, CaseIterable {
-    case today, week, upcoming
+    case today, upcoming, past
+
+    /// v0.3 name of the week view, kept so older call sites compile: it is `upcoming` now.
+    static let week = MeetingSegment.upcoming
 
     var title: String {
         switch self {
         case .today: L("meetings.today")
-        case .week: L("meetings.week")
         case .upcoming: L("meetings.upcoming")
+        case .past: L("meetings.segment.past")
         }
     }
 
+    /// Whether a calendar event is listed in this segment (`past` lists sources, never calendar events).
     func contains(_ event: CalendarEvent, now: Date, calendar: Calendar = .current) -> Bool {
         let today = calendar.startOfDay(for: now)
-        let days = switch self {
-        case .today: 1
-        case .week: 7
-        case .upcoming: MeetingsModel.horizonDays + 1
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
+              let limit = calendar.date(byAdding: .day, value: MeetingsModel.horizonDays + 1, to: today) else { return false }
+        switch self {
+        case .today: return event.start < tomorrow && event.end > today
+        case .upcoming: return event.start >= tomorrow && event.start < limit
+        case .past: return false
         }
-        guard let limit = calendar.date(byAdding: .day, value: days, to: today) else { return false }
-        return event.start < limit && event.end > today
     }
 }
 
@@ -40,6 +45,9 @@ final class MeetingsModel {
     private(set) var accountErrors: [String: String] = [:]
     private(set) var isLoading = false
     private(set) var loadedOnce = false
+    /// `AppState.accountsRevision` of the last finished load: a newly connected account shows the loader, never a
+    /// premature "Nada en la agenda".
+    private(set) var loadedAccountsRevision: Int?
     /// People pages, to link attendees and suggest projects.
     private(set) var people = MeetingPeopleIndex()
     /// The owner's addresses (accounts + people/README): left out of initials and prep.
@@ -54,6 +62,8 @@ final class MeetingsModel {
     @ObservationIgnored private var indexTask: Task<Void, Never>?
     @ObservationIgnored private var seenAccountsRevision: Int?
     @ObservationIgnored private var lastRefresh = Date.distantPast
+    /// Bumped per load: only the newest load clears `isLoading` (a cancelled one never leaves it set).
+    @ObservationIgnored private var loadGeneration = 0
     /// Ticks every 20 s: the banners ("empezó hace 3 min", "Siguiente: … · 15:30") follow the clock through it.
     private(set) var now = Date()
 
@@ -91,12 +101,17 @@ final class MeetingsModel {
     }
 
     private func load(state: AppState) async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        defer { if generation == loadGeneration { isLoading = false } }
         let store = state.engine.accounts
         let accounts = store.accounts
+        let revision = state.accountsRevision
         guard !accounts.isEmpty else {
             events = []
             accountErrors = [:]
             loadedOnce = true
+            loadedAccountsRevision = revision
             return
         }
         isLoading = true
@@ -131,9 +146,12 @@ final class MeetingsModel {
         let deduped = MeetingAgenda.dedupe(all)
         if deduped != events { events = deduped }
         if errors != accountErrors { accountErrors = errors }
-        isLoading = false
         loadedOnce = true
+        loadedAccountsRevision = revision
     }
+
+    /// The agenda reflects the accounts connected now (false right after connecting one: show the loader).
+    func isLoaded(state: AppState) -> Bool { loadedOnce && loadedAccountsRevision == state.accountsRevision }
 
     /// Re-reads people pages and the owner's addresses (after Claude learned something new).
     func reloadPeople(state: AppState) {
@@ -164,10 +182,12 @@ final class MeetingsModel {
     func days(in segment: MeetingSegment, now: Date) -> [(day: Date, events: [CalendarEvent])] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: now)
+        // Próximas starts tomorrow; events that began before the first listed day go under it.
+        let first = segment == .upcoming ? (cal.date(byAdding: .day, value: 1, to: today) ?? today) : today
         var order: [Date] = []
         var groups: [Date: [CalendarEvent]] = [:]
         for event in events(in: segment, now: now) {
-            let day = max(cal.startOfDay(for: event.start), today)
+            let day = max(cal.startOfDay(for: event.start), first)
             if groups[day] == nil { order.append(day) }
             groups[day, default: []].append(event)
         }
@@ -179,12 +199,88 @@ final class MeetingsModel {
         return events.first { $0.matches(id) }
     }
 
-    /// "Ahora" (in its record window) or else "Siguiente".
+    /// "Ahora" (in its record window) or else "Siguiente", the latter only when it is today or tomorrow (§15.2).
     func hero(now: Date) -> (event: CalendarEvent, isNow: Bool)? {
         if let live = MeetingAgenda.current(in: events, now: now) { return (live, true) }
-        if let next = MeetingAgenda.next(in: events, now: now) { return (next, false) }
+        if let next = MeetingAgenda.next(in: events, now: now), (0...1).contains(Self.dayOffset(of: next.start, from: now)) {
+            return (next, false)
+        }
         return nil
     }
+
+    /// Calendar days from `now`'s day to `date`'s day (0 = same day).
+    static func dayOffset(of date: Date, from now: Date, calendar: Calendar = .current) -> Int {
+        calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day ?? 0
+    }
+
+    /// Recorded meetings, done or still being processed (failed ones too, to retry), newest first.
+    func pastMeetings(state: AppState) -> [SourceRecord] {
+        state.engine.sources
+            .filter { $0.kind == .meeting && $0.status != .recording }
+            .sorted { $0.timelineDate > $1.timelineDate }
+    }
+
+    // MARK: Anteriores
+
+    /// Meeting entries of the vault timeline (all projects), read off the main actor; nil until the first read.
+    private(set) var timelineMeetings: [TimelineEntry]?
+    /// My open tasks per citation key (lowercased meeting page / raw file name, as `tasks.md` cites them): the
+    /// "Mis pendientes (n)" chip of Anteriores. Read with the timeline, from the same one parse of every `tasks.md`.
+    private(set) var myOpenTasksByKey: [String: Int] = [:]
+    @ObservationIgnored private var pastTask: Task<Void, Never>?
+    @ObservationIgnored private var pastKey: String?
+
+    /// Reads the timeline and the tasks once per vault / tasks revision (the Anteriores segment calls it on appear and
+    /// on vault or task changes).
+    func loadPast(state: AppState) {
+        let key = "\(state.vaultRevision)|\(state.tasksRevision)"
+        guard state.engineStarted, pastKey != key || timelineMeetings == nil else { return }
+        pastKey = key
+        pastTask?.cancel()
+        let engine = state.engine
+        pastTask = Task { [weak self] in
+            async let timeline = engine.timeline(projectSlug: nil)
+            async let tasks = engine.tasks(projectSlug: nil)
+            let entries = await timeline.filter { $0.kind == .meeting }
+            var counts: [String: Int] = [:]
+            for task in await tasks where task.isMine && !task.done {
+                for k in Set(task.sourceKeys.map { $0.lowercased() }) { counts[k, default: 0] += 1 }
+            }
+            guard let self, !Task.isCancelled else { return }
+            if entries != self.timelineMeetings { self.timelineMeetings = entries }
+            if counts != self.myOpenTasksByKey { self.myOpenTasksByKey = counts }
+        }
+    }
+
+    /// "Mis pendientes (n)" of an Anteriores row: my open tasks citing its meeting (0 = no chip). A meeting page is
+    /// named after its raw file (`wiki/meetings/<raw key>.md`), so one key covers both.
+    func myOpenTaskCount(_ item: PastMeetingItem) -> Int {
+        let path: String?
+        switch item {
+        case .source(let s, _): path = s.rawPath
+        case .page(let e): path = e.pagePath
+        }
+        guard let path else { return 0 }
+        return myOpenTasksByKey[((path as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()] ?? 0
+    }
+
+    /// "Anteriores" (§15.2): the meetings the brain learned, newest first. Recordings come live from the sources (their
+    /// state changes while processing; the timeline's page title is used once learned); meetings only known from the
+    /// vault timeline (`wiki/timeline.md` lines, older imports) come with their page. Works without any calendar.
+    func pastItems(state: AppState, now: Date = Date()) -> [PastMeetingItem] {
+        let entries = timelineMeetings ?? []
+        var titles: [String: String] = [:]
+        for e in entries { if let id = e.sourceId { titles[id] = e.title } }
+        var items = pastMeetings(state: state).map { PastMeetingItem.source($0, title: titles[$0.id]) }
+        items += entries.filter { $0.sourceId == nil && $0.date <= now }.map(PastMeetingItem.page)
+        return items.sorted { ($0.date, $0.id) > ($1.date, $1.id) }
+    }
+
+    /// Anteriores has been read at least once (the loader shows until then, never a premature empty state).
+    var pastLoaded: Bool { timelineMeetings != nil }
+
+    /// The segment last shown in Reuniones: coming back (⌘2, after "Ver resumen") lands where the user was.
+    @ObservationIgnored var lastSegment: MeetingSegment = .today
 
     func phase(of event: CalendarEvent, state: AppState, now: Date) -> MeetingPhase {
         MeetingAgenda.phase(of: event, now: now, recordingEventId: state.recordingEventId,
@@ -291,9 +387,30 @@ final class MeetingsModel {
     private(set) var ruleOfferTarget: MeetingRuleOfferTarget?
 }
 
-/// Where a project chip is shown: the rule offer appears under the chip the user clicked, nowhere else.
+/// Where a project chip is shown: the rule offer appears under the chip the user clicked, nowhere else. Agenda rows
+/// show a read-only chip, so `card` never shows an offer (kept for older call sites).
 enum MeetingChipPlacement: Hashable {
     case card, hero, detail, prep
+}
+
+/// One row of "Anteriores": a recording (live state, actions) or a meeting known only from the vault timeline.
+enum PastMeetingItem: Identifiable, Equatable {
+    case source(SourceRecord, title: String?)
+    case page(TimelineEntry)
+
+    var id: String {
+        switch self {
+        case .source(let s, _): "source:\(s.id)"
+        case .page(let e): e.id
+        }
+    }
+
+    var date: Date {
+        switch self {
+        case .source(let s, _): s.timelineDate
+        case .page(let e): e.date
+        }
+    }
 }
 
 /// Where the §14.3 offer of Reuniones shows: under the chip of this event that the user used.

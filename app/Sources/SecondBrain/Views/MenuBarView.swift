@@ -2,25 +2,21 @@ import AppKit
 import BrainCore
 import SwiftUI
 
+/// The menu bar panel (CONTRACT §15.2): brand header, the same `RecordControl` as the sidebar, "Detalles ▸"
+/// (project, format, title; opened by itself while recording), "Pegar correo…", Abrir · Salir.
 struct MenuBarView: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
+    @ViewState private var detailsOpen = false
 
     var body: some View {
         @Bindable var state = state
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Image(systemName: "brain").foregroundStyle(Color.accentColor)
-                Text("SecondBrain").font(.headline)
-                Spacer()
-                if state.config.hotkeyEnabled {
-                    Text("⌥⌘R").font(.caption.monospaced()).foregroundStyle(.secondary)
-                }
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            BrandLogo(size: 18)
+                .help(state.config.hotkeyEnabled ? L("record.hotkeyHint") : "")
 
             if state.config.onboardingComplete {
-                MeetingBanner(inMenuBar: true)   // MARK: v0.3 meetings
-                RecordButton()
+                RecordControl(placement: .menuBar)
 
                 if state.isRecording {
                     VStack(spacing: 6) {
@@ -31,61 +27,110 @@ struct MenuBarView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Picker(L("menu.project"), selection: $state.recordingProjectSlug) {
-                        Text(L("inbox.title")).tag(String?.none)
-                        Divider()
-                        ForEach(state.projects) { project in
-                            Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
+                DisclosureGroup(isExpanded: $detailsOpen) {
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow {
+                            fieldLabel(L("menu.project"))
+                            Picker(L("menu.project"), selection: $state.recordingProjectSlug) {
+                                Text(L("inbox.title")).tag(String?.none)
+                                Divider()
+                                ForEach(state.projects) { project in
+                                    Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
+                                }
+                            }
+                            .labelsHidden()
+                        }
+                        GridRow {
+                            fieldLabel(L("tpl.pickerShort"))
+                            TemplatePicker(scope: .meeting, selection: $state.recordingTemplateId,
+                                           projectSlug: state.recordingProjectSlug, label: L("tpl.pickerShort"))
+                                .labelsHidden()
+                        }
+                        GridRow {
+                            fieldLabel(L("menu.titleLabel"))
+                            TextField(L("menu.titlePlaceholder"), text: $state.recordingTitle)
+                                .textFieldStyle(.roundedBorder)
                         }
                     }
-                    TemplatePicker(scope: .meeting, selection: $state.recordingTemplateId,
-                                   projectSlug: state.recordingProjectSlug, label: L("tpl.pickerShort"))
-                    TextField(L("menu.titlePlaceholder"), text: $state.recordingTitle)
-                        .textFieldStyle(.roundedBorder)
-                }
-
-                if let warning = state.recorderWarning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                }
-                if let error = state.recordingError {
-                    HStack(alignment: .top, spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                        Text(error).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(L("menu.details"))
+                            .font(Brand.callout)
+                            .foregroundStyle(Brand.color.text)
+                            .lineLimit(1)
+                        // Folded, it still says where the next recording goes (no hidden destination).
+                        if !detailsOpen, let destination {
+                            Text(verbatim: "→ " + destination)
+                                .font(Brand.caption)
+                                .foregroundStyle(Brand.color.text2)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        Spacer(minLength: 0)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(Brand.motion.fast) { detailsOpen.toggle() } }
                 }
 
                 QueueStatusLine()
             } else {
-                Text(L("menu.finishSetup")).font(.callout).foregroundStyle(.secondary)
+                Text(L("menu.finishSetup"))
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Divider()
+            Rectangle().fill(Brand.color.line).frame(height: 1)
 
             if state.config.onboardingComplete {
                 Button {
-                    openWindow(id: "main")
-                    NSApp.activate(ignoringOtherApps: true)
-                    state.requestEmail(projectSlug: state.recordingProjectSlug)
+                    openMain()
+                    state.requestEmail()
                 } label: {
-                    Label(L("email.pasteMenu"), systemImage: "envelope.badge")
+                    Label(L("email.pasteMenu"), systemImage: "envelope")
+                        .foregroundStyle(Brand.color.text)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
             }
 
             HStack {
-                Button(L("menu.open")) {
-                    openWindow(id: "main")
-                    NSApp.activate(ignoringOtherApps: true)
-                }
+                Button(L("menu.open"), action: openMain)
                 Spacer()
                 Button(L("menu.quit")) { NSApp.terminate(nil) }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .foregroundStyle(Brand.color.accent)
         }
+        .font(Brand.body)
         .padding(16)
-        .frame(width: 310)
+        .frame(width: 320)
+        .background(Brand.color.bg)
+        .onAppear { if state.isRecording { detailsOpen = true } }
+        .onChange(of: state.isRecording) { _, recording in
+            if recording { detailsOpen = true }
+        }
+    }
+
+    /// "🚀 Atlas" (and the format, when one is chosen) for the folded "Detalles".
+    private var destination: String? {
+        var parts: [String] = []
+        if let slug = state.recordingProjectSlug, state.project(slug) != nil { parts.append(state.projectName(slug)) }
+        if let template = state.template(state.recordingTemplateId) { parts.append(template.name) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(Brand.caption)
+            .foregroundStyle(Brand.color.text2)
+            .lineLimit(1)
+            .gridColumnAlignment(.trailing)
+    }
+
+    private func openMain() {
+        openWindow(id: "main")
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -97,15 +142,19 @@ struct LevelMeter: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text2)
                 .frame(width: 16)
-            Text(label).font(.caption).foregroundStyle(.secondary).frame(width: 82, alignment: .leading)
+            Text(label)
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text2)
+                .lineLimit(1)
+                .frame(width: 82, alignment: .leading)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.primary.opacity(0.08))
+                    Capsule().fill(Brand.color.cardAlt)
                     Capsule()
-                        .fill(LinearGradient(colors: [.green, .green, .yellow], startPoint: .leading, endPoint: .trailing))
+                        .fill(Brand.color.sage)
                         .frame(width: max(4, geo.size.width * CGFloat(min(max(level, 0), 1))))
                         .animation(.linear(duration: 0.1), value: level)
                 }

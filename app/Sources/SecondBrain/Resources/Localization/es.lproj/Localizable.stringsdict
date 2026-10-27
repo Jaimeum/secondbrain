@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Plural forms for counted nouns (CONTRACT §15.4). Every key here must always be called with its count. -->
+<plist version="1.0">
+<dict>
+	<key>activity.pagesChanged</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld página cambiada</string>
+			<key>many</key>
+			<string>%ld páginas cambiadas</string>
+			<key>other</key>
+			<string>%ld páginas cambiadas</string>
+		</dict>
+	</dict>
+	<key>activity.undoMessage</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>La página volverá a como estaba antes.</string>
+			<key>many</key>
+			<string>Las %ld páginas volverán a como estaban antes.</string>
+			<key>other</key>
+			<string>Las %ld páginas volverán a como estaban antes.</string>
+		</dict>
+	</dict>
+	<key>notify.lintBody</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Ordené %ld página.</string>
+			<key>many</key>
+			<string>Ordené %ld páginas.</string>
+			<key>other</key>
+			<string>Ordené %ld páginas.</string>
+		</dict>
+	</dict>
+	<key>date.inDays</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>en %ld día</string>
+			<key>many</key>
+			<string>en %ld días</string>
+			<key>other</key>
+			<string>en %ld días</string>
+		</dict>
+	</dict>
+	<key>date.daysAgo</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>hace %ld día</string>
+			<key>many</key>
+			<string>hace %ld días</string>
+			<key>other</key>
+			<string>hace %ld días</string>
+		</dict>
+	</dict>
+	<key>tasks.count</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld pendiente</string>
+			<key>many</key>
+			<string>%ld pendientes</string>
+			<key>other</key>
+			<string>%ld pendientes</string>
+		</dict>
+	</dict>
+	<key>mytasks.overdueHelp</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld vencido</string>
+			<key>many</key>
+			<string>%ld vencidos</string>
+			<key>other</key>
+			<string>%ld vencidos</string>
+		</dict>
+	</dict>
+	<key>email.messages</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld correo</string>
+			<key>many</key>
+			<string>%ld correos</string>
+			<key>other</key>
+			<string>%ld correos</string>
+		</dict>
+	</dict>
+	<key>tpl.defaultIn</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Por defecto en %ld proyecto</string>
+			<key>many</key>
+			<string>Por defecto en %ld proyectos</string>
+			<key>other</key>
+			<string>Por defecto en %ld proyectos</string>
+		</dict>
+	</dict>
+	<key>mail.hiddenUnknown</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d más de alguien que aún no conozco</string>
+			<key>many</key>
+			<string>%d más de personas que aún no conozco</string>
+			<key>other</key>
+			<string>%d más de personas que aún no conozco</string>
+		</dict>
+	</dict>
+	<key>mail.conversation</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Hilo · %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d correo</string>
+			<key>many</key>
+			<string>%d correos</string>
+			<key>other</key>
+			<string>%d correos</string>
+		</dict>
+	</dict>
+	<key>github.problem.many</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%@ (y %#@n@)</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld problema más</string>
+			<key>many</key>
+			<string>%ld problemas más</string>
+			<key>other</key>
+			<string>%ld problemas más</string>
+		</dict>
+	</dict>
+	<key>rules.hits.other</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d vez</string>
+			<key>many</key>
+			<string>%d veces</string>
+			<key>other</key>
+			<string>%d veces</string>
+		</dict>
+	</dict>
+	<key>rules.editor.mails.other</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d correo</string>
+			<key>many</key>
+			<string>%d correos</string>
+			<key>other</key>
+			<string>%d correos</string>
+		</dict>
+	</dict>
+	<key>rules.editor.events.other</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d reunión</string>
+			<key>many</key>
+			<string>%d reuniones</string>
+			<key>other</key>
+			<string>%d reuniones</string>
+		</dict>
+	</dict>
+	<key>timeline.someKinds</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld tipo</string>
+			<key>many</key>
+			<string>%ld tipos</string>
+			<key>other</key>
+			<string>%ld tipos</string>
+		</dict>
+	</dict>
+	<key>mail.saveRestOfThread</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Guardar el otro correo del hilo</string>
+			<key>many</key>
+			<string>Guardar el resto del hilo (%ld)</string>
+			<key>other</key>
+			<string>Guardar el resto del hilo (%ld)</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

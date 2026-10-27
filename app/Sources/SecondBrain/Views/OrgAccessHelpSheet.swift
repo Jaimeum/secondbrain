@@ -2,18 +2,17 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// "¿Cómo lo habilito?" (CONTRACT §12.3, §12.7): tabs Microsoft / Google with (A) a message ready to send the admin
-/// (Copiar · Pedírselo a TI), (B) the admin's exact steps and (C) folded "Soy técnico: usar mi propio registro".
-/// Without a client id, (A) says the app isn't registered yet, (B) is skipped and the technical section takes its letter
-/// and opens by default. `provider == nil` opens on
-/// Microsoft.
+/// "¿Cómo lo habilito?" (CONTRACT §12.3, §12.7): tabs Microsoft / Google with "Para ti" (a message ready to send the
+/// admin: Copiar · Pedírselo a TI), "Para tu administrador" (the exact steps) and, folded by default, "Usar mi propio
+/// registro" (technical). Without a client id, "Para ti" says in plain words that it isn't available in this version
+/// yet and the admin steps are skipped. `provider == nil` opens on Microsoft.
 struct OrgAccessHelpSheet: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
     let provider: AccountProvider?
     @ViewState private var tab: AccountProvider
     @ViewState private var copied: String?
-    @ViewState private var technicalOpen: Bool?
+    @ViewState private var technicalOpen = false
 
     init(provider: AccountProvider?) {
         self.provider = provider
@@ -24,9 +23,11 @@ struct OrgAccessHelpSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L("orghelp.title")).font(.title2.weight(.semibold))
-                Text(L("orghelp.subtitle")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("orghelp.title")).font(Brand.title).foregroundStyle(Brand.color.text)
+                Text(L("orghelp.subtitle"))
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
                 Picker("", selection: $tab) {
                     Text(AccountProvider.microsoft.displayName).tag(AccountProvider.microsoft)
                     Text(AccountProvider.google.displayName).tag(AccountProvider.google)
@@ -34,15 +35,15 @@ struct OrgAccessHelpSheet: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .padding(.top, 2)
+                .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 24)
             .padding(.top, 22)
             .padding(.bottom, 14)
-            Divider()
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 24) {
                     forYou
                     if let clientId { forAdmin(clientId) }
                     technical
@@ -50,66 +51,71 @@ struct OrgAccessHelpSheet: View {
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Divider()
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             HStack {
                 if let copied {
-                    Label(copied, systemImage: "checkmark").foregroundStyle(.green).font(.callout)
+                    Label(copied, systemImage: "checkmark").foregroundStyle(Brand.color.success).font(Brand.caption)
                 }
                 Spacer()
-                Button(L("common.close")) { dismiss() }.keyboardShortcut(.defaultAction)
+                Button(L("common.close")) { dismiss() }
+                    .buttonStyle(.brandPrimary)
+                    .keyboardShortcut(.defaultAction)
             }
             .padding(12)
         }
-        .frame(width: 620, height: 520)
+        .frame(minWidth: 560, idealWidth: 620, minHeight: 400, idealHeight: 520)
+        .background(Brand.color.surface)
         .onChange(of: tab) { copied = nil }
     }
 
-    // MARK: (A) For you
+    // MARK: For you
 
     @ViewBuilder private var forYou: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(letter: "A", title: L("orghelp.forYou"))
+            SectionTitle(title: L("orghelp.forYou"))
             if let clientId {
-                Text(L(tab == .microsoft ? "orghelp.ms.forYou.hint" : "orghelp.g.forYou.hint")).foregroundStyle(.secondary)
-                Text(OrgHelpText.message(provider: tab, clientId: clientId))
-                    .font(.callout)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
-                HStack(spacing: 10) {
+                Text(L(tab == .microsoft ? "orghelp.ms.forYou.hint" : "orghelp.g.forYou.hint"))
+                    .foregroundStyle(Brand.color.text2)
+                BrandCard {
+                    Text(OrgHelpText.message(provider: tab, clientId: clientId))
+                        .foregroundStyle(Brand.color.text)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
                     Button {
                         copy(OrgHelpText.message(provider: tab, clientId: clientId))
                     } label: {
                         Label(L("orghelp.copy"), systemImage: "doc.on.doc")
                     }
+                    .buttonStyle(.brandSecondary)
                     Button {
                         OrgHelpText.openMailDraft(provider: tab, clientId: clientId)
                     } label: {
                         Label(L("accounts.blocked.askIT"), systemImage: "envelope")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.brandPrimary)
                 }
             } else {
-                Label {
-                    Text(L("orghelp.notRegistered", tab.displayName)).fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "key.horizontal").foregroundStyle(.orange)
+                // Plain language: what it means for the user and what to do meanwhile (no credentials talk).
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "clock").foregroundStyle(Brand.color.warning)
+                    Text(L("orghelp.notRegistered.plain", tab.displayName))
+                        .foregroundStyle(Brand.color.text)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                .background(Brand.color.warningSoft, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
             }
         }
     }
 
-    // MARK: (B) For your admin
+    // MARK: For your admin
 
     private func forAdmin(_ clientId: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(letter: "B", title: L("orghelp.forAdmin"))
+            SectionTitle(title: L("orghelp.forAdmin"))
             NumberedSteps(steps: OrgHelpText.adminSteps(provider: tab, clientId: clientId))
             if tab == .microsoft {
                 Button {
@@ -117,23 +123,37 @@ struct OrgAccessHelpSheet: View {
                 } label: {
                     Label(L("orghelp.copyConsentLink"), systemImage: "link")
                 }
-                .padding(.leading, 30)
+                .buttonStyle(.brandSecondary)
+                .padding(.leading, NumberedSteps.indent)
             }
         }
     }
 
-    // MARK: (C) Technical
+    // MARK: Technical (folded)
 
     private var technical: some View {
-        DisclosureGroup(isExpanded: Binding(get: { technicalOpen ?? (clientId == nil) }, set: { technicalOpen = $0 })) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            // A plain button header (not a DisclosureGroup) so the title lines up with the other sections.
+            Button {
+                withAnimation(Brand.motion.animation(fast: true)) { technicalOpen.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    SectionTitle(title: L("orghelp.technical"))
+                    Image(systemName: "chevron.right")
+                        .font(Brand.font(10, .semibold))
+                        .foregroundStyle(Brand.color.text2)
+                        .rotationEffect(.degrees(technicalOpen ? 90 : 0))
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if technicalOpen {
                 NumberedSteps(steps: OrgHelpText.ownSteps(provider: tab))
-                Text(L("orghelp.own.paste")).font(.callout).foregroundStyle(.secondary)
+                Text(L("orghelp.own.paste"))
+                    .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, 10)
-        } label: {
-            SectionTitle(letter: clientId == nil ? "B" : "C", title: L("orghelp.technical"))
         }
     }
 
@@ -145,24 +165,21 @@ struct OrgAccessHelpSheet: View {
 }
 
 private struct SectionTitle: View {
-    let letter: String
     let title: String
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(letter)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 20, height: 20)
-                .background(Color.accentColor, in: Circle())
-            Text(title).font(.headline)
-        }
+        Text(title)
+            .font(Brand.section)
+            .foregroundStyle(Brand.color.text)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
 // MARK: v0.4 github — also GitHubOrgHelpSheet
 struct NumberedSteps: View {
     let steps: [String]
+    /// Leading space of the step text (the number column), for buttons that belong to the steps.
+    static let indent: CGFloat = 30
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -170,13 +187,13 @@ struct NumberedSteps: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("\(index + 1).")
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Brand.color.text3)
                         .frame(width: 22, alignment: .trailing)
                     Text(step)
+                        .foregroundStyle(Brand.color.text)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.callout)
             }
         }
     }

@@ -81,69 +81,76 @@ final class ClaudeConnectModel {
     }
 }
 
-/// Detect → install → connect account → verify. Used by onboarding and by Settings ("Reconectar Claude").
+/// Detect → install → connect account → verify. Used by onboarding and by Ajustes ("Reconectar Claude").
 struct ClaudeConnectView: View {
     @Environment(AppState.self) private var state
     @ViewState private var model = ClaudeConnectModel()
+    @ViewState private var showInstallLog = false
+    @ViewState private var showTrouble = false
+    /// The raw `claude setup-token` terminal, folded behind "Ver detalles" (it keeps running hidden, so the token is
+    /// still captured). Opens by itself only when the CLI stops without handing over a token.
+    @ViewState private var showTerminalDetails = false
     var autoVerify = true
+    /// Reports whether Claude is connected (the reconnect sheet makes "Listo" primary only then).
+    var onConnectedChange: ((Bool) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             switch model.install {
             case .checking:
-                HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
-                    Text(L("claude.looking"))
-                }
-            case .missing, .failed:
-                installCard
-            case .installing:
+                BrandLoader(size: 20, text: L("claude.looking"))
+            case .missing, .failed, .installing:
                 installCard
             case .installed:
                 connectSection
             }
         }
         .onAppear { if model.install == .checking { model.locate(config: state.config, autoVerify: autoVerify) } }
+        .onChange(of: model.auth) { onConnectedChange?(model.auth == .connected) }
     }
 
     private var installCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L("claude.missingTitle")).font(.title3.weight(.semibold))
-            Text(L("claude.missingMessage")).foregroundStyle(.secondary)
+            Text(L("claude.missingTitle")).font(Brand.section).foregroundStyle(Brand.color.text)
+            Text(L("claude.missingMessage")).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
             if model.install == .failed {
-                Label(L("claude.installFailed"), systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                Label(L("claude.installFailed"), systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Brand.color.warning)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            HStack {
+            HStack(spacing: 10) {
                 Button {
                     model.runInstall(state: state)
                 } label: {
                     Label(model.install == .installing ? L("claude.installing") : L("claude.install"),
                           systemImage: "arrow.down.circle")
-                        .padding(.horizontal, 8)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.brandPrimary)
                 .controlSize(.large)
                 .disabled(model.install == .installing)
-                if model.install == .installing { ProgressView().controlSize(.small) }
+                if model.install == .installing { BrandLoader(size: 18) }
                 Spacer()
                 Button(L("claude.checkAgain")) { model.locate(config: state.config, autoVerify: autoVerify) }
-                    .buttonStyle(.link)
+                    .buttonStyle(.settingsLink)
             }
             if !model.installLog.isEmpty {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        Text(model.installLog)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .id("log")
+                // The raw installer output is for whoever wants it: folded.
+                Disclosure(title: L("claude.details"), isOpen: $showInstallLog) {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            Text(model.installLog)
+                                .font(Brand.font(11).monospaced())
+                                .foregroundStyle(Brand.color.text2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                                .id("log")
+                        }
+                        .frame(height: 120)
+                        .padding(8)
+                        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                        .onChange(of: model.installLog) { proxy.scrollTo("log", anchor: .bottom) }
                     }
-                    .frame(height: 120)
-                    .padding(8)
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-                    .onChange(of: model.installLog) { proxy.scrollTo("log", anchor: .bottom) }
                 }
             }
         }
@@ -152,26 +159,25 @@ struct ClaudeConnectView: View {
     @ViewBuilder private var connectSection: some View {
         switch model.auth {
         case .connected:
-            HStack(spacing: 16) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 54))
-                    .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: model.auth)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L("claude.connectedTitle")).font(.title2.weight(.semibold))
-                    Text(L("claude.connectedMessage")).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.circle")
+                    .font(Brand.font(22, .medium))
+                    .foregroundStyle(Brand.color.success)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("claude.connectedTitle")).font(Brand.section).foregroundStyle(Brand.color.text)
+                    Text(L("claude.connectedMessage")).foregroundStyle(Brand.color.text2)
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 6)
         case .verifying:
             HStack(spacing: 12) {
-                ProgressView()
+                BrandLoader(size: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(L("claude.verifying")).font(.headline)
-                    Text(L("claude.verifyingHint")).font(.callout).foregroundStyle(.secondary)
+                    Text(L("claude.verifying")).font(Brand.callout).foregroundStyle(Brand.color.text)
+                    Text(L("claude.verifyingHint")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 6)
         case .unknown, .failed:
             connectOptions
         }
@@ -179,78 +185,158 @@ struct ClaudeConnectView: View {
 
     private var connectOptions: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label(L("claude.found"), systemImage: "checkmark.circle").foregroundStyle(.green)
+            Label(L("claude.found"), systemImage: "checkmark.circle").foregroundStyle(Brand.color.success)
             if model.auth == .failed {
-                Label(L("claude.verifyFailed"), systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                Label(L("claude.verifyFailed"), systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Brand.color.warning)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text(L("claude.connectTitle")).font(.title3.weight(.semibold))
-            Text(L("claude.connectMessage")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(L("claude.connectTitle")).font(Brand.section).foregroundStyle(Brand.color.text)
+            Text(L("claude.connectMessage")).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
 
             if model.showTerminal, let url = model.claudeURL {
-                ClaudeTerminalView(executable: url,
-                                   onToken: { model.received(token: $0, config: state.config) },
-                                   onExit: { _ in })
-                    .id(model.terminalRun)
-                    .frame(height: 240)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
-                HStack {
-                    Text(L("claude.terminalHint")).font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button(L("claude.restartTerminal")) { model.terminalRun += 1 }.buttonStyle(.link)
-                }
+                waitingForBrowser(url)
             } else {
                 Button {
                     model.terminalRun += 1
+                    showTerminalDetails = false
                     model.showTerminal = true
                 } label: {
                     Label(L("claude.connect"), systemImage: "person.badge.key")
-                        .padding(.horizontal, 8)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.brandPrimary)
                 .controlSize(.large)
             }
 
-            HStack(spacing: 12) {
-                Button(L("claude.alreadyLoggedIn")) { model.verify(config: state.config) }
-                Spacer()
-            }
-
-            DisclosureGroup(L("claude.pasteTitle")) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        SecureField("sk-ant-oat…", text: $model.pastedToken)
+            // The other ways in (already signed in, a pasted code) folded together.
+            Disclosure(title: L("claude.trouble"), isOpen: $showTrouble) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button(L("claude.alreadyLoggedIn")) { model.verify(config: state.config) }
+                        .buttonStyle(.brandSecondary)
+                    Text(L("claude.pasteTitle")).font(Brand.caption).foregroundStyle(Brand.color.text2)
+                    HStack(spacing: 8) {
+                        SecureField(text: $model.pastedToken) { Text(verbatim: "sk-ant-oat…") }
                             .textFieldStyle(.roundedBorder)
                             .onSubmit { model.submitPasted(config: state.config) }
                         Button(L("claude.pasteSave")) { model.submitPasted(config: state.config) }
+                            .buttonStyle(.brandSecondary)
                             .disabled(model.pastedToken.isEmpty)
                     }
                     if let error = model.pasteError {
-                        Text(error).font(.caption).foregroundStyle(.red)
+                        Text(error).font(Brand.caption).foregroundStyle(Brand.color.danger)
                     }
                 }
-                .padding(.top, 6)
             }
-            .font(.callout)
         }
     }
 }
 
-struct ReconnectClaudeSheet: View {
-    @Environment(\.dismiss) private var dismiss
+extension ClaudeConnectView {
+    /// After "Conectar con Claude": a calm waiting line; the terminal stays mounted (it reads the token) but only shows
+    /// under "Ver detalles".
+    fileprivate func waitingForBrowser(_ url: URL) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                BrandLoader(size: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("claude.waitingBrowser")).font(Brand.callout).foregroundStyle(Brand.color.text)
+                    Text(L("claude.waitingBrowserHint"))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Disclosure(title: L("claude.details"), isOpen: $showTerminalDetails) { EmptyView() }
+                .padding(.top, 12)
+            ClaudeTerminalView(executable: url,
+                               onToken: { model.received(token: $0, config: state.config) },
+                               onExit: { code in
+                                   // Stopped without a token: show what the CLI said.
+                                   if model.auth != .verifying && model.auth != .connected { showTerminalDetails = true }
+                                   _ = code
+                               })
+                .id(model.terminalRun)
+                .frame(height: 220)
+                .clipShape(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                .opacity(showTerminalDetails ? 1 : 0)
+                .frame(height: showTerminalDetails ? 220 : 0, alignment: .top)
+                .allowsHitTesting(showTerminalDetails)
+                .accessibilityHidden(!showTerminalDetails)
+                .padding(.top, showTerminalDetails ? 10 : 0)
+            if showTerminalDetails {
+                HStack {
+                    Text(L("claude.terminalHint")).font(Brand.caption).foregroundStyle(Brand.color.text2)
+                    Spacer()
+                    Button(L("claude.restartTerminal")) { model.terminalRun += 1 }
+                        .buttonStyle(.settingsLink)
+                        .font(Brand.caption)
+                }
+                .padding(.top, 8)
+            }
+        }
+    }
+}
+
+/// A folded section with a plain header (title + rotating chevron) that lines up with the text around it.
+private struct Disclosure<Content: View>: View {
+    let title: String
+    @Binding var isOpen: Bool
+    @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(L("claude.reconnectTitle")).font(.title2.weight(.semibold))
-                Spacer()
-                Button(L("common.done")) { dismiss() }.keyboardShortcut(.defaultAction)
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(Brand.motion.animation(fast: true)) { isOpen.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(Brand.font(10, .semibold))
+                        .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    Text(title)
+                }
+                .foregroundStyle(Brand.color.text2)
+                .contentShape(Rectangle())
             }
-            ClaudeConnectView(autoVerify: false)
+            .buttonStyle(.plain)
+            if isOpen { content }
         }
-        .padding(24)
-        .frame(width: 640)
-        .frame(minHeight: 360)
+    }
+}
+
+/// "Reconectar Claude" (Ajustes → Cuentas, Preguntar, Preparar): the same flow in a sheet, "Listo" bottom-right like
+/// every other sheet.
+struct ReconnectClaudeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    /// "Listo" is the primary action (and Return) only once Claude is connected; before that "Conectar con Claude" is.
+    @ViewState private var connected = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(L("claude.reconnectTitle")).font(Brand.title).foregroundStyle(Brand.color.text)
+                    ClaudeConnectView(autoVerify: false, onConnectedChange: { connected = $0 })
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            HStack {
+                Spacer()
+                if connected {
+                    Button(L("common.done")) { dismiss() }
+                        .buttonStyle(.brandPrimary)
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    Button(L("common.done")) { dismiss() }
+                        .buttonStyle(.brandSecondary)
+                        .keyboardShortcut(.cancelAction)
+                }
+            }
+            .padding(12)
+        }
+        .frame(minWidth: 560, idealWidth: 640, minHeight: 360, idealHeight: 520)
+        .background(Brand.color.surface)
     }
 }

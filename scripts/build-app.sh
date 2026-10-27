@@ -15,6 +15,7 @@ SCRIPTS="$ROOT/scripts"
 PKG="$ROOT/app"
 VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 APP_NAME="SecondBrain"
+DISPLAY_NAME="secondbrain"   # CONTRACT §15.1: the brand is lowercase; executable and .app keep APP_NAME
 BUNDLE_ID="app.secondbrain.mac"
 APP="$ROOT/build/$APP_NAME.app"
 DEV_IDENTITY="SecondBrain Dev"
@@ -81,21 +82,12 @@ if (( ${#FRAMEWORKS[@]} )); then
 fi
 
 ICON_CACHE="$ROOT/build/AppIcon.icns"
-if [[ ! -f "$ICON_CACHE" || "$SCRIPTS/make-icon.swift" -nt "$ICON_CACHE" ]]; then
+ICONSET="$SCRIPTS/icon/secondbrain.iconset"
+# Brand icon (docs/brand/01_icons): rebuilt when any image in the iconset is newer than the cached .icns.
+if [[ -d "$ICONSET" && ( ! -f "$ICON_CACHE" || -n "$(find "$ICONSET" -newer "$ICON_CACHE" -print -quit)" ) ]]; then
     step "Generando icono"
-    ICONSET="$(mktemp -d "${TMPDIR:-/tmp}/sb-icon.XXXXXX")/AppIcon.iconset"
-    mkdir -p "$ICONSET"
-    if swift "$SCRIPTS/make-icon.swift" "$ICONSET/base.png" >/dev/null 2>&1; then
-        for s in 16 32 128 256 512; do
-            sips -z $s $s "$ICONSET/base.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
-            sips -z $((s * 2)) $((s * 2)) "$ICONSET/base.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
-        done
-        rm "$ICONSET/base.png"
-        iconutil -c icns "$ICONSET" -o "$ICON_CACHE"
-    else
-        echo "   (no se pudo generar el icono; se usa el genérico)"
-    fi
-    rm -rf "$(dirname "$ICONSET")"
+    mkdir -p "$(dirname "$ICON_CACHE")"
+    iconutil -c icns "$ICONSET" -o "$ICON_CACHE" || echo "   (no se pudo generar el icono; se usa el genérico)"
 fi
 [[ -f "$ICON_CACHE" ]] && cp "$ICON_CACHE" "$APP/Contents/Resources/AppIcon.icns"
 
@@ -157,8 +149,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<key>CFBundleLocalizations</key><array><string>es</string><string>en</string></array>
 	<key>CFBundleExecutable</key><string>$APP_NAME</string>
 	<key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
-	<key>CFBundleName</key><string>$APP_NAME</string>
-	<key>CFBundleDisplayName</key><string>$APP_NAME</string>
+	<key>CFBundleName</key><string>$DISPLAY_NAME</string>
+	<key>CFBundleDisplayName</key><string>$DISPLAY_NAME</string>
 	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>$VERSION</string>

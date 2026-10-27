@@ -46,6 +46,9 @@ struct SettingsView: View {
 
             AccountsSection()
 
+            // MARK: v0.4 github
+            GitHubSection()
+
             Section(L("settings.storage")) {
                 LabeledContent(L("settings.vault")) {
                     HStack {

@@ -70,17 +70,31 @@ struct ClaudeTerminalView: NSViewRepresentable {
         weak var view: LocalProcessTerminalView?
         private(set) var exited = false
         private var deliveredToken: String?
+        /// The token seen on the last scan: output arrives in chunks, so a token is only handed over once it has
+        /// stayed the same for `settleDelay` (or the CLI exited) — never the first half of one still being printed.
+        private var pendingToken: String?
+        private var settleScan: DispatchWorkItem?
+        static let settleDelay: TimeInterval = 0.6
 
         init(parent: ClaudeTerminalView) { self.parent = parent }
 
-        func scan() {
+        func scan(settled: Bool = false) {
             guard let view, deliveredToken == nil else { return }
             let text = String(decoding: view.getBufferAsData(), as: UTF8.self)
-            guard text.contains("sk-ant-") else { return }
-            if let token = Self.findToken(in: text, columns: view.terminalDimensions.cols) {
+            guard text.contains("sk-ant-"),
+                  let token = Self.findToken(in: text, columns: view.terminalDimensions.cols) else { return }
+            if exited || (settled && token == pendingToken) {
+                settleScan?.cancel()
                 deliveredToken = token
                 parent.onToken(token)
+                return
             }
+            guard token != pendingToken else { return }
+            pendingToken = token
+            settleScan?.cancel()
+            let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.scan(settled: true) } }
+            settleScan = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.settleDelay, execute: work)
         }
 
         /// The terminal wraps long lines, so a ~100 char token can span rows. Rows that fill the full

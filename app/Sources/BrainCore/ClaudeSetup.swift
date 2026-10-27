@@ -53,18 +53,34 @@ public enum ClaudeSetup {
         return url
     }
 
-    /// True when a tiny `claude -p` call succeeds (90 s timeout).
+    /// True when a tiny `claude -p` call succeeds (90 s timeout). If the Keychain token is rejected (401) but the
+    /// CLI's own login works, the bad token is removed so it stops shadowing that login.
     public static func checkAuth(config: AppConfig) async -> Bool {
         guard let binary = locate(config: config) else { return false }
         return await Task.detached {
-            let result = runSync(binary.path, ["-p", "Responde solo: ok", "--model", "haiku", "--output-format", "json",
-                                               "--tools", "", "--strict-mcp-config"],
-                                 timeout: 90, cwd: FileManager.default.temporaryDirectory)
-            guard result.status == 0,
-                  let line = result.output.components(separatedBy: "\n").last(where: { $0.hasPrefix("{") }),
-                  let obj = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any] else { return false }
-            return (obj["is_error"] as? Bool) == false
+            let env = ClaudeRunner.environment()
+            let first = probe(binary, environment: env)
+            if first == .ok { return true }
+            guard first == .unauthorized, loadToken() != nil,
+                  ProcessInfo.processInfo.environment["CLAUDE_CODE_OAUTH_TOKEN"] == nil else { return false }
+            var withoutToken = env
+            withoutToken.removeValue(forKey: "CLAUDE_CODE_OAUTH_TOKEN")
+            guard probe(binary, environment: withoutToken) == .ok else { return false }
+            deleteToken()
+            return true
         }.value
+    }
+
+    enum ProbeResult { case ok, unauthorized, failed }
+
+    static func probe(_ binary: URL, environment: [String: String]) -> ProbeResult {
+        let result = runSync(binary.path, ["-p", "Responde solo: ok", "--model", "haiku", "--output-format", "json",
+                                           "--tools", "", "--strict-mcp-config"],
+                             timeout: 90, cwd: FileManager.default.temporaryDirectory, environment: environment)
+        guard let line = result.output.components(separatedBy: "\n").last(where: { $0.hasPrefix("{") }),
+              let obj = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any] else { return .failed }
+        if result.status == 0, (obj["is_error"] as? Bool) == false { return .ok }
+        return (obj["api_error_status"] as? Int) == 401 ? .unauthorized : .failed
     }
 
     // MARK: Keychain
@@ -145,11 +161,12 @@ public enum ClaudeSetup {
 
     // MARK: Helpers
 
-    static func runSync(_ path: String, _ args: [String], timeout: TimeInterval, cwd: URL? = nil) -> (status: Int32, output: String) {
+    static func runSync(_ path: String, _ args: [String], timeout: TimeInterval, cwd: URL? = nil,
+                        environment: [String: String]? = nil) -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
-        process.environment = ClaudeRunner.environment()
+        process.environment = environment ?? ClaudeRunner.environment()
         if let cwd { process.currentDirectoryURL = cwd }
         let pipe = Pipe()
         process.standardOutput = pipe

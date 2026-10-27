@@ -23,7 +23,7 @@ enum RulesSnapshots {
             ("meetings-rule", CGSize(width: 1000, height: 640),
              AnyView(SnapshotSetup { addSampleRules(state) } content: { MeetingsView(initialSegment: .week) })),
             ("meetings-rule-offer", CGSize(width: 1000, height: 640),
-             AnyView(SnapshotSetup { offerOnSomeMeeting(state) } content: { MeetingsView(initialSegment: .week) })),
+             AnyView(SnapshotSetup { offerOnSomeMeeting(state) } content: { MeetingsView() })),
             // "Agregar correo" from Sin asignar with a pasted mail a rule covers: the picker names the rule's project.
             ("email-routed", CGSize(width: 820, height: 640),
              AnyView(AddEmailSheet(request: EmailRequest(threadKey: nil, projectSlug: nil), initialText: routedEmailSample(state)))),
@@ -34,7 +34,11 @@ enum RulesSnapshots {
     static func settingsShots(state: AppState) -> [(String, CGSize, AnyView)] {
         var shots: [(String, CGSize, AnyView)] = []
         for tab in SettingsTab.allCases {
-            let view = AnyView(SnapshotSetup { if tab == .rules { addSampleRules(state) } } content: { SettingsView(initialTab: tab) })
+            // A deep-link request left in the defaults (another run, a click in the app) would win over `initialTab`.
+            let view = AnyView(SnapshotSetup {
+                UserDefaults.standard.removeObject(forKey: SettingsTab.requestKey)
+                if tab == .rules { addSampleRules(state) }
+            } content: { SettingsView(initialTab: tab) })
             shots.append(("settings-\(tab.rawValue)", CGSize(width: 820, height: 600), view))
             shots.append(("settings-\(tab.rawValue)-min", CGSize(width: 760, height: 520), view))
         }
@@ -105,16 +109,27 @@ enum RulesSnapshots {
         """
     }
 
-    /// The §14.3 line: a meeting of the week put in a project by hand, as if from its card.
+    /// The §14.3 line: a meeting put in a project by hand from the hero (Hoy), else from a card of Próximas. An earlier
+    /// run's pick is forgotten first, and the project differs from the current one, so the offer always has a reason.
     static func offerOnSomeMeeting(_ state: AppState) {
         addSampleRules(state)
         let model = MeetingsModel.shared
-        let candidates = model.events(in: .week, now: Date()).filter { e in
-            let r = model.resolution(for: e, state: state)
-            return !r.isConfirmed && e.organizer != nil && !model.myEmails.contains(e.organizer?.email ?? "")
+        let now = Date()
+        func offerable(_ e: CalendarEvent) -> Bool {
+            model.resolution(for: e, state: state).rule == nil && e.organizer != nil
+                && !model.myEmails.contains(e.organizer?.email ?? "")
         }
-        guard let event = candidates.first, let slug = state.projects.last?.slug else { return }
-        model.setProject(.project(slug), for: event, state: state, offerAt: .card)
+        func offer(_ e: CalendarEvent, at placement: MeetingChipPlacement) {
+            model.setProject(nil, for: e, state: state)
+            let current = model.resolution(for: e, state: state).recordingProject
+            guard let slug = state.projects.map(\.slug).last(where: { $0 != current }) else { return }
+            model.setProject(.project(slug), for: e, state: state, offerAt: placement)
+        }
+        if let hero = model.hero(now: now)?.event, offerable(hero) {
+            offer(hero, at: .hero)
+        } else if let event = (model.events(in: .today, now: now) + model.events(in: .upcoming, now: now)).first(where: offerable) {
+            offer(event, at: .card)
+        }
     }
 }
 

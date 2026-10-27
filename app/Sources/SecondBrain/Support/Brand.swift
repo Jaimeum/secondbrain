@@ -115,6 +115,8 @@ enum Brand {
     static var caption: Font { font(11) }
     /// Code, paths, ids: SF Mono 12.
     static var mono: Font { .system(size: 12, design: .monospaced) }
+    /// A larger monospaced size (e.g. a device code to type elsewhere).
+    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight, design: .monospaced) }
 
     /// Wordmark tracking: −0.03 em.
     static func wordmarkTracking(_ size: CGFloat) -> CGFloat { -0.03 * size }

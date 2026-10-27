@@ -443,7 +443,7 @@ struct GitHubConnectSheet: View {
             // Click the code to copy it.
             Button { copy(code.userCode) } label: {
                 Text(code.userCode)
-                    .font(.system(size: 36, weight: .semibold, design: .monospaced))
+                    .font(Brand.mono(36, .semibold))
                     .tracking(4)
                     .foregroundStyle(Brand.color.text)
                     .padding(.horizontal, 22)

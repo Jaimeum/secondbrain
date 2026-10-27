@@ -63,10 +63,7 @@ enum DebugSnapshots {
                    .events(from: Date().addingTimeInterval(-3600), to: Date().addingTimeInterval(7 * 86_400)).first {
                 shots.append(("prep", CGSize(width: 760, height: 640), AnyView(MeetingPrepView(event: event))))
             }
-            // MARK: v0.5 shell — Ajustes on each tab (SettingsView reads "settings.selectedTab" when it appears).
-            for tab in ["general", "accounts", "github", "rules", "formats", "advanced"] {
-                shots.append(("settings-\(tab)", CGSize(width: 820, height: 600), AnyView(SettingsTabSnapshot(tab: tab))))
-            }
+            // Ajustes on each tab: RulesSnapshots.settingsShots (settings-<tab>, settings-<tab>-min).
             shots.append(("orghelp", CGSize(width: 620, height: 520), AnyView(OrgAccessHelpSheet(provider: .microsoft))))
             // MARK: v0.3 accounts — the connect sheet's trust step and the organization-block fork
             shots.append(("trust", CGSize(width: 460, height: 470),
@@ -289,16 +286,5 @@ enum DebugSnapshots {
         host.cacheDisplay(in: host.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
         window.contentView = nil
-    }
-}
-
-/// Opens Ajustes on one tab for a snapshot: writes the deep-link key right before SettingsView appears (the shots are
-/// built up front and rendered one by one, so it can't be set when the list is made).
-private struct SettingsTabSnapshot: View {
-    let tab: String
-
-    var body: some View {
-        UserDefaults.standard.set(tab, forKey: SettingsLinkOpener.tabKey)
-        return SettingsView()
     }
 }

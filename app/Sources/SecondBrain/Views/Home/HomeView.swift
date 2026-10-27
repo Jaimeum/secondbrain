@@ -38,10 +38,10 @@ struct HomeView: View {
     private var isEmptyVault: Bool { previewEmpty || state.engine.sources.isEmpty }
     private var oneColumn: Bool { width < Self.oneColumnBelow }
 
-    /// Sin asignar and failed sources, newest first.
+    /// Sin asignar and failed sources, newest first; one row per email thread (as Sin asignar shows them).
     private var toSort: [SourceRecord] {
-        state.engine.sources
-            .filter { $0.status == .needsProject || $0.status == .failed }
+        InboxView.onePerThread(state.engine.sources
+            .filter { $0.status == .needsProject || $0.status == .failed })
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
@@ -174,17 +174,12 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(items.prefix(3).enumerated()), id: \.element.id) { offset, source in
                         if offset > 0 { HomeDivider() }
-                        Group {
-                            if source.status == .needsProject {
-                                HomeSortRow(source: source, onError: { error = $0 }, onAssigned: { subject, slug in
-                                    ruleOffer.propose(subject, projectSlug: slug, state: state)
-                                })
-                            } else {
-                                HomeFailedRow(source: source, onError: { error = $0 })
-                            }
-                        }
+                        // The same row as Sin asignar (suggestion · Asignar · Otro ▾, or Reintentar · Eliminar).
+                        InboxRow(source: source, onError: { error = $0 }, onAssigned: { subject, slug in
+                            ruleOffer.propose(subject, projectSlug: slug, state: state)
+                        }, showsCard: false)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 2)
                     }
                 }
             }

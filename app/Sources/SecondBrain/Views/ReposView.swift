@@ -218,8 +218,7 @@ struct ReposView: View {
 
     /// Ajustes › GitHub (the `settings.selectedTab` deep link, CONTRACT §15.2).
     private func openGitHubSettings() {
-        UserDefaults.standard.set("github", forKey: "settings.selectedTab")
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        SettingsTab.open(.github)
     }
 
     private func toggleCode(_ repo: TrackedRepo) {

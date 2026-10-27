@@ -25,11 +25,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     }
 
     /// Opens the Settings window on `tab` (same mechanism as the shell's `SettingsLink.open(tab:)`).
-    @MainActor static func open(_ tab: SettingsTab) {
-        UserDefaults.standard.set(tab.rawValue, forKey: requestKey)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
+    @MainActor static func open(_ tab: SettingsTab) { SettingsLinkOpener.open(tab: tab.rawValue) }
 }
 
 struct SettingsView: View {

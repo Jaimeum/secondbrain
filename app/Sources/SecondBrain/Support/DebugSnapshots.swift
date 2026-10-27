@@ -19,6 +19,13 @@ enum DebugSnapshots {
             state.engine.autoProcess = false   // a snapshot never starts a Claude job (AppState.launch also does this)
             try? await Task.sleep(for: .seconds(2))
             if ProcessInfo.processInfo.environment["SB_SNAPSHOT_SELFTEST"] == "1" { await selfTest(state: state, dir: dir) }
+            // MARK: v0.5 ux — `SB_SNAPSHOT_WINDOW=1`: the whole main window (sidebar + detail) for every sidebar item,
+            // light and dark, at the default size and at the minimum window size (where layouts break first).
+            if ProcessInfo.processInfo.environment["SB_SNAPSHOT_WINDOW"] == "1" {
+                await renderWindows(state: state, dir: dir)
+                NSApp.terminate(nil)
+                return
+            }
             let project = state.projects.first
             let slug = project?.slug ?? ""
             let source = state.engine.sources.first { $0.projectSlug == slug && $0.status == .done }
@@ -204,6 +211,45 @@ enum DebugSnapshots {
         guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
         host.cacheDisplay(in: host.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
+    }
+
+    /// Every top-level screen inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer).
+    private static func renderWindows(state: AppState, dir: URL) async {
+        var items: [(String, SidebarItem)] = [("brain", .brain), ("mytasks", .myTasks), ("inbox", .inbox), ("mail", .mail),
+                                              ("meetings", .meetings), ("people", .people), ("templates", .templates)]
+        if let project = state.projects.first { items.append(("project", .project(project.slug))) }
+        let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""
+        for (name, item) in items where only.isEmpty || name.hasPrefix(only) {
+            for (sizeName, size) in [("1100", CGSize(width: 1100, height: 720)), ("min", CGSize(width: 860, height: 600))] {
+                for dark in [false, true] {
+                    state.selection = item
+                    let file = "window-\(name)-\(sizeName)-\(dark ? "dark" : "light").png"
+                    await renderWindow(MainView().environment(state), size: size, dark: dark, to: dir.appendingPathComponent(file))
+                }
+            }
+        }
+    }
+
+    private static func renderWindow(_ view: some View, size: CGSize, dark: Bool, to url: URL) async {
+        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        host.frame = CGRect(origin: .zero, size: size)
+        // The whole app switches appearance (as AppState.applyAppearance does): AppKit-backed controls inside the
+        // hosting view only follow NSApp.appearance when rendered offscreen.
+        let previous = NSApp.appearance
+        NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        defer { NSApp.appearance = previous }
+        let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.backgroundColor = .windowBackgroundColor
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        try? await Task.sleep(for: .seconds(3))
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        window.contentView = nil
     }
 
     private static func render(_ view: some View, size: CGSize, to url: URL) async {

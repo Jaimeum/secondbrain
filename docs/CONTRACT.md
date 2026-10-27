@@ -1499,3 +1499,214 @@ AND, orden/prioridad, disabled), persistencia, suggestedRule (dominio corporativ
 un vault temporal (hilo existente > regla > default > inbox), auto-importer con DemoProvider (cursor, cap, dedupe).
 Snapshots: `rules`, `rules-empty`, `rule-editor`, `mail-rule-offer`, `meetings-rule`. Strings: bloque "v0.4 — Reglas" /
 "v0.4 — Rules" al final de ambos archivos, prefijo `rules.`.
+
+## 15. v0.5 — Identidad secondbrain y simplificación de la UX (vinculante; prevalece sobre todo lo anterior)
+
+Origen: revisión del dueño ("las cosas se salen de lugar", "está medio compleja", "difícil encontrar reuniones, notas,
+eventos") + brand kit v1.0 (`docs/brand/`, íntegro: íconos, logos, guía PDF, movimiento, tokens). Auditoría previa:
+250 hallazgos, 82 defectos confirmados en código. Lo que aquí contradice a §12.5, §12.7, §13.6 o §14.4 **gana**.
+
+### 15.1 Identidad visual (tokens → código)
+Fuente de verdad: `docs/brand/brand_tokens.json` y `docs/brand/04_guidelines/secondbrain_brand_guidelines_ES.pdf`.
+Uso en código: `docs/brand/USAGE.md`. Un solo archivo de tokens en Swift, `Support/Brand.swift` (`enum Brand`), y las
+mismas variables en `Resources/web/wiki.css` y `graph.css` (`:root` claro, `[data-theme="dark"]` y
+`prefers-color-scheme`). **Prohibido** usar `Color.accentColor`, `.red/.green/.orange/.blue/.yellow`, `.tint(.blue)`,
+hex sueltos o `rgba` fuera de `Brand`/los `:root` de CSS. Los valores claro / oscuro:
+
+| token | claro | oscuro | uso |
+|---|---|---|---|
+| `bg` | marfil `#F5F0E8` | `#202721` | fondo de ventana y barra lateral |
+| `surface` | crema `#FAF7F1` | `#30382F` | área de contenido |
+| `card` | blanco `#FFFFFF` | `#3A4238` (dark2 +6 %) | tarjetas, filas seleccionables, campos |
+| `cardAlt` | arena `#E9E0D4` | `#2A322A` | chips, pills, fondos de resaltado suaves |
+| `line` | `#DAD3C9` | `rgba(255,255,255,0.10)` | divisores, bordes 1 px |
+| `text` | tinta `#232B25` | marfil `#F5F0E8` | texto principal |
+| `text2` | `#6F766D` | mid `#AEB5A4` | texto secundario (WCAG AA sobre bg y surface) |
+| `text3` | mid `#AEB5A4` | salvia `#818979` | placeholders, metadatos no esenciales |
+| `accent` | olivo `#475243` | mid `#AEB5A4` | acción primaria, selección, links, íconos activos; texto sobre él: `onAccent` |
+| `onAccent` | marfil `#F5F0E8` | tinta `#232B25` | texto sobre `accent` |
+| `accentSoft` | olivo 10 % | mid 14 % | fondo de fila seleccionada, chip activo, callout |
+| `sage` | `#818979` | `#818979` | gradientes, decoración, avatar |
+| `record` | `#B4533E` | `#D27A66` | grabar / detener / en curso (rojo **apagado**, único rojo de la app) |
+| `warning` | `#9A7B2E` | `#D2B15C` | avisos, vencido hoy, reconectar |
+| `danger` | `#A3473A` | `#D27A66` | errores, eliminar (texto o icono, nunca fondos saturados) |
+| `success` | olivo `#475243` | mid `#AEB5A4` | listo, ✓ (mismo que accent: éxito = calma) |
+
+- **Proyectos / grafo**: paleta categórica apagada derivada de la marca, 6 tonos, asignada por hash del slug (no por
+  índice): salvia `#818979`, terracota `#A86A55`, ocre `#A89055`, pizarra azul `#6E7F93`, malva `#8B6F86`, musgo
+  `#6F8A5A`. Halos del grafo = tono al 13 % (claro) / 16 % (oscuro). Avatares de personas: fondo `cardAlt`, iniciales
+  en `text2`; sin colores aleatorios.
+- **Tipografía**: Inter (variable, OFL) en `Resources/Brand/Fonts/`, registrada al arrancar con
+  `CTFontManagerRegisterFontsForURL(.process)`. `Brand.font(size, weight)`; estilos: `title` 20/semibold,
+  `section` 15/semibold, `body` 13/regular, `callout` 13/medium, `caption` 11/regular, `mono` = SF Mono 12.
+  Se aplica con `.environment(\.font, Brand.body)` en la raíz y explícitamente en cabeceras. Los controles AppKit
+  (menús, pickers, barra de herramientas) se quedan en la fuente del sistema: aceptado. Las WebViews usan Inter vía
+  `@font-face` (`web/fonts/InterVariable.ttf`, copiado en el build desde Brand/Fonts) con `-apple-system` de respaldo.
+  Pesos 400–600 en la UI; 700 solo en títulos de página del wiki.
+- **Forma**: radio `control` 8, `card` 12, `sheet` 14, chips = cápsula. Espaciado base 4; padding de contenido 20
+  (24 en pantallas de una columna). Sombras: solo en overlays (`0 8 24 rgba(35,43,37,0.10)`), nunca en tarjetas.
+- **Iconografía**: SF Symbols, peso `.regular`, tamaño del texto que acompañan. **Nunca emoji como icono de UI**
+  (🎙️ ✉️ 📄 📅 📥 💬 ✓ ▶ desaparecen de strings y vistas). El emoji del proyecto es dato del usuario y se conserva
+  solo en: fila del sidebar, chip de proyecto, título de proyecto.
+- **Marca**: símbolo = `Resources/Brand/mark-*.png` (gradiente) para cabecera del sidebar (20 pt), Inicio, onboarding,
+  splash, estados vacíos del Inicio; `mark-solid.svg` renderizado como *template image* para la barra de menús (18 pt,
+  grabando: mismo símbolo + punto `record` 6 pt, `isTemplate=false`). Wordmark = `Text("secondbrain")` en Inter
+  Medium, tracking −0.03 em, **siempre minúsculas**. Todas las cadenas visibles pasan de "SecondBrain" a
+  "secondbrain" (es/en), salvo las que nombran el registro OAuth/GitHub (`isOrgRestricted` compara texto de BrainCore:
+  no tocar) y rutas de archivos. `CFBundleName`/`CFBundleDisplayName` = `secondbrain`; el ejecutable y
+  `SecondBrain.app` no cambian de nombre. Ícono: `scripts/icon/secondbrain.iconset` → `iconutil` en `build-app.sh`
+  (`make-icon.swift` se elimina).
+- **Movimiento** (`docs/brand/05_motion/`): (A) arranque: overlay sobre la ventana principal, 1.6 s, símbolo
+  opacidad 0→1, blur 16→0, escala 0.9→1, wordmark fade 10→0 pt, crossfade 200 ms a la UI; una sola vez por lanzamiento
+  (no en vault switch ni snapshots). (B) carga larga (>3 s): `BrandLoader` = símbolo 24–32 pt con respiración de opacidad
+  0.55→1 en 2 s + texto de estado real ("Transcribiendo… 42 %"); sustituye `ProgressView()` en el pie del sidebar,
+  Inicio, Reuniones (cargando), Preparar con Claude, descarga de modelos. (C) guardado/aprendido: `.brandPulse()` escala
+  1→1.04→1 en 650 ms sobre el símbolo del pie del sidebar al terminar un ingest. Grabando: el punto `record` late
+  **solo en opacidad** (0.35→1, 1 s), sin escala ni desplazamiento (corrige el PulsingDot que se desplaza). Transiciones:
+  `.easeOut(0.16–0.24)`; nada de `.snappy`/springs; `accessibilityReduceMotion` → solo fades de 150 ms y símbolo fijo.
+  Los `ProgressView` lineales con porcentaje real se mantienen (son información).
+- **Tema**: Ajustes → Apariencia sigue (sistema/claro/oscuro). Las WebViews reciben el tema explícito
+  (`data-theme`) también en el wiki (hoy solo el grafo), y cambian al instante.
+
+### 15.2 Arquitectura de navegación
+Principio: cada cosa tiene **un** lugar principal, más ⌘K. Pantallas que son "la misma lista ordenada distinto" se
+funden en una con un conmutador. Lo que se configura una vez vive en Ajustes.
+
+**Barra lateral** (`SidebarItem`): `home` (Inicio, ⌘1, selección por defecto) · `meetings` (Reuniones, ⌘2) · `mail`
+(Correo, ⌘3) · `tasks` (Pendientes, ⌘4; antes `myTasks` "Mis pendientes") · `people` (Personas, ⌘5) · sección
+**Proyectos** (`project(slug)`, `+ Nuevo proyecto`). Desaparecen `brain`, `inbox`, `templates` como ítems (los `case`
+se conservan un release como alias: `.brain`→`.home`, `.inbox`→`.home`, `.templates`→ abre Ajustes › Formatos;
+`AppState.selection` los normaliza al asignarse). Cabecera del sidebar: símbolo 20 pt + wordmark, y debajo un botón
+de búsqueda "Buscar o preguntar… ⌘K" (`safeAreaInset(.top)`). Fila de proyecto: menú contextual *Editar proyecto…*
+(nombre, emoji, descripción → `ProjectManager.update`) · *Agregar correo…*. Se elimina el `contextMenu` de la lista.
+Pie del sidebar (≤ 96 pt): **un solo control de grabación** (`RecordControl`): con reunión en curso/próxima
+(§12.7) es una tarjeta `record`-soft con "● Grabar «Kickoff…» · empezó hace 3 min" y un link pequeño "o grabar otra
+cosa"; sin reunión, un botón primario "Grabar"; grabando, "Detener 12:04" en `record`. Debajo, una línea de estado
+(`QueueStatusLine`) con `BrandLoader` y el texto **"Procesando 2…"** / "Transcribiendo… 42 %" (nunca "pendientes",
+que es la palabra de las tareas). El spinner por proyecto en la fila se mantiene (`BrandLoader` 12 pt).
+`navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)`.
+
+**Inicio** (`Views/Home/HomeView.swift`, `NavigationStack` propio, una columna centrada, ancho máx. 880, grids que
+colapsan a 1 columna por debajo de 700 pt). Secciones, solo si tienen contenido, en este orden:
+1. Cabecera: fecha de hoy ("martes 27 de octubre") en `text2`, campo grande "Busca o pregunta algo…  ⌘K" (abre la
+   paleta; con Return y sin resultados → Preguntar).
+2. **Ahora / Siguiente**: mientras se graba, tarjeta de grabación (título, proyecto, tiempo, Detener). Si no,
+   `MeetingsModel.shared.hero(now:)` con la **misma** tarjeta héroe de Reuniones (`MeetingHeroCard`, un solo botón
+   primario según `phase(of:)`). Debajo, "Hoy": el resto de `events(in: .today)` en filas compactas (hora · título ·
+   chip de proyecto), máx. 4, "Ver agenda →". Sin cuentas: una línea "Conecta tu calendario o usa el de la Mac" con el
+   botón del calendario de la Mac. `HomeView.task` arranca `MeetingsModel.shared.start(state:)` si no corre.
+3. **Por ordenar (n)**: `engine.sources` con `status == .needsProject` o `.failed` (máx. 3, `InboxRow` reutilizado:
+   sugerencia de Claude + Asignar + RuleOfferBar; fallidos con Reintentar / Eliminar). "Ver todo →" hace push de
+   `InboxView` dentro del stack de Inicio. Las notificaciones de `.needsProject` seleccionan `.home`.
+4. **Pendientes para hoy**: `engine.tasks(projectSlug: nil)` mías, no hechas, vencidas o que vencen hoy/mañana, máx. 5,
+   `TaskRow` con checkbox real; "Ver todos (n) →" → `.tasks`. Vacío: "Nada vence hoy".
+5. **Recientes**: grid 2 columnas de tarjetas (mockup `page-10`): últimas 6 fuentes `status == .done` por `updatedAt`
+   (las en proceso primero con `StatusPill`); icono del tipo, título, proyecto, fecha relativa. Clic →
+   `AppState.open(path:)`. Enlace "Ver todo por fecha →" hace push de `BrainTimelineView(projectSlug: nil)`.
+6. **Conexiones**: tira con "Explorar cómo se conecta todo →" → push de `GraphView(scope: .global)`.
+Barra de herramientas de Inicio: "Historial" (etiqueta visible) → hoja `ActivityView(projectSlug: nil)`.
+Inicio vacío (vault nuevo): símbolo + "Tu conocimiento, en un lugar." + tres acciones grandes (Grabar · Pegar un correo
+⌘⇧V · Arrastra un archivo aquí). Todo Inicio acepta drop de archivos → Sin asignar. Las secciones tienen alturas de fila
+fijas y aparecen con fade (no saltan al cargar). Las páginas globales (`index.md`, `log.md`) ya no tienen pantalla:
+se abren por ⌘K o desde Historial.
+
+**Búsqueda ⌘K** (`Views/Search/SearchPalette.swift`, `Support/SearchIndex.swift`): overlay centrado 560 pt sobre
+`card` con sombra de overlay, fade 160 ms. Índice en memoria (`@Observable`), reconstruido en `vaultRevision`,
+`tasksRevision`, `accountsRevision`; coincidencia sin acentos ni mayúsculas, prefijo > inicio de palabra > contiene,
+con refuerzo por recencia. Grupos (máx. 4 filas cada uno): Reuniones (eventos próximos + fuentes `.meeting`) ·
+Notas y documentos (`.note/.document/.url`) · Correos (por hilo) · Páginas (`vault.pagesAsync` global + por proyecto,
+con emoji del proyecto) · Personas · Pendientes · Proyectos · Acciones (Grabar, Pegar correo, Nueva nota, Nuevo
+proyecto, Ajustes, Reglas, Formatos). Última fila siempre "Preguntar: «consulta»" (↩ sin resultados; ⌘↩ siempre;
+⌥ = al proyecto actual). Vacío: reuniones de hoy + últimos 5 abiertos (UserDefaults). ↑↓ ↩ esc. Apertura:
+`AppState.open(path:)` (fija `pendingPage` + `selection`), `pendingEventId` (Reuniones), `pendingProjectTab`
+(proyecto), acciones directas. Búsqueda de texto completo: fase posterior (no v0.5).
+
+**Reuniones**: segmentos **Hoy · Próximas · Anteriores**. "Próximas" = desde mañana, agrupado por día (absorbe "Esta
+semana"). "Anteriores" = fuentes `.meeting` con `status == .done` (y en proceso), más recientes primero, con chip de
+proyecto y "Ver resumen" (`engine.pagePath(for:)`); funciona sin calendario. El héroe "SIGUIENTE" solo si la reunión
+es hoy o mañana. El panel de detalle pierde su botón de grabar cuando el evento seleccionado es el héroe (un solo
+"Grabar" visible además del pie del sidebar). Por debajo de 700 pt de detalle, lista y detalle pasan a una columna
+(push). Cambiar de segmento limpia la selección si el evento no está en la lista.
+
+**Correo**: lista + lector como hoy. Cabecera de la lista = selector de cuenta (solo si hay > 1) + búsqueda; se
+elimina el filtro "Conocidos / Todos" y la leyenda "Recibidos · últimos 30 días" (va al subtítulo de ventana). Un solo
+mensaje flotante a la vez: el toast "Aprendiendo del correo… · Deshacer" (6 s, fade); la oferta de regla aparece
+**después**, dentro de la barra de acción del lector, no flotando. Botón inteligente: "Guardar en 🚀 Kickoff ▾"
+(`mail.addTo` cambia de "Agregar a" a "Guardar en"; con 📥 fuera: "Guardar sin proyecto ▾"). Tras guardar: chip
+"✓ Guardado · Ver en el proyecto" como botón visible. Los errores de "Cargar más" se muestran en la lista. Anchos
+mínimos: lista 260, lector 320; el botón de acción nunca `fixedSize`.
+
+**Pendientes** (sidebar) y pestaña Pendientes del proyecto = **una vista** `TasksView(scope:)` (`.all` / `.project`):
+secciones Míos · De otros · Sin dueño · Hechos como segmentos cortos; filtro de origen como menú ("Origen ▾") y
+Exportar en la barra de herramientas; con `.all`, chip de proyecto en cada fila. Chips de origen muestran el **título**
+de la reunión/correo (resuelto vía `vault.title(of:)` / `resolveWikilinksAsync`), nunca el slug; si no se resuelve,
+"Reunión · 26 oct". Clic en la fila abre la fuente (hoja de vista previa `VaultPageSheet`, sin perder la lista). Los
+chips viven en un `FlowLayout` que envuelve.
+
+**Proyecto** (`ProjectTab`): **Contenido · Pendientes · Preguntar · Grafo** (4 segmentos, sin `fixedSize`, con
+`ViewThatFits` → menú). **Contenido** (`Views/Project/ContentView.swift`) = dos columnas: lista izquierda (200–260 pt)
+con conmutador **Por fecha | Por tema** arriba, página a la derecha (`WikiWebView`). *Por fecha* (por defecto) =
+filas de `BrainTimelineView` (reunión, correo, documento, enlace, decisión, hito, fecha límite) agrupadas por mes,
+más un grupo "Procesando" fijo arriba con las fuentes en curso/fallidas (`StatusPill`, Reintentar); clic en una fila
+abre su página a la derecha. *Por tema* = los grupos actuales del `WikiBrowser` (Reuniones · Correos · Documentos ·
+Temas · Decisiones · Código · Personas), **sin** las páginas automáticas "— índice / — pendientes / — línea de
+tiempo / Registro" y sin el prefijo "<proyecto> — " en los títulos. La página de resumen ("En breve") va siempre
+fijada arriba de la lista. Barra de herramientas del proyecto: menú **+ Agregar** (Grabar aquí · Pegar correo ⌘⇧V ·
+Nueva nota · Agregar archivos… · Pegar enlace…) · **Historial** (hoja `ActivityView(projectSlug:)`) · ⋯ (Formato
+por defecto ▸ · Repositorios… (hoja con `ReposView`, §13.6 por dentro) · Mostrar en Finder). Toda la pestaña es
+destino de drop. Cabecera de página: título + botones icon-only con `.help` (grafo, exportar, Finder) que se
+pliegan en ⋯ por debajo de 560 pt. Los filtros de tipo de la línea de tiempo son chips neutros (activo = `accentSoft`),
+con "Hoy" para volver; el anclaje de scroll apunta al encabezado del mes (ya no se esconde la primera fila). La pestaña
+"Código" desaparece (§13.6 queda vigente para el contenido de `ReposView` y `AddRepoSheet`). `navigationSubtitle`
+solo muestra una línea corta o nada.
+
+**Ajustes** = `TabView`: General · Cuentas · GitHub · Reglas · Formatos · Avanzado (almacenamiento, transcripción,
+modelos de Claude, git, IDs OAuth). Ventana mín. 760×520 (el editor de formatos necesita ese espacio). "Formatos"
+conserva `TemplatesView` con lista flexible (200–260), sin chips repetidos en la cabecera, acciones = "Usar por
+defecto ▾" + "Editar" + ⋯. "Tus correos" → "Mis direcciones de correo", prellenado con las cuentas conectadas.
+
+**Barra de menús**: cabecera símbolo + wordmark; `RecordControl` (el mismo del sidebar); Proyecto/Formato/Título
+plegados en "Detalles ▸" (abierto automáticamente mientras se graba); "Pegar correo…"; Abrir · Salir.
+
+**Onboarding**: 6 pasos: Bienvenida (consentimiento + "Se guarda en ~/Documents/SecondBrain · Cambiar…") → Permisos →
+Claude → Tú y tu primer proyecto (nombre, correos, proyecto) → Cuentas (opcional) → Listo (la descarga de modelos corre
+en segundo plano y se muestra como línea de estado aquí y en el pie del sidebar). Símbolo y wordmark en Bienvenida y
+Listo; `ProgressDots` en `accent`. El consentimiento nunca queda bajo el pliegue a 600 pt (botón "Empezar" fijo abajo).
+
+### 15.3 Reglas de layout (se verifican con capturas)
+- Ventana mínima **920×620** (`RootView`). Sidebar 200/220/280 → el detalle dispone de ≥ 700 pt. Toda vista de
+  detalle debe verse completa a 700×580 y a 1100×720 sin recortes, sin letras envueltas una por una, sin desplazar el
+  sidebar. `MainView` envuelve `detail` en `.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)`
+  como última red (no como solución).
+- **Nada con `.fixedSize()` horizontal dentro de una fila con texto variable**: botones de acción en `ViewThatFits`
+  (fila → columna → icon-only); chips con `lineLimit(1)` + truncado; correos con `.truncationMode(.middle)`.
+- Hojas: `.frame(minWidth: ..., idealWidth: ..., minHeight: ..., idealHeight: ...)` con alto ideal ≤ 520 y nunca un
+  `height:` fijo mayor que 520. Las hojas largas tienen `ScrollView`.
+- Encabezados fijos (`pinnedViews`) nunca tapan la primera fila: el scroll ancla al encabezado.
+- Barras de herramientas que no caben se pliegan a un menú ⋯ (`ViewThatFits`).
+- Counts en segmentos no cambian el ancho del control (ancho fijo por segmento o conteo fuera).
+- Grids `.adaptive(minimum:)` con mínimo ≤ (ancho disponible − padding) / 2 o fallback a `VStack`.
+
+### 15.4 Copy (es/en)
+- Vocabulario único: **Pendientes** (tareas; nunca "tareas"/"to-dos" mezclados; en: *Tasks*), **Sin asignar** (fuentes
+  sin proyecto; en: *Unassigned*; nunca "Inbox"/"bandeja"), **cerebro** (el vault; nunca "notas"/"wiki"/"bóveda";
+  en: *brain*), **hilo** (correo; en: *thread*), **Enlace** (kind.url; en: *Link*), **Resumen de la reunión** vs
+  **Resumen del proyecto**, **Historial** (actividad/cambios de Claude). Voz: la app habla en primera persona
+  ("Aprenderé de esta reunión"); "Claude" solo cuando el usuario conecta/elige modelo. Promesa de solo lectura en una
+  sola frase reutilizada: "Solo leo. Nunca envío, borro ni cambio nada."
+- Plurales con `Localizable.stringsdict` (es/en) para todos los `%ld` con sustantivo (páginas, pendientes, proyectos,
+  correos, reuniones, veces).
+- Botones = verbo + objeto corto; nunca frases. "AHORA"/"SIGUIENTE" en minúsculas con `.textCase(.uppercase)` en la
+  vista. Oferta de regla: "¿Mandar siempre lo de @acme.com a 🚀 Acme?" · Sí, siempre · Solo esta vez.
+- `brain.subtitle`, `people.subtitle` y demás subtítulos repetidos se eliminan.
+
+### 15.5 Verificación y entrega
+- `SB_SNAPSHOT_WINDOW=1` renderiza la ventana completa (`window-<home|meetings|mail|tasks|people|project>-<1100|min>-
+  <light|dark>.png`; `min` = 920×620) y además `project` en cada pestaña (`window-project-<tab>-…`). Los PNG por vista
+  (`SB_SNAPSHOT_DIR`) se actualizan: `home`, `home-empty`, `search`, `meetings-past`, `settings-<tab>`, `content-by-date`,
+  `content-by-topic`, `record-control`, `menubar`; se eliminan `brain`, `inbox`, `templates`, `sidebar` (queda dentro
+  de window-*). Toda pantalla nueva o rediseñada tiene captura.
+- `swift build` sin warnings nuevos; `sb selftest`, `sb github selftest`, `sb routing selftest` siguen en verde;
+  `scripts/build-app.sh` produce el ícono de marca.
+- Versión 0.5.0, `docs/RELEASE-NOTES` (README "Novedades"), README con la nueva navegación y capturas, `docs/TODO.md`
+  con lo diferido (búsqueda de texto completo, animación D "conexión encontrada", Rive/Lottie).

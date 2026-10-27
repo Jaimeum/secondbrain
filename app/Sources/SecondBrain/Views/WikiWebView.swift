@@ -12,10 +12,12 @@ struct WikiWebView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
-    func makeNSView(context: Context) -> WKWebView {
-        let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+    func makeNSView(context: Context) -> WikiWKWebView {
+        let webView = WikiWKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         webView.navigationDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
+        // A forced appearance (Ajustes → Apariencia) applies at once, like the graph (CONTRACT §12.7, §15.1 Tema).
+        webView.onAppearanceChange = { [weak coordinator = context.coordinator] in coordinator?.sendTheme() }
         webView.allowsMagnification = true
         let dir = AppResources.webDirectory
         webView.loadFileURL(dir.appendingPathComponent("wiki.html"), allowingReadAccessTo: dir)
@@ -23,19 +25,19 @@ struct WikiWebView: NSViewRepresentable {
         return webView
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
+    func updateNSView(_ webView: WikiWKWebView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.show(path)
     }
 
-    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+    static func dismantleNSView(_ webView: WikiWKWebView, coordinator: Coordinator) {
         coordinator.stopWatching()
     }
 
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
         var parent: WikiWebView
-        weak var webView: WKWebView?
+        weak var webView: WikiWKWebView?
         private var loaded = false
         private var shownPath: String?
         private weak var shownVault: VaultStore?
@@ -81,11 +83,8 @@ struct WikiWebView: NSViewRepresentable {
             var payload: [String: Any] = [
                 "keepScroll": keepScroll,
                 "backlinksTitle": L("wiki.backlinks"),
-                "propLabels": [
-                    "type": L("prop.type"), "date": L("prop.date"), "updated": L("prop.updated"),
-                    "status": L("prop.status"), "duration": L("prop.duration"), "language": L("prop.language"),
-                    "project": L("prop.project"), "people": L("prop.people"), "role": L("prop.role"),
-                ],
+                // Only these keys become chips; anything else in the front matter stays hidden (wiki.js PROP_ORDER).
+                "propLabels": Self.propLabels(),
                 // Front-matter values in the user's words; "" hides a technical one (CONTRACT §12.7: no raw slugs).
                 "propValues": [
                     "type": Dictionary(uniqueKeysWithValues: Self.typeValues.map { ($0, L("prop.type.\($0)")) })
@@ -93,6 +92,9 @@ struct WikiWebView: NSViewRepresentable {
                     "status": Dictionary(uniqueKeysWithValues: Self.statusValues.map { ($0, L("prop.status.\($0)")) }),
                 ],
                 "locale": Localizer.locale.identifier.replacingOccurrences(of: "_", with: "-"),
+                "lang": Localizer.language,
+                "theme": theme(of: webView),
+                "path": shownPath ?? "",
             ]
             renderGeneration += 1
             let generation = renderGeneration
@@ -116,7 +118,7 @@ struct WikiWebView: NSViewRepresentable {
                     // Project and people chips show names, not slugs.
                     let head = markdown.hasPrefix("---") ? String(markdown.prefix(4000)) : ""
                     var projectNames: [String: String] = [:]
-                    if head.contains("\nproject:") {
+                    if head.contains("\nproject:") || head.contains("\nprojects:") {
                         for p in ProjectManager(vaultRoot: vault.root).list() { projectNames[p.slug] = "\(p.emoji) \(p.name)" }
                     }
                     var peopleNames: [String: String] = [:]
@@ -129,6 +131,30 @@ struct WikiWebView: NSViewRepresentable {
                 guard generation == renderGeneration, path == shownPath, let webView = self.webView else { return }
                 send(payload.merging(page) { _, new in new }, to: webView)
             }
+        }
+
+        func sendTheme() {
+            guard loaded, let webView else { return }
+            webView.evaluateJavaScript("SB.setTheme('\(theme(of: webView))')")
+        }
+
+        /// The page follows the window's appearance (the app may force light/dark), not the system's.
+        private func theme(of view: NSView) -> String {
+            view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? "dark" : "light"
+        }
+
+        /// Chip labels. `organization` / `projects` show only once their strings exist (a missing key returns itself).
+        private static func propLabels() -> [String: String] {
+            var labels = [
+                "type": L("prop.type"), "date": L("prop.date"), "updated": L("prop.updated"),
+                "status": L("prop.status"), "duration": L("prop.duration"),
+                "project": L("prop.project"), "people": L("prop.people"), "role": L("prop.role"),
+            ]
+            let projects = L("prop.projects")
+            labels["projects"] = projects == "prop.projects" ? L("prop.project") : projects
+            let organization = L("prop.organization")
+            if organization != "prop.organization" { labels["organization"] = organization }
+            return labels
         }
 
         private func send(_ payload: [String: Any], to webView: WKWebView) {
@@ -187,5 +213,15 @@ struct WikiWebView: NSViewRepresentable {
             }
             decisionHandler(.allow)
         }
+    }
+}
+
+/// A WKWebView that reports appearance changes, so a forced light/dark reaches the page without a reload.
+final class WikiWKWebView: WKWebView {
+    var onAppearanceChange: (() -> Void)?
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChange?()
     }
 }

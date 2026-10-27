@@ -1,64 +1,107 @@
-/* Knowledge graph (CONTRACT §12.2 / §12.7). Colors are tokens: the canvas reads them too (graph.js `readTheme`). */
+/* Knowledge graph (CONTRACT §12.2 / §12.7 / §15.1). Colors are tokens: the canvas reads them too (graph.js `readTheme`). */
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/InterVariable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  --bg: #f6f6f8;
-  --surface: rgba(255, 255, 255, 0.86);
-  --surface-solid: #ffffff;
-  --text: #1d1d1f;
-  --muted: #6e6e73;
-  --faint: #a1a1a6;
-  --border: rgba(0, 0, 0, 0.09);
-  --shadow: 0 6px 24px rgba(0, 0, 0, 0.10), 0 1px 3px rgba(0, 0, 0, 0.08);
-  --accent: #5b5bd6;
-  --edge: rgba(60, 60, 80, 0.16);
-  --edge-strong: rgba(60, 60, 80, 0.55);
-  --person: #c9cbd3;
-  --person-ring: #8b8e99;
+  /* Brand tokens (CONTRACT §15.1). */
+  --bg: #F5F0E8;
+  --surface: #FAF7F1;
+  --card: #FFFFFF;
+  --card-alt: #E9E0D4;
+  --line: #DAD3C9;
+  --text: #232B25;
+  --text2: #6F766D;
+  --text3: #AEB5A4;
+  --accent: #475243;
+  --on-accent: #F5F0E8;
+  --accent-soft: rgba(71, 82, 67, 0.10);
+  --sage: #818979;
+  --warning: #9A7B2E;
+  --shadow: 0 8px 24px rgba(35, 43, 37, 0.10);
+  /* Floating controls: the card at 86 % over the canvas. */
+  --glass: rgba(255, 255, 255, 0.86);
+  /* Canvas (graph.js readTheme reads these literally: plain colors only, no var()/color-mix). */
+  --canvas: #FAF7F1;
+  --edge: rgba(71, 82, 67, 0.16);
+  --edge-strong: rgba(71, 82, 67, 0.55);
+  --person: #E9E0D4;
+  --person-ring: #818979;
   --halo-alpha: 0.13;
-  --label-halo: rgba(246, 246, 248, 0.92);
-  --dot: rgba(60, 60, 80, 0.35);
-  --chip-bg: rgba(0, 0, 0, 0.045);
-  --chip-off: rgba(0, 0, 0, 0.25);
+  --label-halo: #FAF7F1;
+  --dot: rgba(71, 82, 67, 0.30);
+  --track: rgba(71, 82, 67, 0.10);
+  --chip-off: #AEB5A4;
+  --on-tone: #FFFFFF;
+  /* Project tones (§15.1, same in both themes). Projects get theirs from Swift (Brand hash of the slug, GraphView);
+     the kinds inside a project reuse them so the whole graph speaks one palette. */
+  --tone-sage: #818979;
+  --tone-terracotta: #A86A55;
+  --tone-ochre: #A89055;
+  --tone-slate: #6E7F93;
+  --tone-mauve: #8B6F86;
+  --tone-moss: #6F8A5A;
 }
 :root[data-theme="dark"] {
-  --bg: #1b1b1f;
-  --surface: rgba(40, 40, 46, 0.86);
-  --surface-solid: #2a2a30;
-  --text: #ececf1;
-  --muted: #a0a0a8;
-  --faint: #66666e;
-  --border: rgba(255, 255, 255, 0.10);
-  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.4);
-  --accent: #9d9dff;
-  --edge: rgba(200, 200, 230, 0.13);
-  --edge-strong: rgba(220, 220, 255, 0.55);
-  --person: #6b6e78;
-  --person-ring: #b4b7c2;
-  --halo-alpha: 0.15;
-  --label-halo: rgba(27, 27, 31, 0.92);
-  --dot: rgba(220, 220, 255, 0.40);
-  --chip-bg: rgba(255, 255, 255, 0.07);
-  --chip-off: rgba(255, 255, 255, 0.28);
+  --bg: #202721;
+  --surface: #30382F;
+  --card: #3A4238;
+  --card-alt: #2A322A;
+  --line: rgba(255, 255, 255, 0.10);
+  --text: #F5F0E8;
+  --text2: #AEB5A4;
+  --text3: #818979;
+  --accent: #AEB5A4;
+  --on-accent: #232B25;
+  --accent-soft: rgba(174, 181, 164, 0.14);
+  --sage: #818979;
+  --warning: #D2B15C;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --glass: rgba(58, 66, 56, 0.86);
+  --canvas: #30382F;
+  --edge: rgba(174, 181, 164, 0.15);
+  --edge-strong: rgba(220, 226, 210, 0.55);
+  --person: #3A4238;
+  --person-ring: #818979;
+  --halo-alpha: 0.16;
+  --label-halo: #30382F;
+  --dot: rgba(174, 181, 164, 0.38);
+  --track: rgba(174, 181, 164, 0.14);
+  --chip-off: #818979;
+  --on-tone: #FFFFFF;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1b1b1f;
-    --surface: rgba(40, 40, 46, 0.86);
-    --surface-solid: #2a2a30;
-    --text: #ececf1;
-    --muted: #a0a0a8;
-    --faint: #66666e;
-    --border: rgba(255, 255, 255, 0.10);
-    --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.4);
-    --accent: #9d9dff;
-    --edge: rgba(200, 200, 230, 0.13);
-    --edge-strong: rgba(220, 220, 255, 0.55);
-    --person: #6b6e78;
-    --person-ring: #b4b7c2;
-    --halo-alpha: 0.15;
-    --label-halo: rgba(27, 27, 31, 0.92);
-    --dot: rgba(220, 220, 255, 0.40);
-    --chip-bg: rgba(255, 255, 255, 0.07);
-    --chip-off: rgba(255, 255, 255, 0.28);
+    --bg: #202721;
+    --surface: #30382F;
+    --card: #3A4238;
+    --card-alt: #2A322A;
+    --line: rgba(255, 255, 255, 0.10);
+    --text: #F5F0E8;
+    --text2: #AEB5A4;
+    --text3: #818979;
+    --accent: #AEB5A4;
+    --on-accent: #232B25;
+    --accent-soft: rgba(174, 181, 164, 0.14);
+    --sage: #818979;
+    --warning: #D2B15C;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+    --glass: rgba(58, 66, 56, 0.86);
+    --canvas: #30382F;
+    --edge: rgba(174, 181, 164, 0.15);
+    --edge-strong: rgba(220, 226, 210, 0.55);
+    --person: #3A4238;
+    --person-ring: #818979;
+    --halo-alpha: 0.16;
+    --label-halo: #30382F;
+    --dot: rgba(174, 181, 164, 0.38);
+    --track: rgba(174, 181, 164, 0.14);
+    --chip-off: #818979;
+    --on-tone: #FFFFFF;
   }
 }
 
@@ -67,8 +110,8 @@
 .snapshot * { animation: none !important; transition: none !important; }
 html, body {
   margin: 0; padding: 0; height: 100%; overflow: hidden;
-  background: var(--bg); color: var(--text);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  background: var(--canvas); color: var(--text);
+  font: 13px/1.4 "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-user-select: none; user-select: none;
 }
@@ -83,113 +126,119 @@ svg.g { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; 
 
 /* Top bar: kind chips (inside a project) on the left, tools on the right. */
 #topbar { position: absolute; top: 12px; left: 14px; right: 14px; display: flex; align-items: flex-start; gap: 10px; pointer-events: none; }
-#chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; pointer-events: auto; }
+#chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; pointer-events: auto; }
 #chips:empty { pointer-events: none; }
 .chip {
-  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px;
-  border: 1px solid var(--border); border-radius: 13px; background: var(--surface);
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; max-width: 220px; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 13px; background: var(--glass);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   transition: opacity .15s, background .15s;
 }
 .chip .g { color: var(--c); }
-.chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip > span:first-of-type { overflow: hidden; text-overflow: ellipsis; }
+.chip .g { flex: none; }
+.chip .n { color: var(--text2); font-variant-numeric: tabular-nums; }
 .chip.off { opacity: 0.45; }
 .chip.off .g { color: var(--chip-off); }
-.chip:hover { background: var(--surface-solid); }
+.chip:hover { background: var(--card); }
 #tools { display: flex; gap: 6px; pointer-events: auto; }
 button.icon, button.pill {
   height: 28px; min-width: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 14px; background: var(--glass); color: var(--text2);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
 }
-button.pill { padding: 0 12px; font-weight: 550; color: var(--accent); }
-button.icon:hover, button.pill:hover { background: var(--surface-solid); }
+button.pill { padding: 0 12px; font-weight: 500; color: var(--accent); white-space: nowrap; }
+button.icon:hover, button.pill:hover { background: var(--card); color: var(--text); }
 button.icon.on { color: var(--accent); }
 
+/* --top-inset = measured bottom of the top bar (graph.js `measureChrome`): chips may wrap to several rows. */
 #searchBox {
-  position: absolute; top: 48px; right: 14px; width: 260px; height: 32px; display: flex; align-items: center; gap: 6px;
-  padding: 0 10px; border-radius: 9px; background: var(--surface-solid); border: 1px solid var(--border); box-shadow: var(--shadow);
+  position: absolute; top: var(--top-inset, 48px); right: 14px; width: min(260px, calc(100% - 28px)); height: 32px; display: flex; align-items: center; gap: 6px;
+  padding: 0 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
 }
-#searchBox .glyph { color: var(--muted); display: flex; }
+#searchBox .glyph { color: var(--text2); display: flex; }
 #searchInput { flex: 1; border: none; outline: none; background: transparent; color: var(--text); font: inherit; -webkit-user-select: text; user-select: text; }
+#searchInput::placeholder { color: var(--text3); }
 #searchInput::-webkit-search-cancel-button { display: none; }
-#searchCount { color: var(--muted); font-size: 11px; white-space: nowrap; }
+#searchCount { color: var(--text2); font-size: 11px; white-space: nowrap; }
 
 #hint {
   position: absolute; left: 50%; bottom: 66px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px; border-radius: 16px;
-  background: var(--surface-solid); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--muted);
-  white-space: nowrap; animation: rise .5s ease both;
+  width: max-content; max-width: min(92vw, 640px, calc(100% - 28px));
+  background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text2);
+  white-space: normal; line-height: 1.35; animation: rise .24s ease-out both;
 }
-#hint button { border: none; background: transparent; color: var(--faint); font-size: 16px; line-height: 1; width: 20px; height: 20px; border-radius: 10px; }
-#hint button:hover { background: var(--chip-bg); color: var(--text); }
+#hint #hintText { flex: 1 1 auto; min-width: 0; }
+#hint button { flex: none; border: none; background: transparent; color: var(--text3); font-size: 16px; line-height: 1; width: 22px; height: 22px; border-radius: 11px; }
+#hint button:hover { background: var(--card-alt); color: var(--text); }
 
 /* Peek card. */
 #peek {
-  position: absolute; top: 52px; right: 14px; width: 270px; max-height: calc(100% - 130px); overflow: auto;
-  padding: 14px 16px 12px; border-radius: 12px; background: var(--surface-solid); border: 1px solid var(--border);
-  box-shadow: var(--shadow); animation: slide .22s ease both;
+  position: absolute; top: var(--top-inset, 52px); right: 14px; width: min(270px, calc(100% - 28px));
+  max-height: calc(100% - var(--top-inset, 52px) - var(--bottom-inset, 66px)); overflow: auto;
+  padding: 14px 16px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line);
+  box-shadow: var(--shadow); animation: slide .22s ease-out both;
 }
-#peek .close { position: absolute; top: 8px; right: 8px; border: none; background: transparent; color: var(--faint); font-size: 17px;
+#peek .close { position: absolute; top: 8px; right: 8px; border: none; background: transparent; color: var(--text3); font-size: 17px;
                width: 22px; height: 22px; border-radius: 11px; line-height: 1; }
-#peek .close:hover { background: var(--chip-bg); color: var(--text); }
-#peek .kind { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 550; }
+#peek .close:hover { background: var(--card-alt); color: var(--text); }
+#peek .kind { display: flex; align-items: center; gap: 7px; color: var(--text2); font-size: 12px; font-weight: 500; }
 #peek .badge { width: 24px; height: 24px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center;
-               color: #fff; background: var(--c); }
+               color: var(--on-tone); background: var(--c); }
 #peek .badge .g { width: 14px; height: 14px; }
-#peek h2 { font: 650 16px/1.3 -apple-system, "SF Pro Display", sans-serif; margin: 10px 0 6px; letter-spacing: -0.01em; padding-right: 8px; }
-#peek .meta { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 12px; }
+#peek h2 { font: 600 16px/1.3 "Inter", -apple-system, sans-serif; margin: 10px 0 6px; letter-spacing: -0.01em; padding-right: 8px;
+           overflow-wrap: anywhere; }
+#peek .meta { color: var(--text2); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 12px; }
 #peek .meta span { display: inline-flex; align-items: center; gap: 4px; }
 button.primary {
-  width: 100%; height: 30px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600;
+  width: 100%; height: 30px; border: none; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 600;
 }
-:root[data-theme="dark"] button.primary { color: #16162a; }
 button.primary:hover { filter: brightness(1.06); }
-#peek .section { margin: 14px 0 4px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+#peek .section { margin: 14px 0 4px; color: var(--text2); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 #peek .section:empty { display: none; }
 #peekNeighbours { list-style: none; padding: 0; margin: 0; }
 #peekNeighbours li { display: flex; align-items: center; gap: 7px; padding: 4px 6px; margin: 0 -6px; border-radius: 6px;
                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#peekNeighbours li:hover { background: var(--chip-bg); }
+#peekNeighbours li:hover { background: var(--accent-soft); }
 #peekNeighbours li .g { color: var(--c); flex: none; }
 #peekNeighbours li span { overflow: hidden; text-overflow: ellipsis; }
 
 #tooltip {
   position: absolute; pointer-events: none; max-width: 280px; padding: 7px 10px; border-radius: 8px;
-  background: var(--surface-solid); border: 1px solid var(--border); box-shadow: var(--shadow); z-index: 5;
+  background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); z-index: 5;
 }
-#tooltip b { display: block; font-weight: 600; }
-#tooltip .sub { color: var(--muted); font-size: 11.5px; display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+#tooltip b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+#tooltip .sub { color: var(--text2); font-size: 11.5px; display: flex; align-items: center; gap: 5px; margin-top: 2px; }
 #tooltip .sub .g { color: var(--c); width: 12px; height: 12px; }
 
 /* Time strip: dots per meeting, "Hoy" at the right, ▶ plays it. */
 #timebar {
   position: absolute; left: 14px; right: 14px; bottom: 12px; height: 42px; display: flex; align-items: center; gap: 12px;
-  padding: 0 16px 0 7px; border-radius: 21px; background: var(--surface); border: 1px solid var(--border);
+  padding: 0 16px 0 7px; border-radius: 21px; background: var(--glass); border: 1px solid var(--line);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
 #timebar[hidden] { display: none; }
-button.play { width: 30px; height: 30px; border-radius: 15px; border: none; background: var(--accent); color: #fff; display: flex;
+button.play { width: 30px; height: 30px; border-radius: 15px; border: none; background: var(--accent); color: var(--on-accent); display: flex;
               align-items: center; justify-content: center; flex: none; }
-:root[data-theme="dark"] button.play { color: #16162a; }
 button.play .g { width: 13px; height: 13px; fill: currentColor; stroke: none; }
 #strip { position: relative; flex: 1; height: 100%; margin-right: 34px; }
 #track, #fill { position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; }
-#track { right: 0; background: var(--chip-bg); }
+#track { right: 0; background: var(--track); }
 #fill { background: color-mix(in srgb, var(--accent) 35%, transparent); width: 100%; }
 #dots { position: absolute; inset: 0; }
 .dot { position: absolute; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 3px; background: var(--dot); transition: background .2s, transform .2s; }
 .dot.meeting { width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 4px; }
 .dot.on { background: var(--c, var(--accent)); }
-#thumb { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 7px; background: var(--surface-solid);
-         border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: grab; }
+#thumb { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 7px; background: var(--card);
+         border: 2px solid var(--accent); cursor: grab; }
 #thumbLabel { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11px; font-weight: 600;
-              color: var(--text); background: var(--surface-solid); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px;
+              color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px;
               opacity: 0; transition: opacity .15s; pointer-events: none; }
 #strip.active #thumbLabel, #thumb:hover #thumbLabel { opacity: 1; }
 /* Sits right of the track, clear of the thumb at 100%; graph.js sizes #strip's margin to the label ("Hoy", "Today"). */
 #todayLabel { position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 11px;
-              font-weight: 600; color: var(--muted); }
+              font-weight: 600; color: var(--text2); }
 
 @keyframes slide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
 @keyframes rise { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }

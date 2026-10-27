@@ -27,19 +27,19 @@
 "project.missing" = "I can't find this project";
 
 /* Tabs */
-"tab.wiki" = "Wiki";
+"tab.wiki" = "Content";
 "tab.sources" = "Sources";
 "tab.ask" = "Ask";
-"tab.activity" = "Activity";
+"tab.activity" = "History";
 
 /* Recording */
 "record.start" = "Record";
 "record.somethingElse" = "Record something else";
 "record.starting" = "Starting…";
 "record.stopping" = "Saving…";
-"record.stopWithTime" = "Stop · %@";
+"record.stopWithTime" = "Stop %@";
 "record.hotkeyHint" = "You can also press ⌥⌘R from any app";
-"record.finishSetupFirst" = "Finish setting up SecondBrain before recording.";
+"record.finishSetupFirst" = "Finish setting up secondbrain before recording.";
 "record.needsPermission" = "I need permission to hear your computer's audio. Turn it on in System Settings → Privacy → Screen & System Audio Recording.";
 "record.couldNotStart" = "I couldn't start recording. Please try again.";
 "record.couldNotStop" = "I couldn't stop the recording cleanly. Everything recorded so far is safe.";
@@ -53,16 +53,16 @@
 "queue.ingesting" = "Learning from “%@”…";
 "queue.classifying" = "Figuring out which project “%@” belongs to…";
 "queue.linting" = "Reviewing your brain…";
-"queue.savingAnswer" = "Saving the answer to the wiki…";
+"queue.savingAnswer" = "Saving the answer to your brain…";
 "queue.waitingClaude" = "Waiting for Claude until %@";
-"queue.oneWaiting" = "1 item waiting";
-"queue.manyWaiting" = "%ld items waiting";
+"queue.oneWaiting" = "Processing 1…";
+"queue.manyWaiting" = "Processing %ld…";
 
 /* Statuses */
 "status.recording" = "Recording";
 "status.queued" = "Waiting";
 "status.transcribing" = "Transcribing";
-"status.needsProject" = "No project";
+"status.needsProject" = "Unassigned";
 "status.ingesting" = "Learning";
 "status.done" = "Done";
 "status.failed" = "Problem";
@@ -84,8 +84,8 @@
 "wiki.backlinks" = "Mentioned in";
 "wiki.emptyPage" = "This page is empty for now.";
 "wiki.noPageSelected" = "Pick a page from the list.";
-"wiki.emptyTitle" = "Your wiki is waiting";
-"wiki.emptyMessage" = "Record a meeting or add a document and what I learn will show up here: summaries, decisions, to-dos and people.";
+"wiki.emptyTitle" = "Nothing here yet";
+"wiki.emptyMessage" = "Record a meeting or add a document and what I learn will show up here: summaries, decisions, tasks and people.";
 "wiki.showInFinder" = "Show in Finder";
 "wiki.back" = "Previous page";
 "wikiGroup.general" = "General";
@@ -104,13 +104,15 @@
 "prop.project" = "Project";
 "prop.people" = "People";
 "prop.role" = "Role";
+"prop.projects" = "Projects";
+"prop.organization" = "Organization";
 "prop.type.meeting" = "Meeting";
 "prop.type.transcript" = "Transcript";
 "prop.type.email" = "Email";
-"prop.type.email-thread" = "Email conversation";
+"prop.type.email-thread" = "Email thread";
 "prop.type.document" = "Document";
 "prop.type.note" = "Note";
-"prop.type.url" = "Web page";
+"prop.type.url" = "Link";
 "prop.type.person" = "Person";
 "prop.type.topic" = "Topic";
 "prop.type.decision" = "Decision";
@@ -136,7 +138,7 @@
 
 /* Sources */
 "sources.emptyTitle" = "Nothing here yet";
-"sources.emptyMessage" = "Record a meeting, drop files (PDF, Word, text, audio or video) or paste a link. Recordings are transcribed automatically. I’ll learn from all of it and organize it in the wiki.";
+"sources.emptyMessage" = "Record a meeting, drop files (PDF, Word, text, audio or video) or paste a link. Recordings are transcribed automatically. I’ll learn from all of it and organize it in your brain.";
 "sources.dropHere" = "Drop to add to this project";
 "sources.linkPlaceholder" = "Paste a link for me to read…";
 "sources.addLink" = "Add link";
@@ -154,11 +156,11 @@
 "sources.moveFailed" = "I couldn't move it to that project.";
 "sources.delete" = "Delete";
 "sources.deleteConfirm" = "Delete “%@”?";
-"sources.deleteMessage" = "It's removed from the list along with any leftover audio. What I already learned in the wiki stays.";
+"sources.deleteMessage" = "It's removed from the list along with any leftover audio. What I already learned stays in your brain.";
 "sources.deleteFailed" = "I couldn't delete it.";
 
 "note.title" = "New note";
-"note.hint" = "Write anything you want me to remember. I'll add it to the project's wiki.";
+"note.hint" = "Write anything you want me to remember. I'll add it to the project.";
 "note.titlePlaceholder" = "Title (optional)";
 "note.save" = "Save note";
 "note.defaultTitle" = "Note from %@";
@@ -168,22 +170,22 @@
 "chat.scopeProject" = "This project";
 "chat.scopeBrain" = "Whole brain";
 "chat.lint" = "Review my brain";
-"chat.lintHelp" = "I look for contradictions, orphan pages and overdue to-dos, and fix the easy ones.";
+"chat.lintHelp" = "I look for contradictions, orphan pages and overdue tasks, and fix the easy ones.";
 "chat.lintQueued" = "Reviewing… I'll let you know when done";
 "chat.clear" = "Clear conversation";
 "chat.emptyTitle" = "Ask me anything";
-"chat.emptyMessage" = "I answer from what's in your wiki and tell you where I found it.";
+"chat.emptyMessage" = "I answer from what's in your brain and tell you where I found it.";
 "chat.suggestion1" = "What did we decide in the last meeting?";
-"chat.suggestion2" = "What to-dos are open and who owns them?";
+"chat.suggestion2" = "What tasks are open and who owns them?";
 "chat.suggestion3" = "Give me a summary of where things stand";
 "chat.placeholder" = "Type your question…";
 "chat.stop" = "Stop";
 "chat.thinking" = "Thinking…";
 "chat.step.reading" = "Reading…";
 "chat.step.readingFile" = "Reading %@…";
-"chat.step.searching" = "Searching your notes…";
-"chat.saveToWiki" = "Save to wiki";
-"chat.saved" = "Saved to wiki";
+"chat.step.searching" = "Searching your brain…";
+"chat.saveToWiki" = "Save to brain";
+"chat.saved" = "Saved to brain";
 "chat.copy" = "Copy";
 "chat.reconnect" = "Reconnect Claude";
 "chat.errorNotConnected" = "Please reconnect your Claude account.";
@@ -221,7 +223,7 @@
 "inbox.emptyMessage" = "When you record without picking a project, the meeting lands here and I'll suggest where it belongs.";
 "inbox.needsProject" = "Which project do these belong to?";
 "inbox.inProgress" = "In progress";
-"inbox.suggestion" = "Looks like %@ — assign it?";
+"inbox.suggestion" = "Looks like %@";
 "inbox.assign" = "Assign";
 "inbox.choose" = "Choose project";
 "inbox.other" = "Other…";
@@ -244,9 +246,9 @@
 "menu.microphone" = "Microphone";
 "menu.project" = "Project";
 "menu.titlePlaceholder" = "Meeting title (optional)";
-"menu.open" = "Open SecondBrain";
+"menu.open" = "Open secondbrain";
 "menu.quit" = "Quit";
-"menu.finishSetup" = "Open SecondBrain to finish setting it up.";
+"menu.finishSetup" = "Open secondbrain to finish setting it up.";
 
 /* Notifications */
 "notify.doneTitle" = "Done";
@@ -255,25 +257,25 @@
 "notify.failedBody" = "I couldn't process “%@”. You can try again from the app.";
 "notify.inboxTitle" = "Which project is this?";
 "notify.inboxBody" = "“%@” is in Unassigned waiting for a project.";
-"notify.jobFailed" = "I couldn't finish a task. You can try again from the app.";
+"notify.jobFailed" = "I couldn't finish something I was processing. You can try again from the app.";
 "notify.lintFailed" = "I couldn't review your brain this time.";
 "notify.rateTitle" = "Paused for Claude's limit";
 "notify.rateBody" = "You've reached your plan's limit; I'll continue at %@.";
 "notify.lintTitle" = "I reviewed your brain";
 "notify.lintBody" = "I tidied up %ld pages.";
-"notify.savedTitle" = "Answer saved to the wiki";
+"notify.savedTitle" = "Answer saved to your brain";
 
 /* Models */
 "models.error" = "I couldn't download the transcription model. Check your internet connection.";
 
 /* Restart */
-"restart.message" = "This change takes effect when SecondBrain restarts.";
+"restart.message" = "This change takes effect when secondbrain restarts.";
 "restart.now" = "Restart now";
 
 /* Claude */
 "claude.looking" = "Looking for Claude on your Mac…";
 "claude.missingTitle" = "First, let's install Claude";
-"claude.missingMessage" = "Claude is who reads your meetings and writes your wiki. I'll install it for you; it takes a minute.";
+"claude.missingMessage" = "Claude is who reads your meetings and organizes your brain. I'll install it for you; it takes a minute.";
 "claude.install" = "Install Claude";
 "claude.installing" = "Installing…";
 "claude.installFailed" = "The installation didn't finish. Check your connection and try again.";
@@ -284,7 +286,7 @@
 "claude.connect" = "Connect with Claude";
 "claude.terminalHint" = "If it asks for something, type here and press Return.";
 "claude.restartTerminal" = "Start over";
-"claude.alreadyLoggedIn" = "I'm already signed in — verify";
+"claude.alreadyLoggedIn" = "I'm signed in";
 "claude.pasteTitle" = "Already have a connection code? Paste it here";
 "claude.pasteSave" = "Save";
 "claude.pasteInvalid" = "That code doesn't look right. It should start with sk-ant-oat.";
@@ -298,21 +300,21 @@
 /* Onboarding */
 "onb.start" = "Get started";
 "onb.skip" = "Skip";
-"onb.finish" = "Start using SecondBrain";
+"onb.finish" = "Get started";
 "onb.welcome.title" = "Hi, I'm your second brain";
-"onb.welcome.message" = "I listen to your meetings, transcribe them, and write a tidy wiki for each project so you never forget what was said.";
+"onb.welcome.message" = "I listen to your meetings, transcribe them, and organize what I learn by project so you never forget what was said.";
 "onb.welcome.feature1" = "I record your computer's audio and your microphone: Zoom, Meet, Teams, anything.";
 "onb.welcome.feature2" = "Everything stays on your Mac. Transcription happens right here, your audio is never uploaded.";
-"onb.welcome.feature3" = "Claude, with your own account, turns each meeting into summaries, decisions, to-dos and people pages.";
+"onb.welcome.feature3" = "Claude, with your own account, turns each meeting into summaries, decisions, tasks and people pages.";
 "onb.consent.title" = "Before recording, let people know";
 "onb.consent.message" = "Recording people without their knowledge may be illegal where you live and, above all, isn't fair to them. Say you're recording at the start of every meeting and respect anyone who doesn't want to be.";
-"onb.consent.accept" = "I understand and will tell others when I record";
-"onb.vault.title" = "Where should I keep your notes?";
-"onb.vault.message" = "Your wiki is a regular folder of text files. You can open it, back it up or move it whenever you like.";
+"onb.consent.accept" = "I'll tell people before recording";
+"onb.vault.title" = "Where should I keep your brain?";
+"onb.vault.message" = "Your brain is a regular folder of text files. You can open it, back it up or move it whenever you like.";
 "onb.vault.change" = "Change…";
 "onb.vault.choose" = "Use this folder";
-"onb.vault.panelMessage" = "Choose where to keep your SecondBrain wiki";
-"onb.vault.hint" = "If you use Obsidian, you can open this folder as a vault.";
+"onb.vault.panelMessage" = "Choose where to keep your brain";
+"onb.vault.hint" = "If you use Obsidian, you can open this folder there too.";
 "onb.perm.title" = "Two permissions and you're set";
 "onb.perm.message" = "macOS will ask you to confirm. I only listen when you press Record.";
 "onb.perm.screenTitle" = "Computer audio";
@@ -322,7 +324,7 @@
 "onb.perm.allow" = "Allow";
 "onb.perm.openSettings" = "Open Settings";
 "onb.perm.granted" = "Done";
-"onb.perm.restartHint" = "Already turned it on in Settings but it doesn't show here? macOS needs SecondBrain to reopen. You'll come back to this same step.";
+"onb.perm.restartHint" = "Already turned it on in Settings but it doesn't show here? macOS needs secondbrain to reopen. You'll come back to this same step.";
 "onb.claude.title" = "Connect Claude";
 "onb.claude.message" = "I use your Claude account (Pro or Max) to understand your meetings. No technical knowledge needed.";
 "onb.models.title" = "Getting transcription ready";
@@ -336,13 +338,13 @@
 "onb.project.message" = "A project groups the meetings and documents about one thing: a client, a team, your thesis…";
 "onb.project.create" = "Create and continue";
 "onb.done.title" = "All set!";
-"onb.done.message" = "Here's how you'll use SecondBrain day to day:";
-"onb.done.menuTitle" = "The brain in your menu bar";
-"onb.done.menuMessage" = "Top right of your screen. Click it to record, pick the project and see how things are going. It turns red while recording.";
+"onb.done.message" = "Here's how you'll use secondbrain day to day:";
+"onb.done.menuTitle" = "secondbrain in your menu bar";
+"onb.done.menuMessage" = "Top right of your screen. Click it to record, pick the project and see how things are going. A red dot shows while you record.";
 "onb.done.hotkeyTitle" = "Record from anywhere";
 "onb.done.hotkeyMessage" = "Press ⌥⌘R (Option + Command + R) to start or stop a recording.";
 "onb.done.afterTitle" = "After each meeting";
-"onb.done.afterMessage" = "I transcribe and learn on my own. I'll let you know when I'm done and you'll see it in the project's wiki.";
+"onb.done.afterMessage" = "I transcribe and learn on my own. I'll let you know when I'm done and you'll see it in the project.";
 
 /* Settings */
 "settings.general" = "General";
@@ -350,7 +352,7 @@
 "settings.captureMic" = "Also record my microphone";
 "settings.hotkey" = "⌥⌘R shortcut to record";
 "settings.storage" = "Storage";
-"settings.vault" = "Wiki folder";
+"settings.vault" = "Brain folder";
 "settings.dataFolder" = "Audio and internal data";
 "settings.reveal" = "Show in Finder";
 "settings.transcription" = "Transcription";
@@ -369,20 +371,20 @@
 "settings.account" = "Account";
 "settings.advanced" = "Advanced";
 "settings.git" = "Keep history with git";
-"settings.gitFooter" = "If your wiki folder is a git repository, I commit after every change.";
+"settings.gitFooter" = "If your brain folder is a git repository, I commit after every change.";
 
 "owner.label" = "Your name";
 "owner.placeholder" = "e.g. Jamie Smith";
-"owner.hint" = "So Claude knows that “Me” in your meetings is you.";
+"owner.hint" = "So I know that “Me” in your meetings is you.";
 
-"restart.menuLanguage" = "Restart SecondBrain to change the language of the menus.";
+"restart.menuLanguage" = "Restart secondbrain to change the language of the menus.";
 "restart.whileRecording" = "Stop the recording before restarting.";
-"onb.perm.reopen" = "Reopen SecondBrain";
+"onb.perm.reopen" = "Reopen secondbrain";
 "sources.importing" = "Importing…";
 "sources.dropHint" = "Documents, audio or video. Recordings are transcribed automatically.";
 "sources.addFilesHelp" = "Documents (PDF, Word, text) or audio and video recordings. Recordings are transcribed automatically.";
 "sources.panelMessage" = "Choose documents or audio/video recordings. Recordings are transcribed automatically.";
-"vault.switching" = "Finishing the current task… then I’ll open the new brain folder.";
+"vault.switching" = "Finishing what I'm processing… then I’ll open the new brain folder.";
 "kind.email" = "Email";
 
 /* ===== v0.2 ===== */
@@ -407,7 +409,7 @@
 "dates.changeTitle" = "When did it happen?";
 "dates.changeSave" = "Save date";
 "dates.changeHint" = "I'll use this date to place it on the timeline and to understand phrases like “on Friday” or “next week”.";
-"dates.changeRelearn" = "Claude will read it again with the right date so it lands in the right place on the timeline and phrases like “on Friday” make sense. What it learned gets updated; nothing is lost.";
+"dates.changeRelearn" = "I'll read it again with the right date so it lands in the right place on the timeline and phrases like “on Friday” make sense. What I learned gets updated; nothing is lost.";
 "when.title" = "When did it happen?";
 "when.hint" = "Used to place it on the timeline and to understand phrases like “tomorrow” or “on Friday”.";
 "when.noteHint" = "If you're writing about something that happened earlier, use that date so it lands in the right place on the timeline.";
@@ -416,7 +418,7 @@
 "sources.sortHelp" = "Sort by: when it happened / when it was added";
 "sources.addedLater" = "Added days after it happened";
 "sources.withFormat" = "%@ format";
-"sources.openSummary" = "Open summary";
+"sources.openSummary" = "View summary";
 "sources.openEmail" = "View the email as is";
 "sources.openOriginal" = "View the original";
 "import.titleOne" = "Add file";
@@ -439,32 +441,32 @@
 "tl.kind.email" = "Email";
 "tl.kind.document" = "Document";
 "tl.kind.note" = "Note";
-"tl.kind.url" = "Web page";
+"tl.kind.url" = "Link";
 "tl.kind.decision" = "Decision";
 "tl.kind.milestone" = "Milestone";
 "tl.kind.task" = "Due date";
 
 /* Tasks */
-"tab.tasks" = "To-dos";
-"tasks.mine" = "My to-dos";
+"tab.tasks" = "Tasks";
+"tasks.mine" = "My tasks";
 "tasks.theirs" = "Others'";
 "tasks.unowned" = "No owner";
 "tasks.done" = "Done";
-"tasks.from" = "From:";
+"tasks.from" = "Source";
 "tasks.allSources" = "All meetings and emails";
 "tasks.me" = "Me";
 "tasks.noOwner" = "No owner";
 "tasks.doneOn" = "done %@";
 "tasks.markDone" = "Mark as done";
 "tasks.markUndone" = "Mark as not done";
-"tasks.count" = "%ld to-dos";
-"tasks.busy" = "Claude is updating this project, try again in a moment.";
+"tasks.count" = "%ld tasks";
+"tasks.busy" = "I'm updating this project; try again in a moment.";
 "tasks.emptyMine" = "Nothing for you here";
-"tasks.emptyTheirs" = "Nobody else has to-dos here";
-"tasks.emptyUnowned" = "No to-dos without an owner";
+"tasks.emptyTheirs" = "Nobody else has tasks here";
+"tasks.emptyUnowned" = "No tasks without an owner";
 "tasks.emptyDone" = "Nothing done yet";
 "tasks.emptyMessage" = "Once I learn from a meeting or an email, commitments show up here: yours and everyone else's, with their dates.";
-"mytasks.title" = "My to-dos";
+"mytasks.title" = "Tasks";
 "mytasks.subtitle" = "What's on you, across all your projects";
 "mytasks.overdue" = "Overdue";
 "mytasks.today" = "Today";
@@ -474,21 +476,21 @@
 "mytasks.recentlyDone" = "Recently done";
 "mytasks.showDone" = "Show done";
 "mytasks.overdueHelp" = "%ld overdue";
-"mytasks.emptyTitle" = "You have no to-dos";
+"mytasks.emptyTitle" = "You have no tasks";
 "mytasks.emptyMessage" = "When you commit to something in a meeting or an email, it shows up here with its date.";
-"srctasks.title" = "To-dos and agreements";
+"srctasks.title" = "Tasks and agreements";
 "srctasks.mine" = "Mine";
 "srctasks.theirs" = "Others'";
 "srctasks.none" = "None.";
 "srctasks.agreements" = "Agreements";
 "srctasks.noAgreements" = "I didn't find an agreements section in the summary.";
 "srctasks.notYet" = "They'll appear once I finish learning from this.";
-"error.busyProject" = "Claude is updating this project, try again in a moment.";
+"error.busyProject" = "I'm updating this project; try again in a moment.";
 
 /* Emails */
 "email.add" = "Add email";
 "email.addEllipsis" = "Add email…";
-"email.addHelp" = "Paste an email (or several from a conversation) so the brain learns it";
+"email.addHelp" = "Paste an email (or several from one thread) so I learn from it";
 "email.pasteMenu" = "Paste email…";
 "email.title" = "Add email";
 "email.nextTitle" = "Next email in “%@”";
@@ -505,9 +507,9 @@
 "email.noDate" = "I couldn't find the email's date. Set when it was sent so it lands right on the timeline.";
 "email.dateHint" = "Sent %@. That's where it goes on the timeline.";
 "email.isMine" = "Mine";
-"email.isMineHelp" = "You sent it (matches “Your emails” in Settings)";
+"email.isMineHelp" = "You sent it (matches “My email addresses” in Settings)";
 "email.noOwnerEmails" = "Tip: add your email addresses in Settings so I know which ones you sent.";
-"email.thread" = "Conversation";
+"email.thread" = "Thread";
 "email.looksLike" = "Looks like part of the thread “%@”";
 "email.mightBe" = "Might belong to the thread “%@”";
 "email.addToThread" = "Add to thread";
@@ -523,13 +525,13 @@
 "thread.viewEmails" = "View emails";
 "thread.addNext" = "Add the next email";
 "thread.openSummary" = "Thread summary";
-"thread.quoted" = "Quoted history";
+"thread.quoted" = "Quoted messages";
 "thread.sentAdded" = "Sent: %@ · Added: %@";
 "thread.unknownSender" = "Unknown sender";
 "thread.emptyBody" = "(no new text)";
 "thread.empty" = "This thread has no emails yet";
 "wikiGroup.emails" = "Emails";
-"owner.emails" = "Your emails";
+"owner.emails" = "My email addresses";
 "owner.emailsPlaceholder" = "you@company.com, you@gmail.com";
 "owner.emailsHint" = "So I know which emails you sent. You can add several, separated by commas.";
 
@@ -539,12 +541,12 @@
 "tpl.mine" = "My formats";
 "tpl.builtin" = "Included";
 "tpl.builtinBadge" = "Included";
-"tpl.noneYet" = "You haven't made any yet";
+"tpl.noneYet" = "You don't have your own formats yet";
 "tpl.pickOne" = "Choose a format";
-"tpl.explain" = "A format is the structure Claude follows when summarizing a meeting or an email: which sections it has and what goes in each.";
+"tpl.explain" = "A format is the structure I follow when summarizing a meeting or an email: which sections it has and what goes in each.";
 "tpl.new" = "New format";
 "tpl.makeAI" = "Create with AI";
-"tpl.makeAIHelp" = "Describe the format in your own words and Claude writes it";
+"tpl.makeAIHelp" = "Describe the format in your own words and I'll write it";
 "tpl.edit" = "Edit";
 "tpl.editCopy" = "Edit a copy";
 "tpl.editCopyHelp" = "Included formats don't change: a copy of yours is saved";
@@ -553,12 +555,12 @@
 "tpl.copyOf" = "%@ (copy)";
 "tpl.deleteConfirm" = "Delete the format “%@”?";
 "tpl.deleteMessage" = "Summaries already written with it don't change.";
-"tpl.useAsDefault" = "Use by default in…";
-"tpl.defaultIn" = "Default in %ld project(s)";
+"tpl.useAsDefault" = "Use by default";
+"tpl.defaultIn" = "Default in %ld projects";
 "tpl.name" = "Name";
 "tpl.description" = "What it's for (one line)";
 "tpl.structure" = "Structure";
-"tpl.structureHint" = "Use headings (##) for sections. Instructions for Claude go between <!-- and -->. The Agreements section is always added.";
+"tpl.structureHint" = "Each section starts with ##. Anything between <!-- and --> is an instruction for me. I always add the Agreements section.";
 "tpl.preview" = "Preview";
 "tpl.previewEmpty" = "Write the structure on the left.";
 "tpl.save" = "Save format";
@@ -572,19 +574,19 @@
 "tpl.projectDefault" = "Default format";
 "tpl.projectDefaultHint" = "How this project's meetings will be summarized. You can change it per meeting.";
 "tpl.makeTitle" = "Create a format with AI";
-"tpl.makeHint" = "Tell Claude how you want your summaries to look. For example: “For client meetings: what they need, objections, budget and next steps”.";
-"tpl.makeNamePlaceholder" = "E.g. Client meetings";
+"tpl.makeHint" = "Tell me how you want your summaries to look. For example: “For client meetings: what they need, objections, budget and next steps”.";
+"tpl.makeNamePlaceholder" = "e.g. Client meetings";
 "tpl.makeDescPlaceholder" = "Describe the sections you want and what goes in each…";
 "tpl.makeGo" = "Create";
 "tpl.makeQueued" = "Waiting…";
-"tpl.makeRunning" = "Claude is writing the format…";
+"tpl.makeRunning" = "Writing the format…";
 "tpl.makeDone" = "Done! It's in your list of formats.";
-"tpl.makeFailed" = "The format couldn't be created. Try again in a moment.";
+"tpl.makeFailed" = "I couldn't create the format. Try again in a moment.";
 "tpl.makeBackground" = "Keep going in the background";
-"reformat.menu" = "Redo with another format…";
-"reformat.title" = "Redo with another format";
-"reformat.hint" = "Claude rewrites only this summary with the chosen format. To-dos, decisions and the rest of the brain stay the same. You can undo it in Activity.";
-"reformat.go" = "Redo";
+"reformat.menu" = "Change format…";
+"reformat.title" = "Change format";
+"reformat.hint" = "I rewrite only the summary with the chosen format. Tasks, decisions and the rest of your brain stay the same. You can undo it in History.";
+"reformat.go" = "Rewrite";
 "project.more" = "More options";
 
 /* Export */
@@ -605,14 +607,14 @@
 "export.hint.html" = "A web page any browser can open.";
 "export.hint.rtf" = "Formatted text that almost any editor opens.";
 "export.include" = "Include";
-"export.opt.summary" = "Include summary";
-"export.opt.tasks" = "Include to-dos and agreements";
-"export.opt.transcript" = "Include transcript";
-"export.opt.emails" = "Include the full emails";
+"export.opt.summary" = "Summary";
+"export.opt.tasks" = "Tasks and agreements";
+"export.opt.transcript" = "Transcript";
+"export.opt.emails" = "Full emails";
 "export.opt.timestamps" = "With timestamps";
 "export.opt.names" = "Use names instead of “Speaker N”";
-"export.opt.wikilinks" = "Keep links between pages [[…]]";
-"export.opt.frontmatter" = "Keep the header data";
+"export.opt.wikilinks" = "Keep internal links";
+"export.opt.frontmatter" = "Keep metadata";
 "export.save" = "Save…";
 "export.copy" = "Copy";
 "export.copied" = "Copied";
@@ -620,7 +622,7 @@
 "export.panelMessage" = "Choose where to save the file";
 "export.saved" = "Saved: %@";
 "export.open" = "Open";
-"export.failed" = "Couldn't export. %@";
+"export.failed" = "I couldn't export. %@";
 
 /* Queue */
 "queue.reformatting" = "Rewriting “%@” with another format…";
@@ -629,12 +631,12 @@
 "queue.savingEdit" = "Saving your change…";
 
 /* Brain update */
-"migration.title" = "Your brain was updated: it now has to-dos, emails, formats and a timeline.";
+"migration.title" = "Your brain was updated: it now has tasks, emails, formats and a timeline.";
 "migration.more" = "More details";
 "migration.less" = "Less";
 "migration.dismiss" = "Got it";
 "migration.explain" = "Nothing you had was deleted or changed. If you had edited the brain's rules, I kept your version and left the new one beside it for you to review whenever you like.";
-"email.several" = "I found %ld emails from one conversation. They'll all be saved to the same thread, in the order they were sent. The newest one is shown below.";
+"email.several" = "I found %ld emails from one thread. I'll save them together, in the order they were sent. The newest one is shown below.";
 
 /* v0.3 — Navigation */
 "sidebar.mail" = "Mail";
@@ -655,13 +657,13 @@
 "graph.fit" = "Fit";
 "graph.search" = "Search the graph";
 "graph.links" = "%ld connections";
-"graph.overviewLabel" = "Overview";
+"graph.overviewLabel" = "Project overview";
 "graph.play" = "Watch it grow";
 "graph.open" = "Open page";
-"graph.openOverview" = "Open overview";
+"graph.openOverview" = "Open project overview";
 "graph.today" = "Today";
-"graph.hint.all" = "Each color is a project · gray = people · squares = summaries · click to explore · ▶ to watch it grow";
-"graph.hint.project" = "Hover to see a name · click to explore · chips filter by type · ▶ to watch it grow";
+"graph.hint.all" = "Click anything to explore it";
+"graph.hint.project" = "Click anything to explore it";
 "graph.close" = "Close";
 "graph.connected" = "Connected to";
 "graph.matches" = "%ld matches";
@@ -671,37 +673,37 @@
 "graph.kind.email" = "Email";
 "graph.kind.document" = "Document";
 "graph.kind.note" = "Note";
-"graph.kind.url" = "Web page";
+"graph.kind.url" = "Link";
 "graph.kind.person" = "Person";
 "graph.kind.topic" = "Topic";
 "graph.kind.decision" = "Decision";
 "graph.kind.question" = "Question";
 "graph.kind.task" = "Task";
-"graph.kind.page" = "Summary";
+"graph.kind.page" = "Page";
 "graph.kinds.project" = "Projects";
 "graph.kinds.meeting" = "Meetings";
 "graph.kinds.email" = "Emails";
 "graph.kinds.document" = "Documents";
 "graph.kinds.note" = "Notes";
-"graph.kinds.url" = "Web pages";
+"graph.kinds.url" = "Links";
 "graph.kinds.person" = "People";
 "graph.kinds.topic" = "Topics";
 "graph.kinds.decision" = "Decisions";
 "graph.kinds.question" = "Questions";
 "graph.kinds.task" = "Tasks";
-"graph.kinds.page" = "Summaries";
+"graph.kinds.page" = "Pages";
 
 /* v0.3 — Accounts */
 "accounts.section" = "Accounts";
 "accounts.none" = "Connect your mail and calendar so you don't have to copy and paste.";
-"accounts.footer" = "Read-only: SecondBrain never sends, deletes or changes anything.";
+"accounts.footer" = "I only read. I never send, delete or change anything.";
 "accounts.connectMicrosoft" = "Connect Microsoft 365";
 "accounts.connectGoogle" = "Connect Google";
 "accounts.disconnect" = "Disconnect";
 "accounts.waiting" = "Waiting for you to sign in to %@ in your browser…";
 "accounts.howToEnable" = "How do I enable it?";
 "accounts.troubleConnecting" = "Trouble connecting a work account?";
-"accounts.notConfigured" = "This connection isn't set up yet. Here's how, in a minute.";
+"accounts.notConfigured" = "This connection isn't set up yet. I'll show you how in a minute.";
 "accounts.consentRequired" = "Your organization needs to approve SecondBrain.";
 "accounts.advanced" = "Advanced";
 "accounts.msClientId" = "Microsoft application ID";
@@ -721,14 +723,14 @@
 "accounts.trust.read" = "I only read your mail and calendar";
 "accounts.trust.readDetail" = "I never send, delete or change anything.";
 "accounts.trust.local" = "Your mail stays on this Mac";
-"accounts.trust.localDetail" = "It never goes through our servers. Only what you add to your brain is read by Claude to write the wiki, through your account.";
+"accounts.trust.localDetail" = "It never goes through our servers. Only what you add to your brain is read by Claude, through your account.";
 "accounts.trust.disconnect" = "Disconnect anytime";
 "accounts.trust.disconnectDetail" = "Settings → Accounts → Disconnect, and this Mac forgets the access.";
-"accounts.trust.browserHint" = "Your browser will open so you can sign in to %@. SecondBrain never sees your password.";
+"accounts.trust.browserHint" = "Your browser will open so you can sign in to %@. I never see your password.";
 "accounts.trust.continue" = "Continue in the browser";
 "accounts.waiting.detail" = "When you're done, come back here: this closes on its own.";
-"accounts.waiting.reopen" = "Didn't open? Open it again";
-"accounts.failed.title" = "Couldn't connect %@";
+"accounts.waiting.reopen" = "Open again";
+"accounts.failed.title" = "I couldn't connect %@";
 "accounts.failed.retry" = "Try again";
 "accounts.blocked.title" = "Your organization needs to approve SecondBrain";
 "accounts.blocked.message" = "It's nothing you did: with work %@ accounts, IT decides which apps can read mail. It only needs approving once.";
@@ -738,8 +740,8 @@
 "accounts.blocked.macCalendarDetail" = "Your meetings without signing in: one system permission and done.";
 "accounts.blocked.paste" = "Meanwhile: paste an email";
 "accounts.blocked.pasteDetail" = "Copy an email or a thread and add it to your brain anyway.";
-"accounts.notRegistered.title" = "SecondBrain isn't registered with %@ yet";
-"accounts.notRegistered.message" = "This copy of SecondBrain can't connect to %1$@ yet: it's missing the credentials %1$@ gives each app. If someone set SecondBrain up for you, ask them to add them under Settings → Accounts → Advanced. Meanwhile you can use the Mac's calendar or paste emails.";
+"accounts.notRegistered.title" = "secondbrain isn't registered with %@ yet";
+"accounts.notRegistered.message" = "This copy of secondbrain can't connect to %1$@ yet: it's missing the credentials %1$@ gives each app. If someone set secondbrain up for you, ask them to add them under Settings → Accounts → Advanced. Meanwhile you can use the Mac's calendar or paste emails.";
 "accounts.notRegistered.howDetail" = "How to register it yourself, if you're technical.";
 "onb.accounts.title" = "Connect your mail and calendar (optional)";
 "onb.accounts.message" = "Your emails and meetings then arrive on their own, no copy and paste. You can also do it later in Settings.";
@@ -750,11 +752,11 @@
 "orghelp.subtitle" = "With a work account, your admin sometimes has to approve SecondBrain once. Here's what to send them.";
 "orghelp.forYou" = "For you";
 "orghelp.forAdmin" = "For your admin";
-"orghelp.technical" = "I'm technical: use my own app registration";
+"orghelp.technical" = "Use my own app registration";
 "orghelp.copy" = "Copy message";
 "orghelp.copied" = "Copied";
 "orghelp.copyConsentLink" = "Copy consent link";
-"orghelp.notRegistered" = "This copy of SecondBrain can't connect to %1$@ yet: it's missing the credentials %1$@ gives each app. If someone set SecondBrain up for you, ask them to add them under Settings → Accounts → Advanced. Meanwhile you can use the Mac's calendar or paste emails. If you're technical, follow the steps under “I'm technical: use my own app registration” below.";
+"orghelp.notRegistered" = "This copy of secondbrain can't connect to %1$@ yet: it's missing the credentials %1$@ gives each app. If someone set secondbrain up for you, ask them to add them under Settings → Accounts → Advanced. Meanwhile you can use the Mac's calendar or paste emails. If you're technical, follow the steps under “Use my own app registration” below.";
 "orghelp.own.paste" = "Then paste the IDs in Settings → Accounts → Advanced and press Connect again.";
 "orghelp.ms.forYou.hint" = "Copy and send this message to your IT admin:";
 "orghelp.g.forYou.hint" = "Copy and send this message to your Google Workspace admin:";
@@ -778,7 +780,7 @@
 "orghelp.ms.own.7" = "Go to Authentication and set Allow public client flows to Yes.";
 "orghelp.ms.own.8" = "Go to API permissions → Add a permission → Microsoft Graph → Delegated permissions.";
 "orghelp.ms.own.9" = "Add User.Read, Mail.Read, Calendars.Read and offline_access.";
-"orghelp.ms.own.10" = "On Overview, copy the Application (client) ID and paste it into SecondBrain.";
+"orghelp.ms.own.10" = "On Overview, copy the Application (client) ID and paste it into secondbrain.";
 "orghelp.g.admin.1" = "Sign in to the Google Admin console (admin.google.com) as a super admin.";
 "orghelp.g.admin.2" = "Go to Security → Access and data control → API controls.";
 "orghelp.g.admin.3" = "Select Manage Third-Party App Access.";
@@ -798,7 +800,7 @@
 "orghelp.g.own.7" = "Go to Credentials → Create credentials → OAuth client ID.";
 "orghelp.g.own.8" = "Application type: Desktop app. Name: SecondBrain.";
 "orghelp.g.own.9" = "Select Create.";
-"orghelp.g.own.10" = "Copy the client ID and client secret and paste them into SecondBrain.";
+"orghelp.g.own.10" = "Copy the client ID and client secret and paste them into secondbrain.";
 
 /* v0.3 — Mail */
 "mail.title" = "Mail";
@@ -807,7 +809,7 @@
 "mail.empty.message" = "Connect your account and pick which emails I should learn from. Nothing is saved until you say so.";
 "mail.pasteInstead" = "or paste an email";
 "mail.pickMessage" = "Pick an email to read it.";
-"mail.inBrain" = "✓ in your brain";
+"mail.inBrain" = "In your brain";
 "mail.loadMore" = "Load more";
 "mail.search" = "Search mail";
 "mail.inboxWindow" = "Inbox · last 30 days";
@@ -827,27 +829,27 @@
 "mail.attachments" = "Attachments";
 "mail.to" = "To: %@";
 "mail.cc" = "Cc: %@";
-"mail.conversation" = "Conversation · %d emails";
+"mail.conversation" = "Thread · %d emails";
 "mail.quoted" = "Earlier messages";
 "mail.onlyQuoted" = "(No new text: it only quotes earlier messages.)";
 "mail.openFailed" = "I couldn't open this email";
-"mail.addTo" = "Add to %@";
-"mail.addConversationTo" = "Add conversation (%d) to %@";
-"mail.addTo.help" = "I save it in the project and learn from it. Click the arrow to pick another project.";
-"mail.addConversation.help" = "I save the whole conversation, oldest first. Click the arrow to pick another project or add only this message.";
+"mail.addTo" = "Save to %@";
+"mail.addConversationTo" = "Save thread (%d) to %@";
+"mail.addTo.help" = "I save it in the project and learn from it. Use the arrow to pick another project.";
+"mail.addConversation.help" = "I save the whole thread, oldest first. Use the arrow to pick another project or save only this message.";
 "mail.changeProject" = "Change project";
 "mail.onlyThis" = "Only this message";
 "mail.alreadyIn" = "Already in %@";
-"mail.readOnly" = "Read only · I never send or delete anything";
+"mail.readOnly" = "I only read. I never send, delete or change anything.";
 "mail.learning" = "Learning from the email…";
 "mail.alreadyInBrain" = "It was already in your brain";
 "mail.undo" = "Undo";
-"mail.openInProject" = "Show in project";
+"mail.openInProject" = "View in project";
 "mail.remove" = "Remove";
 "mail.removeConfirm" = "Remove this email from your brain?";
 "mail.removeConfirm.message" = "I'll undo what I learned from it. The email stays in your mailbox.";
 "mail.reconnect.title" = "Your %@ session expired.";
-"mail.reconnect" = "Connect again";
+"mail.reconnect" = "Reconnect";
 "mail.retry" = "Try again";
 "mail.paste" = "Paste an email";
 
@@ -855,7 +857,7 @@
 "meetings.title" = "Meetings";
 "meetings.subtitle" = "Your agenda, ready to record";
 "meetings.empty.title" = "Bring in your calendar";
-"meetings.empty.message" = "Use your Mac's calendar or connect your account to see your meetings here — join, record and get ready in one click.";
+"meetings.empty.message" = "You'll see your meetings here to join, record and get ready in one click.";
 "meetings.nothing.title" = "Nothing on the agenda";
 "meetings.nothing.message" = "Your meetings will show up here.";
 "meetings.today" = "Today";
@@ -866,8 +868,8 @@
 "meetings.join" = "Join";
 "meetings.prepare" = "Get ready";
 "meetings.viewSummary" = "View summary";
-"meetings.now" = "NOW";
-"meetings.next" = "NEXT";
+"meetings.now" = "Now";
+"meetings.next" = "Next";
 "meetings.startsIn" = "starts in %@";
 "meetings.startedAgo" = "started %@ ago";
 "meetings.left" = "%@ left";
@@ -886,13 +888,13 @@
 "meetings.retry" = "Try again";
 "meetings.failedHelp" = "I couldn't learn from this recording. You can try again.";
 "meetings.over" = "Ended";
-"meetings.noProject" = "No project";
-"meetings.noProjectHelp" = "Without a project, the recording goes to the Inbox and I'll suggest one later.";
+"meetings.noProject" = "Unassigned";
+"meetings.noProjectHelp" = "Without a project, it goes to Unassigned and I'll suggest one later.";
 "meetings.chooseProject" = "Choose project";
 "meetings.changeProject" = "Change project";
 "meetings.isItProject" = "Is it for %@?";
 "meetings.yesProject" = "Yes, it belongs to this project";
-"meetings.yesProjectSeries" = "Yes; I'll remember it for every meeting in this series";
+"meetings.yesProjectSeries" = "Yes, and remember it for this series";
 "meetings.otherProject" = "No, pick another";
 "meetings.reasonTitle" = "The title mentions the project";
 "meetings.reasonPeople" = "%@ are in this project";
@@ -902,7 +904,7 @@
 "meetings.openInCalendar" = "Open in calendar";
 "meetings.openPerson" = "See what I know about this person";
 "meetings.you" = "(you)";
-"meetings.organizer" = "organizer";
+"meetings.organizer" = "(organizer)";
 "meetings.nextAt" = "Next: %@ · %@";
 "meetings.openAgenda" = "Open the agenda";
 "meetings.stillThere" = "Still in the meeting?";
@@ -936,11 +938,11 @@
 "github.none" = "Connect GitHub so I can learn from your projects' repositories.";
 "github.connect" = "Connect GitHub";
 "github.useCLI" = "Use my GitHub CLI session";
-"github.envToken" = "Connected through the SB_GITHUB_TOKEN variable";
+"github.envToken" = "Connected with a system token";
 "github.method.device" = "Connected from github.com";
 "github.method.cli" = "Connected with your GitHub CLI session";
 "github.method.token" = "Connected with a personal token";
-"github.method.env" = "Connected through the SB_GITHUB_TOKEN variable";
+"github.method.env" = "Connected with a system token";
 "github.interval" = "Refresh repositories";
 "github.interval.15" = "Every 15 min";
 "github.interval.60" = "Every hour";
@@ -952,7 +954,7 @@
 "github.lastSync.never" = "Not yet";
 "github.syncNow" = "Refresh now";
 "github.change" = "Change";
-"github.footer" = "I only read your repositories. I never write to GitHub.";
+"github.footer" = "I only read. I never write to GitHub.";
 "github.advanced" = "Advanced";
 "github.clientId" = "Your OAuth App's client ID";
 "github.clientId.hint" = "Only if you use your own GitHub OAuth App (with “Enable Device Flow” on). Leave it empty to use SecondBrain's.";
@@ -967,7 +969,7 @@
 "github.trust.local" = "The code stays on this Mac";
 "github.trust.localDetail" = "The code copy and what I learn are kept here, in your folders.";
 "github.trust.disconnect" = "Disconnect whenever you want";
-"github.trust.disconnectDetail" = "From Settings, in one click. What I already learned stays in your wiki.";
+"github.trust.disconnectDetail" = "From Settings, in one click. What I already learned stays in your brain.";
 "github.trust.browserHint" = "I'll give you a short code to type on github.com. I don't need your password.";
 "github.trust.cliHint" = "I'll use the session you already have in the terminal (gh). I don't need your password.";
 "github.code.title" = "Type this code on GitHub";
@@ -981,8 +983,8 @@
 "github.failed.title" = "I couldn't connect GitHub";
 "github.failed.notConfigured" = "Meanwhile you can use your GitHub CLI session or paste a personal token in Settings → GitHub → Advanced.";
 "github.learned.title" = "I learned from the code";
-"github.learned.one" = "I learned new things from %@. Adding them to your wiki.";
-"github.learned.many" = "I learned new things from %ld repositories. Adding them to your wiki.";
+"github.learned.one" = "I learned new things from %@. Adding them to your brain.";
+"github.learned.many" = "I learned new things from %ld repositories. Adding them to your brain.";
 "github.problem.many" = "%@ (and %ld more problems)";
 "github.org.trouble" = "Is your organization blocking it?";
 "github.org.howTo" = "How do I fix it?";
@@ -1018,7 +1020,7 @@
 "repos.readCode" = "Read the code";
 "repos.remove" = "Stop following";
 "repos.remove.confirm" = "Stop following %@?";
-"repos.remove.message" = "I'll stop refreshing it and delete the code copy from this Mac. What I already learned stays in your wiki.";
+"repos.remove.message" = "I'll stop refreshing it and delete the code copy from this Mac. What I already learned stays in your brain.";
 "repos.noCode" = "no code";
 "repos.noCode.help" = "I don't read this repository's code, only its changes, pull requests and issues.";
 "repos.ahead" = "%ld ahead";
@@ -1032,7 +1034,7 @@
 "repos.branch.pending" = "pending";
 "repos.branch.error" = "has problems";
 "repos.branch.primary" = "%@ (primary branch)";
-"repos.branch.rewritten.help" = "Someone rewrote this branch's history (force-push or rebase). I flagged in the wiki what relied on commits that are gone.";
+"repos.branch.rewritten.help" = "Someone rewrote this branch's history (force-push or rebase). I flagged in your brain what relied on commits that are gone.";
 "repos.branch.gone.help" = "This branch was deleted or renamed on GitHub. I keep what I learned from it; pick the new one in Choose branches.";
 "repos.addSheet.title" = "Add repository";
 "repos.addSheet.hint" = "Pick a repository for %@. You can add several.";
@@ -1049,7 +1051,7 @@
 "repos.branches.followOne" = "Follow 1 branch";
 "repos.branches.follow" = "Follow %ld branches";
 "repos.branches.save" = "Save";
-"repos.readCode.toggle" = "Read the code (for technical questions)";
+"repos.readCode.toggle" = "Read the code";
 "repos.readCode.hint" = "I keep a copy of those branches' code on this Mac, without history, to answer where something is or how it works.";
 "repos.readCode.tooBig" = "This repository is too big to copy its code. I still learn from its changes, pull requests and issues.";
 
@@ -1063,9 +1065,9 @@
 "github.orphans.remove" = "Stop following";
 
 /* v0.4 — Rules */
-"rules.offer.from" = "Everything from %1$@ into %2$@ from now on?";
-"rules.offer.to" = "Everything sent to %1$@ into %2$@ from now on?";
-"rules.offer.with" = "Everything that includes %1$@ into %2$@ from now on?";
+"rules.offer.from" = "Always send mail from %1$@ to %2$@?";
+"rules.offer.to" = "Always send mail addressed to %1$@ to %2$@?";
+"rules.offer.with" = "Always send anything that includes %1$@ to %2$@?";
 "rules.offer.always" = "Yes, always";
 "rules.offer.once" = "Just this once";
 "rules.offer.created" = "Rule created";
@@ -1115,13 +1117,13 @@
 "rules.editor.when" = "When";
 "rules.editor.andAlso" = "and";
 "rules.editor.and" = "and also…";
-"rules.editor.sendTo" = "→ send to";
+"rules.editor.sendTo" = "send to";
 "rules.editor.removeCondition" = "Remove";
 "rules.editor.section.mail" = "Email";
 "rules.editor.section.meetings" = "Meetings";
 "rules.editor.section.both" = "Both";
 "rules.editor.name" = "Name (optional)";
-"rules.editor.autoAdd" = "Add new matching emails automatically";
+"rules.editor.autoAdd" = "Add automatically";
 "rules.editor.autoAddHint" = "Every 15 min I check your email and add the ones that match, without asking.";
 "rules.editor.duplicate" = "You already have a rule that looks for the same thing.";
 "rules.editor.issue.empty" = "Type what to look for.";
@@ -1168,5 +1170,90 @@
 "rules.meetings.byRuleHelp" = "The rule “%@” decided this. Pick another project to change it just here.";
 "rules.meetings.byDefault" = "default project";
 "rules.meetings.byDefaultHelp" = "No rule matches: it goes to your default project (Settings → Rules).";
-"rules.meetingOffer.organizer" = "Meetings organized by %1$@ into %2$@ from now on?";
-"rules.meetingOffer.with" = "Meetings with %1$@ into %2$@ from now on?";
+"rules.meetingOffer.organizer" = "Always send meetings %1$@ organizes to %2$@?";
+"rules.meetingOffer.with" = "Always send meetings with %1$@ to %2$@?";
+
+/* v0.5 — Home, search, brand */
+"home.title" = "Home";
+"home.search" = "Search or ask anything…";
+"home.now" = "Now";
+"home.next" = "Next";
+"home.today" = "Today";
+"home.seeAgenda" = "See agenda";
+"home.toSort" = "To sort";
+"home.seeAll" = "See all";
+"home.seeAllTasks" = "See all (%ld)";
+"home.tasksToday" = "Tasks for today";
+"home.nothingDue" = "Nothing due today";
+"home.recent" = "Recent";
+"home.seeByDate" = "See all by date";
+"home.connections" = "Explore how everything connects";
+"home.history" = "History";
+"home.emptyTitle" = "Your knowledge, in one place.";
+"home.emptyRecord" = "Record";
+"home.emptyPaste" = "Paste an email";
+"home.emptyDrop" = "Drop a file here";
+"home.connectCalendar" = "Connect your calendar or use the Mac's";
+"search.placeholder" = "Search or ask…";
+"search.ask" = "Ask: “%@”";
+"search.askProject" = "Ask %@: “%@”";
+"search.group.meetings" = "Meetings";
+"search.group.notes" = "Notes and documents";
+"search.group.mail" = "Emails";
+"search.group.pages" = "Pages";
+"search.group.people" = "People";
+"search.group.tasks" = "Tasks";
+"search.group.projects" = "Projects";
+"search.group.actions" = "Actions";
+"search.group.today" = "Today's meetings";
+"search.group.recent" = "Recently opened";
+"search.empty" = "No results. ↩ to ask.";
+"search.action.record" = "Record";
+"search.action.pasteMail" = "Paste email";
+"search.action.newNote" = "New note";
+"search.action.newProject" = "New project";
+"search.action.settings" = "Settings";
+"search.action.rules" = "Rules";
+"search.action.formats" = "Formats";
+"record.control.meeting" = "Record “%@”";
+"record.control.else" = "or record something else";
+"record.stop" = "Stop";
+"queue.processing" = "Processing %ld…";
+"tabs.content" = "Content";
+"tabs.byDate" = "By date";
+"tabs.byTopic" = "By topic";
+"content.processing" = "Processing";
+"project.add" = "Add";
+"project.addRecordHere" = "Record here";
+"project.addFiles" = "Add files…";
+"project.pasteLink" = "Paste link…";
+"project.history" = "History";
+"project.repos" = "Repositories…";
+"project.edit" = "Edit project…";
+"project.missing.message" = "It may have been deleted or moved.";
+"project.missing.action" = "Go to Home";
+"tasks.title" = "Tasks";
+"tasks.segment.mine" = "Mine";
+"tasks.segment.theirs" = "Others'";
+"tasks.segment.unowned" = "No owner";
+"tasks.segment.done" = "Done";
+"tasks.sourceMeeting" = "Meeting · %@";
+"tasks.sourceEmail" = "Email · %@";
+"meetings.segment.past" = "Past";
+"meetings.seeSummary" = "View summary";
+"mail.saveTo" = "Save to %@";
+"mail.saveNoProject" = "Save without a project";
+"mail.saved" = "Saved";
+"mail.seeInProject" = "View in project";
+"note.hintInbox" = "Write anything you want me to remember. I'll suggest which project it belongs to.";
+"settings.tab.general" = "General";
+"settings.tab.accounts" = "Accounts";
+"settings.tab.github" = "GitHub";
+"settings.tab.rules" = "Rules";
+"settings.tab.formats" = "Formats";
+"settings.tab.advanced" = "Advanced";
+"settings.ownerEmails" = "My email addresses";
+"onb.saveIn" = "Saved in %@";
+"onb.change" = "Change…";
+"readonly.promise" = "I only read. I never send, delete or change anything.";
+"brand.name" = "secondbrain";

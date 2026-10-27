@@ -6,13 +6,16 @@
 
   // ---------- Constants ----------
 
-  // Fixed project palette (one per project, in creation order). Readable on light and dark backgrounds.
-  const PALETTE = ['#6e56cf', '#12a594', '#f76b15', '#d6409f', '#0090ff', '#30a46c', '#e5484d', '#05a2c2', '#ad7f58', '#8e4ec6'];
-  const KIND_COLORS = {
-    project: '#5b5bd6', meeting: '#6e56cf', email: '#0090ff', document: '#f76b15', note: '#ad7f58', url: '#05a2c2',
-    person: '#8b8e99', topic: '#30a46c', decision: '#d6409f', question: '#e2a336', task: '#12a594', page: '#5d6577',
-    repo: '#3e63dd',
+  // Colors come from the brand tokens in graph.css (CONTRACT §15.1); nothing is hard-coded here.
+  // Project colors are computed in Swift (GraphPalette → Brand's stable hash of the slug) and arrive as `projects[].color`:
+  // the hash lives in one place only. Kinds (inside a project) map onto the same six tones.
+  const KIND_TONES = {
+    project: '--accent', meeting: '--tone-terracotta', email: '--tone-slate', document: '--tone-ochre', note: '--tone-ochre',
+    url: '--tone-slate', person: '--person-ring', topic: '--tone-moss', decision: '--tone-mauve', question: '--warning',
+    task: '--accent', page: '--text3', repo: '--tone-sage',
   };
+  const KIND_COLORS = {};
+  const FONT = '"Inter", -apple-system, sans-serif';
   const KIND_ORDER = ['meeting', 'email', 'document', 'note', 'url', 'topic', 'decision', 'question', 'task', 'repo', 'person', 'page', 'project'];
   // Same icons as the rest of the app (SF Symbols waveform, envelope, person, checkmark.seal, lightbulb,
   // questionmark.bubble, doc.text …), drawn as small inline SVGs.
@@ -83,10 +86,11 @@
   function readTheme() {
     const cs = getComputedStyle(document.documentElement);
     const v = (n) => cs.getPropertyValue(n).trim();
+    for (const [kind, token] of Object.entries(KIND_TONES)) KIND_COLORS[kind] = v(token);
     S.theme = {
-      bg: v('--bg'), text: v('--text'), muted: v('--muted'), edge: v('--edge'), edgeStrong: v('--edge-strong'),
-      person: v('--person'), personRing: v('--person-ring'), haloAlpha: parseFloat(v('--halo-alpha')) || 0.1,
-      labelHalo: v('--label-halo'), accent: v('--accent'),
+      bg: v('--canvas'), text: v('--text'), muted: v('--text2'), edge: v('--edge'), edgeStrong: v('--edge-strong'),
+      person: v('--person'), personRing: v('--person-ring'), haloAlpha: parseFloat(v('--halo-alpha')) || 0.13,
+      labelHalo: v('--label-halo'), accent: v('--accent'), fallback: v('--tone-sage'),
       dark: document.documentElement.dataset.theme === 'dark' ||
         (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches),
     };
@@ -102,7 +106,7 @@
   }
 
   function colorOf(n) {
-    if (n.kind === 'person') return S.theme.person || '#c9cbd3';
+    if (n.kind === 'person') return S.theme.person;
     if (S.colorBy === 'project') {
       const p = n.project && S.projects.get(n.project);
       if (p) return p.color;
@@ -156,9 +160,10 @@
     else for (const n of S.nodes) S.positions.set(n.id, { x: n.x, y: n.y });
     S.scopeKey = scopeKey;
 
+    if (!S.theme.fallback) readTheme();
     S.projects = new Map();
-    (payload.projects || []).forEach((p, i) => {
-      S.projects.set(p.slug, { ...p, color: p.color || PALETTE[i % PALETTE.length] });
+    (payload.projects || []).forEach((p) => {
+      S.projects.set(p.slug, { ...p, color: p.color || S.theme.fallback || KIND_COLORS.repo });
     });
 
     S.nodes = payload.nodes.map((n) => ({
@@ -186,9 +191,9 @@
       document.documentElement.classList.add('snapshot');
       S.sim.stop();
       for (let i = 0; i < 260; i++) S.sim.tick();
+      if (payload.hint) showHint();
       fit(null, false);
       if (focus) setFocus(focus, false);
-      if (payload.hint) showHint();
       for (const n of S.nodes) n.alpha = targetAlpha(n);
       frame(performance.now());
       return;
@@ -387,7 +392,7 @@
   function buildChips() {
     const box = $('chips');
     box.innerHTML = '';
-    if (S.colorBy !== 'kind') return;
+    if (S.colorBy !== 'kind') { measureChrome(); return; }
     const counts = new Map();
     for (const n of S.nodes) if (n.kind !== 'project') counts.set(n.kind, (counts.get(n.kind) || 0) + 1);
     for (const kind of KIND_ORDER) {
@@ -408,6 +413,24 @@
       };
       box.appendChild(b);
     }
+    measureChrome();
+  }
+
+  // The chip bar may wrap to two rows, the hint may wrap too: measure them instead of assuming 52 / 66 px, so fit()
+  // and the peek card / search box never sit under them.
+  function measureChrome() {
+    const bar = $('topbar').getBoundingClientRect();
+    const chips = $('chips').getBoundingClientRect();
+    const tools = $('tools').getBoundingClientRect();
+    S.topInset = Math.max(chips.bottom, tools.bottom, bar.top + 28) + 10;
+    S.bottomInset = $('timebar').hidden ? 16 : 66;
+    if (!$('hint').hidden) {
+      const h = $('hint').getBoundingClientRect();
+      if (h.height) S.bottomInset = Math.max(S.bottomInset, S.height - h.top + 8);
+    }
+    const root = document.documentElement.style;
+    root.setProperty('--top-inset', S.topInset + 'px');
+    root.setProperty('--bottom-inset', S.bottomInset + 'px');
   }
 
   function afterVisibilityChange() {
@@ -527,6 +550,7 @@
     if (!S.labels.hint) return;
     $('hintText').textContent = S.labels.hint;
     $('hint').hidden = false;
+    measureChrome();
   }
 
   // ---------- Fit ----------
@@ -539,8 +563,9 @@
       x0 = Math.min(x0, n.x - n.r); y0 = Math.min(y0, n.y - n.r);
       x1 = Math.max(x1, n.x + n.r); y1 = Math.max(y1, n.y + n.r);
     }
-    const top = 52, bottom = $('timebar').hidden ? 16 : 66;
-    const right = $('peek').hidden ? 16 : 300;
+    measureChrome();
+    const top = S.topInset, bottom = S.bottomInset;
+    const right = $('peek').hidden ? 16 : Math.min(300, $('peek').getBoundingClientRect().width + 30);
     const left = 16;
     const w = Math.max(50, S.width - left - right), h = Math.max(50, S.height - top - bottom);
     const pad = S.colorBy === 'project' && S.projects.size > 1 && !nodes ? 70 : 40;
@@ -682,7 +707,7 @@
         ctx.stroke();
       }
       if (n.kind === 'project') {
-        ctx.font = `${Math.round(r * 1.05)}px -apple-system, "Apple Color Emoji"`;
+        ctx.font = `${Math.round(r * 1.05)}px "Apple Color Emoji", -apple-system`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(projectEmoji(n), n.x, n.y + r * 0.06);
@@ -778,9 +803,9 @@
 
     // Cluster labels: "emoji name" right by each project's cluster — above it, or below / beside it when that spot
     // would cover other pages or leave the screen.
-    const clusterFont = '700 17px -apple-system, "SF Pro Display", sans-serif';
+    const clusterFont = `600 16px ${FONT}`;
     const screenNodes = S.nodes.filter((n) => n.alpha > 0.3).map((n) => [t.applyX(n.x), t.applyY(n.y), n.r * t.k]);
-    const bottomLimit = S.height - ($('timebar').hidden ? 16 : 70);
+    const bottomLimit = S.height - (S.bottomInset || 16) - 4;
     for (const c of clusters) {
       const text = `${c.p.emoji} ${c.p.name}`;
       const w = textWidth(text, clusterFont) + 12;
@@ -814,31 +839,55 @@
     }
     ctx.globalAlpha = 1;
 
+    // Every visible node is an obstacle as well: a label never covers another node (only its own). Grid-bucketed.
+    const CELL = 64;
+    const grid = new Map();
     for (const n of S.nodes) {
-      if (n.kind !== 'project' || n.alpha < 0.3) continue;
-      const r = n.r * t.k + 2;
-      placed.push({ x: t.applyX(n.x) - r, y: t.applyY(n.y) - r, w: r * 2, h: r * 2 });
+      if (n.alpha < 0.3 || !visible(n)) continue;
+      const r = n.r * n.appear * t.k + 2;
+      const d = { n, x: t.applyX(n.x) - r, y: t.applyY(n.y) - r, w: r * 2, h: r * 2 };
+      if (d.x > S.width || d.y > S.height || d.x + d.w < 0 || d.y + d.h < 0) continue;
+      for (let gx = Math.floor(d.x / CELL); gx <= Math.floor((d.x + d.w) / CELL); gx++) {
+        for (let gy = Math.floor(d.y / CELL); gy <= Math.floor((d.y + d.h) / CELL); gy++) {
+          const key = gx + ':' + gy;
+          if (!grid.has(key)) grid.set(key, []);
+          grid.get(key).push(d);
+        }
+      }
     }
+    const coversNode = (r, self) => {
+      for (let gx = Math.floor(r.x / CELL); gx <= Math.floor((r.x + r.w) / CELL); gx++) {
+        for (let gy = Math.floor(r.y / CELL); gy <= Math.floor((r.y + r.h) / CELL); gy++) {
+          for (const q of grid.get(gx + ':' + gy) || []) {
+            if (q.n !== self && r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y) return true;
+          }
+        }
+      }
+      return false;
+    };
 
-    // Node labels, by priority, skipping any that would overlap.
+    // Which nodes get a name (§12.7): hover, focus, search matches, cluster centers and the best-connected pages only.
     const vis = S.nodes.filter((n) => n.alpha > 0.5 && n.appear > 0.6);
     const ranked = vis.filter((n) => n.kind !== 'page' && n.kind !== 'project').sort((a, b) => b.links - a.links);
-    const K = Math.round(Math.min(40, Math.max(7, 6 + vis.length * 0.07)) * Math.min(3, Math.max(0.6, t.k)));
     const prio = new Map();
-    ranked.slice(0, K).forEach((n, i) => prio.set(n.id, 10 + (K - i) / K));
-    for (const n of vis) if (isOverview(n)) prio.set(n.id, 25);
-    // The 3 most connected knowledge pages (topics, meetings, decisions …) of each project.
-    const perProject = new Map();
-    for (const n of ranked) {
-      if (isHub(n) || !n.project) continue;
-      const c = perProject.get(n.project) || 0;
-      if (c >= 3) continue;
-      perProject.set(n.project, c + 1);
-      prio.set(n.id, Math.max(prio.get(n.id) || 0, 20 + n.links / 1000));
+    if (S.colorBy === 'project') {
+      // Whole brain: the cluster names are already drawn; add each project's 2 most connected pages (3+ links).
+      const perProject = new Map();
+      for (const n of ranked) {
+        if (!n.project || n.links < 3) continue;
+        const c = perProject.get(n.project) || 0;
+        if (c >= 2) continue;
+        perProject.set(n.project, c + 1);
+        prio.set(n.id, 20 + n.links / 1000);
+      }
+    } else {
+      // Inside a project: the hub (its center) and a handful of high-degree pages, more as you zoom in.
+      for (const n of vis) if (n.kind === 'project') prio.set(n.id, 50);
+      const K = Math.round(Math.min(8, Math.max(4, 3 + vis.length * 0.03)) * Math.min(2, Math.max(0.75, t.k)));
+      ranked.filter((n) => n.links >= 2).slice(0, K).forEach((n, i) => prio.set(n.id, 10 + (K - i) / K));
     }
-    // In a project view every node with 3+ links asks for a label (the overlap check still keeps them apart).
-    if (S.colorBy === 'kind') for (const n of ranked) if (n.links >= 3 && !prio.has(n.id)) prio.set(n.id, 6 + n.links / 1000);
-    if (t.k >= 1.8) vis.forEach((n) => { if (!prio.has(n.id)) prio.set(n.id, 5 + n.links / 1000); });
+    // Zoomed well in there is room: offer every name (the collision test keeps them apart).
+    if (t.k >= 2.2) vis.forEach((n) => { if (!prio.has(n.id)) prio.set(n.id, 5 + n.links / 1000); });
     const bump = (id, p) => { if (S.byId.has(id)) prio.set(id, Math.max(prio.get(id) || 0, p)); };
     if (S.focus) { bump(S.focus, 90); for (const id of S.adj.get(S.focus)) if (S.focusSet.has(id)) bump(id, 40 + (S.byId.get(id).links / 1000)); }
     if (S.matches) for (const id of S.matches) bump(id, 70);
@@ -847,19 +896,26 @@
     if (S.colorBy === 'project') for (const n of vis) if (n.kind === 'project' && prio.get(n.id) < 30) prio.delete(n.id);
 
     const items = [...prio.entries()].map(([id, p]) => [S.byId.get(id), p]).filter(([n]) => n && n.alpha > 0.05)
-      .sort((a, b) => b[1] - a[1]).slice(0, 160);
+      .sort((a, b) => b[1] - a[1]).slice(0, 120);
     for (const [n, p] of items) {
       const strong = p >= 30;
-      const font = `${strong ? 600 : 500} ${strong ? 12 : 11}px -apple-system, "SF Pro Text", sans-serif`;
+      const font = `${strong ? 600 : 500} ${strong ? 12 : 11}px ${FONT}`;
       let text = n.kind === 'project' ? `${projectEmoji(n)} ${projectName(n)}`
-        : isOverview(n) ? `📋 ${S.labels.overview || n.title}` : n.title;
+        : isOverview(n) ? (S.labels.overview || n.title) : n.title;
       if (text.length > 38) text = text.slice(0, 36) + '…';
       const w = textWidth(text, font) + 6;
-      const x = t.applyX(n.x), y = t.applyY(n.y) + n.r * n.appear * t.k + 9;
-      const rect = { x: x - w / 2, y: y - 7, w, h: 14 };
-      if (p < 90 && hit(rect)) continue;
+      const cx = t.applyX(n.x), cy = t.applyY(n.y), rr = n.r * n.appear * t.k;
+      // Below the node, else above, right or left; skipped when every spot covers a label, a node or a control.
+      const spots = [[cx, cy + rr + 9], [cx, cy - rr - 9], [cx + rr + 5 + w / 2, cy], [cx - rr - 5 - w / 2, cy]];
+      let at = null;
+      for (const [x, y] of spots) {
+        const r = { x: x - w / 2, y: y - 7, w, h: 14 };
+        if (!hit(r) && !coversNode(r, n)) { at = [x, y]; break; }
+      }
+      if (!at) { if (p < 90) continue; at = spots[0]; }
+      const [x, y] = at;
       if (x < -w || x > S.width + w || y < -20 || y > S.height + 20) continue;
-      placed.push(rect);
+      placed.push({ x: x - w / 2, y: y - 7, w, h: 14 });
       ctx.globalAlpha = Math.min(1, n.alpha * 1.1);
       ctx.font = font;
       ctx.lineWidth = 3.5;
@@ -973,7 +1029,7 @@
       if (e.key === 'Escape') { e.stopPropagation(); toggleSearch(false); }
     });
     $('peekClose').onclick = () => clearFocus();
-    $('hintClose').onclick = () => { $('hint').hidden = true; navigate('sbgraph://hint-dismissed'); };
+    $('hintClose').onclick = () => { $('hint').hidden = true; measureChrome(); navigate('sbgraph://hint-dismissed'); };
     $('playBtn').onclick = () => (S.playing ? stopPlay() : startPlay());
 
     const strip = $('strip');
@@ -1016,6 +1072,7 @@
     S.dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(r.width * S.dpr);
     canvas.height = Math.round(r.height * S.dpr);
+    measureChrome();
     requestDraw();
   }
 
@@ -1029,6 +1086,11 @@
     setupPointer();
     setupControls();
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTheme(); requestDraw(); });
+    // The canvas does not trigger @font-face loads: ask for Inter, then measure and draw the labels again.
+    if (document.fonts) {
+      Promise.all([`400 11px ${FONT}`, `500 11px ${FONT}`, `600 12px ${FONT}`, `600 16px ${FONT}`].map((f) => document.fonts.load(f)))
+        .then(() => { S.textWidths.clear(); measureChrome(); requestDraw(); }, () => {});
+    }
   }
 
   const errors = [];

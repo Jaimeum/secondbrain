@@ -11,13 +11,20 @@ struct SecondBrainApp: App {
         // System menus (Edit, View, Window…) are localized by AppKit from AppleLanguages when the app finishes
         // launching, so the preference has to be in place before that.
         AppState.applyMenuLanguage(AppState.shared.config.uiLanguage)
+        // Inter must be registered before the first view asks for `Brand.font`.
+        BrandFonts.register()
     }
 
     var body: some Scene {
         WindowGroup(id: "main") {
-            RootView()
-                .environment(state)
-                .id(state.config.uiLanguage)
+            ZStack {
+                RootView()
+                    .environment(state)
+                    .id(state.config.uiLanguage)
+                // Outside RootView's identity: plays once per launch, never on a vault or language switch.
+                LaunchOverlay()
+            }
+            .brandEnvironment()
         }
         .defaultSize(width: 1100, height: 720)
         .windowToolbarStyle(.unified)
@@ -44,6 +51,7 @@ struct SecondBrainApp: App {
             MenuBarView()
                 .environment(state)
                 .id(state.config.uiLanguage)
+                .brandEnvironment()
         } label: {
             MenuBarLabel(isRecording: state.isRecording)
         }
@@ -53,6 +61,7 @@ struct SecondBrainApp: App {
             SettingsView()
                 .environment(state)
                 .id(state.config.uiLanguage)
+                .brandEnvironment()
         }
     }
 }
@@ -72,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppState.shared.launch()
             if snapshot {
                 NSApp.windows.forEach { $0.orderOut(nil) }
+                BrandGallery.renderIfRequested()   // SB_SNAPSHOT_ONLY=brand
                 DebugSnapshots.runIfRequested(state: AppState.shared)
             }
         }
@@ -111,28 +121,15 @@ struct RootView: View {
                 OnboardingView()
             }
         }
-        .frame(minWidth: 860, minHeight: 600)
+        .frame(minWidth: 920, minHeight: 620)   // CONTRACT §15.3
     }
 }
 
-/// Brain in the menu bar; a red record dot while recording.
+/// The brand symbol in the menu bar (an 18 pt template image); while recording, the same symbol plus a `record` dot.
 struct MenuBarLabel: View {
     let isRecording: Bool
 
     var body: some View {
-        if isRecording {
-            Image(nsImage: Self.recordingImage)
-        } else {
-            Image(systemName: "brain")
-        }
+        Image(nsImage: isRecording ? BrandMenuBarIcon.recording : BrandMenuBarIcon.idle)
     }
-
-    private static let recordingImage: NSImage = {
-        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-            .applying(.init(paletteColors: [.white, .systemRed]))
-        let image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: L("status.recording"))?
-            .withSymbolConfiguration(config) ?? NSImage()
-        image.isTemplate = false
-        return image
-    }()
 }

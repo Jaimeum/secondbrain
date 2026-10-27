@@ -25,7 +25,7 @@ struct MainView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.accentColor.opacity(0.1))
+                    .background(Brand.color.accentSoft)
             } else if state.restartNeeded {
                 RestartBanner()
             } else if let notice = state.migrationNotice {
@@ -67,17 +67,20 @@ struct RestartBanner: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "arrow.clockwise.circle.fill").foregroundStyle(.orange)
+            Image(systemName: "arrow.clockwise.circle").foregroundStyle(Brand.color.warning)
             Text(L("restart.message"))
-            Spacer()
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
             Button(L("restart.now")) { state.relaunch() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.brandPrimary)
                 .disabled(state.isRecording)
                 .help(state.isRecording ? L("restart.whileRecording") : "")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.orange.opacity(0.12))
+        .background(Brand.color.warningSoft)
     }
 }
 
@@ -91,23 +94,27 @@ struct MigrationBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
-                Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
-                Text(L("migration.title")).font(.callout.weight(.medium))
-                Spacer()
+                BrandMark(size: 16)
+                Text(L("migration.title")).font(Brand.callout).foregroundStyle(Brand.color.text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
                 Button(expanded ? L("migration.less") : L("migration.more")) { expanded.toggle() }
                     .buttonStyle(.borderless)
+                    .foregroundStyle(Brand.color.accent)
                 Button(L("migration.dismiss")) { state.dismissMigrationNotice() }
+                    .buttonStyle(.brandSecondary)
             }
             if expanded {
-                Text(L("migration.explain")).font(.callout).foregroundStyle(.secondary)
+                Text(L("migration.explain")).font(Brand.body).foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(notice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                Text(notice).font(Brand.caption).foregroundStyle(Brand.color.text2).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.accentColor.opacity(0.08))
+        .background(Brand.color.accentSoft)
     }
 }
 
@@ -115,8 +122,10 @@ struct MigrationBanner: View {
 struct VaultSwitchingNotice: View {
     var body: some View {
         HStack(spacing: 8) {
-            ProgressView().controlSize(.small)
-            Text(L("vault.switching")).font(.callout).fixedSize(horizontal: false, vertical: true)
+            BrandLoader(size: 16)
+            Text(L("vault.switching")).font(Brand.callout).foregroundStyle(Brand.color.text)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -127,8 +136,10 @@ struct MenuLanguageNotice: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "globe").foregroundStyle(.secondary)
-            Text(L("restart.menuLanguage")).font(.callout).fixedSize(horizontal: false, vertical: true)
+            Image(systemName: "globe").foregroundStyle(Brand.color.text2)
+            Text(L("restart.menuLanguage")).font(Brand.body).foregroundStyle(Brand.color.text)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Button(L("restart.now")) { state.relaunch() }
                 .disabled(state.isRecording)
@@ -137,7 +148,8 @@ struct MenuLanguageNotice: View {
     }
 }
 
-/// Calm, centered placeholder used across empty lists and errors.
+/// Calm, centered placeholder used across empty lists and errors. `symbol: "brand"` shows the brand mark instead
+/// of an SF Symbol (Home and other brand-level empty states).
 struct EmptyStateView: View {
     var symbol: String
     var title: String
@@ -147,18 +159,28 @@ struct EmptyStateView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text(title).font(.title3.weight(.semibold))
+            if symbol == "brand" {
+                BrandMark(size: 40).opacity(0.6)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 36, weight: .regular))
+                    .foregroundStyle(Brand.color.text3)
+            }
+            Text(title)
+                .font(Brand.section)
+                .foregroundStyle(Brand.color.text)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             if !message.isEmpty {
                 Text(message)
-                    .foregroundStyle(.secondary)
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text2)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 380)
             }
             if let actionTitle, let action {
-                Button(actionTitle, action: action).buttonStyle(.borderedProminent).padding(.top, 4)
+                Button(actionTitle, action: action).buttonStyle(.brandPrimary).padding(.top, 4)
             }
         }
         .padding(40)

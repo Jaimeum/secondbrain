@@ -10,8 +10,7 @@ struct MenuBarView: View {
         @Bindable var state = state
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Image(systemName: "brain").foregroundStyle(Color.accentColor)
-                Text("SecondBrain").font(.headline)
+                BrandLogo(size: 18)
                 Spacer()
                 if state.config.hotkeyEnabled {
                     Text("⌥⌘R").font(.caption.monospaced()).foregroundStyle(.secondary)

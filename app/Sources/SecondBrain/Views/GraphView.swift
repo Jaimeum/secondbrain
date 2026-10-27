@@ -82,8 +82,8 @@ struct GraphView: View {
             "connected": L("graph.connected"), "matches": L("graph.matches"), "noMatches": L("graph.noMatches"),
             "overview": L("graph.overviewLabel"),
         ]
-        let projects = state.projects.enumerated().map { i, p -> [String: Any] in
-            ["slug": p.slug, "name": p.name, "emoji": p.emoji, "color": GraphPalette.colors[i % GraphPalette.colors.count]]
+        let projects = state.projects.map { p -> [String: Any] in
+            ["slug": p.slug, "name": p.name, "emoji": p.emoji, "color": GraphPalette.hex(slug: p.slug)]
         }
         return [
             "labels": labels,
@@ -98,9 +98,11 @@ struct GraphView: View {
     }
 }
 
-/// Same 10 colors as `graph.js` (`PALETTE`), one per project in creation order.
+/// A project's tone in the graph: the brand's categorical palette by a stable hash of the slug (`Brand.projectHex`),
+/// the same color the sidebar and project chips use. This is the only place the web graph gets project colors from:
+/// `graph.js` never hashes, it uses `projects[].color` as sent.
 enum GraphPalette {
-    static let colors = ["#6e56cf", "#12a594", "#f76b15", "#d6409f", "#0090ff", "#30a46c", "#e5484d", "#05a2c2", "#ad7f58", "#8e4ec6"]
+    static func hex(slug: String) -> String { Brand.projectHex(slug: slug) }
 }
 
 @MainActor
@@ -259,7 +261,7 @@ enum GraphSnapshot {
     /// `cacheDisplay` does not capture web content. Waits for the page to lay out and draw.
     static func render(_ view: some View, size: CGSize, to url: URL, wait: Double = 6) async {
         let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height)
-            .background(Color(nsColor: .windowBackgroundColor)))
+            .background(Brand.color.surface).brandEnvironment())
         host.frame = CGRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),
                               styleMask: [.borderless], backing: .buffered, defer: false)

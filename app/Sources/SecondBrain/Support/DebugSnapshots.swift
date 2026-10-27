@@ -189,7 +189,7 @@ enum DebugSnapshots {
     private static func renderOnboardingAccounts(state: AppState, dir: URL) async {
         let size = CGSize(width: 760, height: 620)
         let host = NSHostingView(rootView: OnboardingView(initialStep: .accounts).environment(state)
-            .frame(width: size.width, height: size.height))
+            .frame(width: size.width, height: size.height).brandEnvironment())
         host.frame = CGRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),
                               styleMask: [.titled], backing: .buffered, defer: false)
@@ -231,7 +231,7 @@ enum DebugSnapshots {
     }
 
     private static func renderWindow(_ view: some View, size: CGSize, dark: Bool, to url: URL) async {
-        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height).brandEnvironment())
         host.frame = CGRect(origin: .zero, size: size)
         // The whole app switches appearance (as AppState.applyAppearance does): AppKit-backed controls inside the
         // hosting view only follow NSApp.appearance when rendered offscreen.
@@ -254,7 +254,7 @@ enum DebugSnapshots {
 
     private static func render(_ view: some View, size: CGSize, to url: URL) async {
         let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height)
-            .background(Color(nsColor: .windowBackgroundColor)))
+            .background(Color(nsColor: .windowBackgroundColor)).brandEnvironment())
         host.frame = CGRect(origin: .zero, size: size)
         // An offscreen, never-ordered-in window gives the view a real layout/appearance context.
         let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),

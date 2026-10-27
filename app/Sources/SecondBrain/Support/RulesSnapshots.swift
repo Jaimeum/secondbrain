@@ -27,7 +27,33 @@ enum RulesSnapshots {
             // "Agregar correo" from Sin asignar with a pasted mail a rule covers: the picker names the rule's project.
             ("email-routed", CGSize(width: 820, height: 640),
              AnyView(AddEmailSheet(request: EmailRequest(threadKey: nil, projectSlug: nil), initialText: routedEmailSample(state)))),
-        ]
+        ] + settingsShots(state: state)
+    }
+
+    // MARK: v0.5 settings — Ajustes per tab (ideal 820×600 and min 760×520), onboarding steps, sheets.
+    static func settingsShots(state: AppState) -> [(String, CGSize, AnyView)] {
+        var shots: [(String, CGSize, AnyView)] = []
+        for tab in SettingsTab.allCases {
+            let view = AnyView(SnapshotSetup { if tab == .rules { addSampleRules(state) } } content: { SettingsView(initialTab: tab) })
+            shots.append(("settings-\(tab.rawValue)", CGSize(width: 820, height: 600), view))
+            shots.append(("settings-\(tab.rawValue)-min", CGSize(width: 760, height: 520), view))
+        }
+        shots.append(("settings-accounts-dark", CGSize(width: 820, height: 600),
+                      AnyView(SettingsView(initialTab: .accounts).environment(\.colorScheme, .dark))))
+        for step in [OnboardingStep.welcome, .permissions, .project, .done] {
+            let name = "onboarding-\(step)"
+            shots.append((name, CGSize(width: 920, height: 620), AnyView(OnboardingView(initialStep: step))))
+            shots.append((name + "-1100", CGSize(width: 1100, height: 720), AnyView(OnboardingView(initialStep: step))))
+        }
+        if let template = state.templates.first {
+            shots.append(("templates-editor", CGSize(width: 780, height: 520), AnyView(TemplateEditor(original: template) { _ in })))
+            shots.append(("templates-editor-narrow", CGSize(width: 640, height: 520), AnyView(TemplateEditor(original: template) { _ in })))
+        }
+        shots.append(("templates-make", CGSize(width: 520, height: 440), AnyView(MakeTemplateSheet { _ in })))
+        shots.append(("claude-reconnect", CGSize(width: 640, height: 520), AnyView(ReconnectClaudeSheet())))
+        shots.append(("rules-sheet-narrow", CGSize(width: 560, height: 420),
+                      AnyView(SnapshotSetup { addSampleRules(state) } content: { RulesSheet() })))
+        return shots
     }
 
     /// A few realistic rules over the demo accounts (idempotent: equivalent rules aren't added twice).

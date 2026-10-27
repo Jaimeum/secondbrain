@@ -3,8 +3,9 @@ import BrainCore
 import SwiftUI
 import WebKit
 
-/// "Formatos": how Claude writes the summary of each meeting or email. List, preview, edit, duplicate,
-/// create with AI, and set as a project's default.
+/// "Formatos" (Ajustes → Formatos, CONTRACT §15.2): how I write the summary of each meeting or email. A flexible list
+/// (200–260) beside the preview; actions = "Usar por defecto ▾" · "Editar" · ⋯ (Duplicar, Crear con IA, Eliminar).
+/// Editing hides the list and gives the editor the whole width.
 struct TemplatesView: View {
     @Environment(AppState.self) private var state
 
@@ -17,48 +18,31 @@ struct TemplatesView: View {
     private var selected: TemplateInfo? { state.template(selection) }
 
     var body: some View {
-        HStack(spacing: 0) {
-            List(selection: $selection) {
-                SwiftUI.Section(L("tpl.mine")) {
-                    ForEach(state.templates.filter { !$0.isBuiltIn }) { row($0) }
-                    if !state.templates.contains(where: { !$0.isBuiltIn }) {
-                        Text(L("tpl.noneYet")).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                SwiftUI.Section(L("tpl.builtin")) {
-                    ForEach(state.templates.filter(\.isBuiltIn)) { row($0) }
-                }
-            }
-            .listStyle(.sidebar)
-            .frame(width: 260)
-            Divider()
+        Group {
             if let editing {
                 TemplateEditor(original: editing) { saved in
                     self.editing = nil
                     if let saved { selection = saved.id }
                 }
-                .id(editing.id)
-            } else if let selected {
-                detail(selected)
+                .id(editing.id + editing.name)
             } else {
-                EmptyStateView(symbol: "doc.richtext", title: L("tpl.pickOne"), message: L("tpl.explain"))
-            }
-        }
-        .navigationTitle(L("tpl.title"))
-        .navigationSubtitle(L("tpl.subtitle"))
-        .toolbar {
-            ToolbarItemGroup {
-                Button {
-                    editing = TemplateInfo(id: "", name: "", description: "", scope: .meeting, isBuiltIn: false,
-                                           body: TemplateEditor.blankBody)
-                } label: {
-                    Label(L("tpl.new"), systemImage: "plus")
+                HStack(spacing: 0) {
+                    listColumn
+                        .frame(minWidth: 200, idealWidth: 230, maxWidth: 260)
+                    Rectangle().fill(Brand.color.line).frame(width: 1)
+                    Group {
+                        if let selected {
+                            detail(selected)
+                        } else {
+                            EmptyStateView(symbol: "doc.richtext", title: L("tpl.pickOne"), message: L("tpl.explain"))
+                        }
+                    }
+                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
                 }
-                .help(L("tpl.new"))
-                Button { showMake = true } label: { Label(L("tpl.makeAI"), systemImage: "sparkles") }
-                    .help(L("tpl.makeAIHelp"))
             }
         }
+        .background(Brand.color.surface)
         .onAppear {
             state.reloadTemplates()
             if selection == nil { selection = state.templates.first?.id }
@@ -91,72 +75,169 @@ struct TemplatesView: View {
         }
     }
 
-    private func row(_ t: TemplateInfo) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(t.name).lineLimit(1)
-                if usedAsDefault(t) > 0 {
-                    Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow)
-                        .help(L("tpl.defaultIn", usedAsDefault(t)))
+    // MARK: List
+
+    private var listColumn: some View {
+        VStack(spacing: 0) {
+            // Plain header rows instead of Sections: the inset list pins section headers on an opaque white band.
+            // No List selection: macOS paints it in the system accent (blue); rows draw `accentSoft` themselves.
+            List {
+                header(L("tpl.mine"))
+                ForEach(state.templates.filter { !$0.isBuiltIn }) { row($0) }
+                if !state.templates.contains(where: { !$0.isBuiltIn }) {
+                    Text(L("tpl.noneYet"))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .listRowSeparator(.hidden)
                 }
+                header(L("tpl.builtin")).padding(.top, 8)
+                ForEach(state.templates.filter(\.isBuiltIn)) { row($0) }
             }
-            Text(t.scope.label).font(.caption).foregroundStyle(.secondary)
+            .listStyle(.inset)
+            .alternatingRowBackgrounds(.disabled)
+            .scrollContentBackground(.hidden)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            HStack {
+                Button {
+                    editing = TemplateInfo(id: "", name: "", description: "", scope: .meeting, isBuiltIn: false,
+                                           body: TemplateEditor.blankBody)
+                } label: {
+                    Label(L("tpl.new"), systemImage: "plus")
+                }
+                .buttonStyle(.brandSecondary)
+                .help(L("tpl.new"))
+                Spacer(minLength: 0)
+            }
+            .padding(10)
         }
-        .tag(Optional(t.id))
+        .background(Brand.color.surface)
+    }
+
+    private func header(_ title: String) -> some View {
+        Text(title)
+            .font(Brand.font(11, .semibold))
+            .foregroundStyle(Brand.color.text2)
+            .listRowSeparator(.hidden)
+            .selectionDisabled()
+    }
+
+    private func row(_ t: TemplateInfo) -> some View {
+        let isSelected = selection == t.id
+        return Button { selection = t.id } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(t.name)
+                        .font(isSelected ? Brand.callout : Brand.body)
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if usedAsDefault(t) > 0 {
+                        Image(systemName: "star.fill")
+                            .font(Brand.font(9))
+                            .foregroundStyle(Brand.color.accent)
+                            .help(L("tpl.defaultIn", usedAsDefault(t)))
+                    }
+                }
+                Text(t.scope.label).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+            }
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowSeparator(.hidden)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+                .fill(isSelected ? Brand.color.accentSoft : Color.clear)
+                .padding(.horizontal, 8)
+        )
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func usedAsDefault(_ t: TemplateInfo) -> Int {
         state.projects.filter { $0.defaultTemplate == t.id }.count
     }
 
+    // MARK: Detail
+
     private func detail(_ t: TemplateInfo) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(t.name).font(.title2.weight(.semibold))
-                        if t.isBuiltIn { Chip(text: L("tpl.builtinBadge"), symbol: "shippingbox") }
-                        Chip(text: t.scope.label)
+            VStack(alignment: .leading, spacing: 10) {
+                // Title and actions share a line when they fit, otherwise the actions go under the title.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 12) {
+                        title(t)
+                        Spacer(minLength: 8)
+                        actions(t)
                     }
-                    if !t.description.isEmpty {
-                        Text(t.description).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 10) {
+                        title(t)
+                        actions(t)
                     }
                 }
-                Spacer()
-                Menu {
-                    ForEach(state.projects) { project in
-                        Button {
-                            setDefault(project, t)
-                        } label: {
-                            if project.defaultTemplate == t.id {
-                                Label("\(project.emoji) \(project.name)", systemImage: "checkmark")
-                            } else {
-                                Text("\(project.emoji) \(project.name)")
-                            }
+                if !t.description.isEmpty {
+                    Text(t.description)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+            }
+            .padding(.horizontal, Brand.spacing.content)
+            .padding(.vertical, 16)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            MarkdownPreview(markdown: TemplateEditor.previewMarkdown(t.body))
+        }
+    }
+
+    private func title(_ t: TemplateInfo) -> some View {
+        Text(t.name)
+            .font(Brand.title)
+            .foregroundStyle(Brand.color.text)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .layoutPriority(1)
+    }
+
+    @ViewBuilder private func actions(_ t: TemplateInfo) -> some View {
+        HStack(spacing: 8) {
+            let n = usedAsDefault(t)
+            Menu {
+                ForEach(state.projects) { project in
+                    Button {
+                        setDefault(project, t)
+                    } label: {
+                        if project.defaultTemplate == t.id {
+                            Label("\(project.emoji) \(project.name)", systemImage: "checkmark")
+                        } else {
+                            Text("\(project.emoji) \(project.name)")
                         }
                     }
-                } label: {
-                    Label(L("tpl.useAsDefault"), systemImage: "star")
                 }
-                .fixedSize()
-                .disabled(state.projects.isEmpty)
-                Button(t.isBuiltIn ? L("tpl.editCopy") : L("tpl.edit")) { editing = t }
-                    .help(t.isBuiltIn ? L("tpl.editCopyHelp") : "")
-                Menu {
-                    Button(L("tpl.duplicate")) { duplicate(t) }
-                    if !t.isBuiltIn {
-                        Divider()
-                        Button(L("sources.delete"), role: .destructive) { pendingDelete = t }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuIndicator(.hidden)
-                .fixedSize()
+            } label: {
+                SettingsMenuLabel(title: n > 0 ? L("tpl.defaultIn", n) : L("tpl.useAsDefault"), symbol: n > 0 ? "star.fill" : "star")
             }
-            .padding(16)
-            Divider()
-            MarkdownPreview(markdown: TemplateEditor.previewMarkdown(t.body))
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .fixedSize()
+            .disabled(state.projects.isEmpty)
+            Button(L("tpl.edit")) { editing = t }
+                .buttonStyle(.brandPrimary)
+                .help(t.isBuiltIn ? L("tpl.editCopyHelp") : "")
+            Menu {
+                Button(L("tpl.duplicate")) { duplicate(t) }
+                Button(L("tpl.makeAI")) { showMake = true }
+                if !t.isBuiltIn {
+                    Divider()
+                    Button(L("sources.delete"), role: .destructive) { pendingDelete = t }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle").foregroundStyle(Brand.color.text2)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 28)
+            .help(L("rules.more"))
         }
     }
 
@@ -179,7 +260,8 @@ struct TemplatesView: View {
     }
 }
 
-/// Name, description, scope and the markdown structure, with a live rendered preview beside it.
+/// Name, description, scope and the markdown structure, with a live rendered preview: side by side from 700 pt,
+/// otherwise one pane with "Editar | Vista previa".
 struct TemplateEditor: View {
     @Environment(AppState.self) private var state
     let original: TemplateInfo
@@ -189,6 +271,9 @@ struct TemplateEditor: View {
     @ViewState private var preview = ""
     @ViewState private var error: String?
     @ViewState private var previewTask: Task<Void, Never>?
+    @ViewState private var pane = Pane.edit
+
+    private enum Pane: Hashable { case edit, preview }
 
     static let blankBody = """
     ## En breve
@@ -208,55 +293,67 @@ struct TemplateEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    TextField(L("tpl.name"), text: $draft.name).textFieldStyle(.roundedBorder).font(.title3)
+                HStack(spacing: 8) {
+                    TextField(L("tpl.name"), text: $draft.name)
+                        .textFieldStyle(.roundedBorder)
+                        .font(Brand.font(15, .medium))
                     Picker("", selection: $draft.scope) {
                         Text(TemplateScope.meeting.label).tag(TemplateScope.meeting)
                         Text(TemplateScope.email.label).tag(TemplateScope.email)
                         Text(TemplateScope.any.label).tag(TemplateScope.any)
                     }
                     .labelsHidden()
-                    .fixedSize()
+                    .frame(maxWidth: 200)
                 }
                 TextField(L("tpl.description"), text: $draft.description).textFieldStyle(.roundedBorder)
                 if original.isBuiltIn {
-                    Label(L("tpl.builtinCopyNote"), systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
+                    Label(L("tpl.builtinCopyNote"), systemImage: "info.circle")
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(16)
-            Divider()
-            HSplitView {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L("tpl.structure")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    TextEditor(text: $draft.body)
-                        .font(.system(size: 12.5, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .background(Color.primary.opacity(0.03))
-                    Text(L("tpl.structureHint")).font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(12)
-                .frame(minWidth: 280)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L("tpl.preview")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            GeometryReader { geo in
+                if geo.size.width >= 700 {
+                    HStack(spacing: 0) {
+                        structurePane.frame(maxWidth: .infinity)
+                        Rectangle().fill(Brand.color.line).frame(width: 1)
+                        previewPane.frame(maxWidth: .infinity)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Picker("", selection: $pane) {
+                            Text(L("tpl.edit")).tag(Pane.edit)
+                            Text(L("tpl.preview")).tag(Pane.preview)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
                         .padding([.top, .leading], 12)
-                    MarkdownPreview(markdown: preview)
+                        if pane == .edit { structurePane } else { previewPane }
+                    }
                 }
-                .frame(minWidth: 280)
             }
-            Divider()
-            HStack {
-                if let error { Text(error).foregroundStyle(.red).font(.callout) }
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            HStack(spacing: 8) {
+                if let error {
+                    Text(error).foregroundStyle(Brand.color.danger).font(Brand.caption).lineLimit(2)
+                }
                 Spacer()
-                Button(L("common.cancel")) { onDone(nil) }.keyboardShortcut(.cancelAction)
+                Button(L("common.cancel")) { onDone(nil) }
+                    .buttonStyle(.brandSecondary)
+                    .keyboardShortcut(.cancelAction)
                 Button(L("tpl.save"), action: save)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.brandPrimary)
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty
                               || draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(12)
         }
+        .background(Brand.color.surface)
         .onAppear {
             draft = original
             preview = Self.previewMarkdown(original.body)
@@ -272,6 +369,33 @@ struct TemplateEditor: View {
         }
     }
 
+    private var structurePane: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("tpl.structure")).font(Brand.font(11, .semibold)).foregroundStyle(Brand.color.text2)
+            TextEditor(text: $draft.body)
+                .font(Brand.mono)
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+            Text(L("tpl.structureHint"))
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+    }
+
+    private var previewPane: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L("tpl.preview"))
+                .font(Brand.font(11, .semibold))
+                .foregroundStyle(Brand.color.text2)
+                .padding([.top, .leading], 12)
+            MarkdownPreview(markdown: preview)
+        }
+    }
+
     private func save() {
         do {
             let saved = try state.engine.saveTemplate(draft)
@@ -282,7 +406,7 @@ struct TemplateEditor: View {
         }
     }
 
-    /// Instructions for Claude live in `<!-- … -->`; the preview shows them as notes instead of hiding them.
+    /// Instructions for me live in `<!-- … -->`; the preview shows them as italic notes instead of hiding them.
     static func previewMarkdown(_ body: String) -> String {
         var text = body
         if text.hasPrefix("---"), let end = text.range(of: "\n---", range: text.index(text.startIndex, offsetBy: 3)..<text.endIndex) {
@@ -290,7 +414,7 @@ struct TemplateEditor: View {
         }
         return text.replacing(#/<!--\s*([\s\S]*?)\s*-->/#) { match in
             let lines = String(match.1).split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-            return "*💬 " + lines.joined(separator: " ").replacingOccurrences(of: "*", with: "") + "*"
+            return "*" + lines.joined(separator: " ").replacingOccurrences(of: "*", with: "") + "*"
         }
     }
 }
@@ -323,43 +447,45 @@ struct MakeTemplateSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(L("tpl.makeTitle")).font(.title2.weight(.semibold))
-            Text(L("tpl.makeHint")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(L("tpl.makeTitle")).font(Brand.title).foregroundStyle(Brand.color.text)
+            Text(L("tpl.makeHint")).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
             TextField(L("tpl.name"), text: $name, prompt: Text(L("tpl.makeNamePlaceholder")))
                 .textFieldStyle(.roundedBorder)
                 .disabled(jobId != nil)
             TextEditor(text: $description)
-                .font(.body)
+                .scrollContentBackground(.hidden)
                 .frame(minHeight: 140)
                 .padding(6)
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
                 .disabled(jobId != nil)
                 .overlay(alignment: .topLeading) {
                     if description.isEmpty {
-                        Text(L("tpl.makeDescPlaceholder")).foregroundStyle(.tertiary).padding(12).allowsHitTesting(false)
+                        Text(L("tpl.makeDescPlaceholder")).foregroundStyle(Brand.color.text3).padding(12).allowsHitTesting(false)
                     }
                 }
             if jobId != nil {
                 HStack(spacing: 8) {
                     if failed || job?.status == .failed {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                        Text(job?.error ?? L("tpl.makeFailed")).font(.callout)
+                        Image(systemName: "exclamationmark.triangle").foregroundStyle(Brand.color.warning)
+                        Text(job?.error ?? L("tpl.makeFailed")).foregroundStyle(Brand.color.text)
                     } else if finished {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        Text(L("tpl.makeDone")).font(.callout)
+                        Image(systemName: "checkmark.circle").foregroundStyle(Brand.color.success)
+                        Text(L("tpl.makeDone")).foregroundStyle(Brand.color.text)
                     } else {
-                        ProgressView().controlSize(.small)
-                        Text(job?.message ?? (job?.status == .running ? L("tpl.makeRunning") : L("tpl.makeQueued")))
-                            .font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                        BrandLoader(size: 18,
+                                    text: job?.message ?? (job?.status == .running ? L("tpl.makeRunning") : L("tpl.makeQueued")))
                     }
                 }
             }
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
                 if jobId == nil {
-                    Button(L("common.cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                    Button(L("common.cancel")) { dismiss() }
+                        .buttonStyle(.brandSecondary)
+                        .keyboardShortcut(.cancelAction)
                     Button(L("tpl.makeGo"), action: make)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.brandPrimary)
                         .keyboardShortcut(.defaultAction)
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
                                   || description.trimmingCharacters(in: .whitespacesAndNewlines).count < 10)
@@ -367,12 +493,14 @@ struct MakeTemplateSheet: View {
                     Button(finished ? L("common.done") : L("tpl.makeBackground")) {
                         finish()
                     }
+                    .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
                 }
             }
         }
         .padding(24)
-        .frame(width: 520)
+        .frame(minWidth: 480, idealWidth: 520, minHeight: 360, idealHeight: 440)
+        .background(Brand.color.surface)
         .onChange(of: job?.id) {
             if job != nil { sawJob = true } else { state.reloadTemplates() }
         }
@@ -393,23 +521,25 @@ struct MakeTemplateSheet: View {
     }
 }
 
-/// Renders a markdown string with the same look as the wiki (bundled markdown-it), no vault links.
+/// Renders a markdown string with the same look as the wiki (bundled markdown-it), no vault links. Follows the window's
+/// light/dark appearance like `WikiWebView`.
 struct MarkdownPreview: NSViewRepresentable {
     let markdown: String
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> WKWebView {
-        let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+    func makeNSView(context: Context) -> WikiWKWebView {
+        let webView = WikiWKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         webView.navigationDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
+        webView.onAppearanceChange = { [weak coordinator = context.coordinator] in coordinator?.sendTheme() }
         let dir = AppResources.webDirectory
         webView.loadFileURL(dir.appendingPathComponent("wiki.html"), allowingReadAccessTo: dir)
         context.coordinator.webView = webView
         return webView
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
+    func updateNSView(_ webView: WikiWKWebView, context: Context) {
         context.coordinator.show(markdown)
     }
 
@@ -425,11 +555,21 @@ struct MarkdownPreview: NSViewRepresentable {
             flush()
         }
 
+        func sendTheme() {
+            guard loaded, let webView else { return }
+            webView.evaluateJavaScript("SB.setTheme('\(Self.theme(of: webView))')")
+        }
+
+        /// The page follows the window's appearance (the app may force light/dark), not the system's.
+        private static func theme(of view: NSView) -> String {
+            view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? "dark" : "light"
+        }
+
         private func flush() {
             guard loaded, let webView, let markdown = pending, markdown != shown else { return }
             shown = markdown
             let payload: [String: Any] = ["markdown": markdown, "keepScroll": true, "links": [:], "backlinks": [],
-                                          "emptyText": L("tpl.previewEmpty")]
+                                          "emptyText": L("tpl.previewEmpty"), "theme": Self.theme(of: webView)]
             guard let data = try? JSONSerialization.data(withJSONObject: payload),
                   let json = String(data: data, encoding: .utf8) else { return }
             webView.evaluateJavaScript("SB.render(\(json))")
@@ -438,6 +578,7 @@ struct MarkdownPreview: NSViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             loaded = true
             flush()
+            sendTheme()
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,

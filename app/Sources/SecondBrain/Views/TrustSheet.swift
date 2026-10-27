@@ -23,8 +23,10 @@ struct TrustSheet: View {
                 }
             }
         }
-        .frame(width: 460)
-        .animation(.easeInOut(duration: 0.2), value: connector.flow?.phase)
+        .frame(minWidth: 440, idealWidth: 460, maxWidth: 520)
+        .frame(maxHeight: .infinity)
+        .background(Brand.color.surface)
+        .animation(Brand.motion.animation(), value: connector.flow?.phase)
         // Closed some other way (Esc, window closing): stop waiting for the browser.
         .onDisappear { if connector.flow == nil { connector.cancel() } }
     }
@@ -34,33 +36,33 @@ struct TrustSheet: View {
     private func trust(_ provider: AccountProvider) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                ProviderBadge(provider: provider, size: 38)
+                ProviderBadge(provider: provider, size: 40)
                 Text(L("accounts.trust.title", provider.displayName))
-                    .font(.title2.weight(.semibold))
+                    .font(Brand.title)
+                    .foregroundStyle(Brand.color.text)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.bottom, 22)
             VStack(alignment: .leading, spacing: 18) {
-                TrustLine(symbol: "eye", tint: .blue, title: L("accounts.trust.read"), detail: L("accounts.trust.readDetail"))
-                TrustLine(symbol: "laptopcomputer", tint: .green, title: L("accounts.trust.local"), detail: L("accounts.trust.localDetail"))
-                TrustLine(symbol: "powerplug", tint: .orange, title: L("accounts.trust.disconnect"),
-                          detail: L("accounts.trust.disconnectDetail"))
+                TrustLine(symbol: "eye", title: L("accounts.trust.read"), detail: L("accounts.trust.readDetail"))
+                TrustLine(symbol: "laptopcomputer", title: L("accounts.trust.local"), detail: L("accounts.trust.localDetail"))
+                TrustLine(symbol: "powerplug", title: L("accounts.trust.disconnect"), detail: L("accounts.trust.disconnectDetail"))
             }
             Text(L("accounts.trust.browserHint", provider.displayName))
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 22)
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
                 Button(L("common.cancel")) { connector.cancel() }
+                    .buttonStyle(.brandSecondary)
                     .keyboardShortcut(.cancelAction)
                 Button {
                     connector.continueInBrowser(state: state)
                 } label: {
                     Label(L("accounts.trust.continue"), systemImage: "safari")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.brandPrimary)
                 .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 22)
@@ -72,18 +74,20 @@ struct TrustSheet: View {
 
     private func waiting(_ provider: AccountProvider) -> some View {
         VStack(spacing: 14) {
-            ProgressView().controlSize(.large)
+            BrandLoader(size: 32)
             Text(L("accounts.waiting", provider.displayName))
-                .font(.headline)
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Text(L("accounts.waiting.detail"))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Brand.color.text2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L("accounts.waiting.reopen")) { connector.reopenBrowser() }
-                .buttonStyle(.link)
+                .buttonStyle(.settingsLink)
             Button(L("common.cancel")) { connector.cancel() }
+                .buttonStyle(.brandSecondary)
                 .keyboardShortcut(.cancelAction)
                 .padding(.top, 4)
         }
@@ -96,19 +100,23 @@ struct TrustSheet: View {
     private func failed(_ provider: AccountProvider, _ message: String) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(.orange)
-            Text(L("accounts.failed.title", provider.displayName)).font(.headline)
+                .font(Brand.font(30))
+                .foregroundStyle(Brand.color.warning)
+            Text(L("accounts.failed.title", provider.displayName))
+                .font(Brand.section)
+                .foregroundStyle(Brand.color.text)
+                .multilineTextAlignment(.center)
             Text(message)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Brand.color.text2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-            HStack {
+            HStack(spacing: 8) {
                 Button(L("common.close")) { connector.cancel() }
+                    .buttonStyle(.brandSecondary)
                     .keyboardShortcut(.cancelAction)
                 Button(L("accounts.failed.retry")) { connector.retry() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 4)
@@ -119,22 +127,33 @@ struct TrustSheet: View {
 }
 
 // MARK: v0.4 github — also the GitHub connect sheet's three promises
+/// One promise: a calm `accentSoft` tile with the symbol, a title and one line of detail.
 struct TrustLine: View {
     let symbol: String
-    let tint: Color
+    /// Kept for source compatibility; the brand uses one tile tone for every promise.
+    var tint: Color = Brand.color.accent
     let title: String
     let detail: String
+
+    init(symbol: String, tint: Color = Brand.color.accent, title: String, detail: String) {
+        self.symbol = symbol
+        self.tint = tint
+        self.title = title
+        self.detail = detail
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: symbol)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(tint)
-                .frame(width: 34, height: 34)
-                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
+                .font(Brand.font(15, .medium))
+                .foregroundStyle(Brand.color.accent)
+                .frame(width: 32, height: 32)
+                .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(title).font(Brand.callout).foregroundStyle(Brand.color.text)
+                Text(detail)
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

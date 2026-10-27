@@ -15,6 +15,7 @@ struct ClaudeTerminalView: NSViewRepresentable {
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         let view = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 280))
         view.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        Self.applyBrandColors(view)
         view.processDelegate = context.coordinator
         context.coordinator.view = view
 
@@ -36,6 +37,18 @@ struct ClaudeTerminalView: NSViewRepresentable {
 
     static func dismantleNSView(_ view: LocalProcessTerminalView, coordinator: Coordinator) {
         if !coordinator.exited { view.terminate() }
+    }
+
+    /// The terminal wears the brand tokens (card background, ink text, olive caret) instead of SwiftTerm's black.
+    /// Resolved for the view's current appearance (SwiftTerm stores plain colors).
+    static func applyBrandColors(_ view: LocalProcessTerminalView) {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            func resolved(_ color: SwiftUI.Color) -> NSColor { NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color) }
+            view.nativeBackgroundColor = resolved(Brand.color.card)
+            view.nativeForegroundColor = resolved(Brand.color.text)
+            view.caretColor = resolved(Brand.color.accent)
+            view.selectedTextBackgroundColor = resolved(Brand.color.accentSoft)
+        }
     }
 
     static func environment() -> [String] {

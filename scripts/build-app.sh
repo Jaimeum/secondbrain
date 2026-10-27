@@ -99,6 +99,44 @@ if [[ ! -f "$ICON_CACHE" || "$SCRIPTS/make-icon.swift" -nt "$ICON_CACHE" ]]; the
 fi
 [[ -f "$ICON_CACHE" ]] && cp "$ICON_CACHE" "$APP/Contents/Resources/AppIcon.icns"
 
+# OAuth app registration (CONTRACT §12.3): the ids live OUTSIDE the repo, in ~/.config/secondbrain/ (or SB_OAUTH_DIR):
+#   google-client.json      the "client_secret_….json" downloaded from Google Cloud (Desktop app client), as is
+#   microsoft-client-id.txt the Application (client) ID of the Entra app registration, one line
+#   oauth.json              optional: {"microsoftClientId":…,"googleClientId":…,"googleClientSecret":…} (wins)
+# They are merged into Contents/Resources/oauth-defaults.json. Values are never printed.
+OAUTH_DIR="${SB_OAUTH_DIR:-$HOME/.config/secondbrain}"
+if [[ -d "$OAUTH_DIR" ]]; then
+    step "Registro OAuth (desde $OAUTH_DIR)"
+    OAUTH_SUMMARY="$(python3 -I - "$OAUTH_DIR" "$APP/Contents/Resources/oauth-defaults.json" <<'PY'
+import json, os, sys
+src, dst = sys.argv[1], sys.argv[2]
+out = {}
+g = os.path.join(src, "google-client.json")
+if os.path.isfile(g):
+    d = json.load(open(g))
+    d = d.get("installed") or d.get("web") or d
+    if d.get("client_id"): out["googleClientId"] = d["client_id"]
+    if d.get("client_secret"): out["googleClientSecret"] = d["client_secret"]
+m = os.path.join(src, "microsoft-client-id.txt")
+if os.path.isfile(m):
+    v = open(m).read().strip()
+    if v: out["microsoftClientId"] = v
+o = os.path.join(src, "oauth.json")
+if os.path.isfile(o):
+    for k, v in json.load(open(o)).items():
+        if v: out[k] = v
+if out:
+    json.dump(out, open(dst, "w"))
+    os.chmod(dst, 0o644)
+print("Google " + ("ok" if out.get("googleClientId") and out.get("googleClientSecret") else "–")
+      + " · Microsoft " + ("ok" if out.get("microsoftClientId") else "–"))
+PY
+)"
+    echo "   $OAUTH_SUMMARY"
+else
+    echo "   (sin $OAUTH_DIR: la app se compila sin registro OAuth; Conectar mostrará la ayuda)"
+fi
+
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

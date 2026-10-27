@@ -142,12 +142,29 @@ public struct OAuthAppRegistration: Codable, Equatable, Sendable {
     }
 }
 
-/// Client ids of SecondBrain's own app registrations. Empty until the repo owner registers the apps
-/// (Azure "Accounts in any directory + personal", Google "Desktop app"); until then sign-in shows "Falta configurar".
+/// Client ids of SecondBrain's own app registrations (Azure "Accounts in any directory + personal", Google "Desktop
+/// app"). They are NOT in the source: `scripts/build-app.sh` copies them into the app bundle as
+/// `Contents/Resources/oauth-defaults.json` from `~/.config/secondbrain/` at build time, so the repo never holds the
+/// Google desktop "secret". Without that file (plain `swift build`, the `sb` CLI) they are empty and sign-in shows the
+/// "not registered" help. Override for tests/dev: env `SB_OAUTH_DEFAULTS=<path to such a json>`.
 public enum OAuthDefaults {
-    public static let microsoftClientId = ""
-    public static let googleClientId = ""
-    public static let googleClientSecret = ""
+    public static var microsoftClientId: String { bundled.microsoftClientId ?? "" }
+    public static var googleClientId: String { bundled.googleClientId ?? "" }
+    public static var googleClientSecret: String { bundled.googleClientSecret ?? "" }
+
+    /// Where the bundled file is looked for: `SB_OAUTH_DEFAULTS`, then `<app bundle>/Contents/Resources/oauth-defaults.json`.
+    public static var fileURL: URL? {
+        if let override = ProcessInfo.processInfo.environment["SB_OAUTH_DEFAULTS"], !override.isEmpty {
+            return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
+        }
+        return Bundle.main.resourceURL?.appendingPathComponent("oauth-defaults.json")
+    }
+
+    private static let bundled: OAuthAppRegistration = {
+        guard let url = fileURL, let data = try? Data(contentsOf: url),
+              let reg = try? JSONDecoder().decode(OAuthAppRegistration.self, from: data) else { return .empty }
+        return reg
+    }()
 }
 
 public enum AccountError: Error {

@@ -1257,3 +1257,15 @@
 "onb.change" = "Cambiar…";
 "readonly.promise" = "Solo leo. Nunca envío, borro ni cambio nada.";
 "brand.name" = "secondbrain";
+
+/* v0.5 — tasks */
+"when.now" = "Ahora";
+"when.change" = "Cambiar";
+"preview.openInProject" = "Abrir en el proyecto";
+"tasks.sourceUnknown" = "Origen";
+"tasks.sourceMissing" = "No encontré la página de esto en el cerebro.";
+"tasks.fromHelp" = "Ver solo los pendientes de una reunión o un correo";
+"tasks.emptyFiltered" = "Nada aquí de ese origen";
+"tasks.openSource" = "Abrir la reunión o el correo";
+"inbox.thinkingShort" = "Pensando…";
+"inbox.pick" = "Elige a qué proyecto va.";

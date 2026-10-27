@@ -3,7 +3,7 @@ import BrainCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// "Exportar…": choose a format (Word, PDF, Markdown…) and what to include, then save or copy.
+/// "Exportar…": a format (menu + one-line hint) and what to include, then save or copy. Sized per CONTRACT §15.3.
 struct ExportSheet: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
@@ -19,81 +19,123 @@ struct ExportSheet: View {
     private var format: ExportFormat { ExportFormat(rawValue: formatRaw) ?? .docx }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L("export.title")).font(.title2.weight(.semibold))
-                Text(displayTitle).foregroundStyle(.secondary).lineLimit(2)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Brand.spacing.xl) {
+                    SheetTitleBlock(title: L("export.title"), subtitle: displayTitle, symbol: displaySymbol)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(L("export.format")).font(.headline)
-                Picker("", selection: $formatRaw) {
-                    ForEach(ExportFormat.menuOrder, id: \.self) { Text($0.label).tag($0.rawValue) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                Text(formatHint).font(.caption).foregroundStyle(.secondary)
-            }
-
-            if hasOptions {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(L("export.include")).font(.headline)
-                    if case .source(let source) = request.target {
-                        Toggle(L("export.opt.summary"), isOn: $options.includeSummary)
-                        Toggle(L("export.opt.tasks"), isOn: $options.includeTasks)
-                        Toggle(source.kind == .email ? L("export.opt.emails") : L("export.opt.transcript"),
-                               isOn: $options.includeTranscript)
-                        if source.kind == .meeting {
-                            Group {
-                                Toggle(L("export.opt.timestamps"), isOn: $options.includeTimestamps)
-                                Toggle(L("export.opt.names"), isOn: $options.resolveSpeakerNames)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: Brand.spacing.m) {
+                            Text(L("export.format"))
+                                .font(Brand.callout)
+                                .foregroundStyle(Brand.color.text)
+                                .lineLimit(1)
+                            Picker("", selection: $formatRaw) {
+                                ForEach(ExportFormat.menuOrder, id: \.self) { Text($0.label).tag($0.rawValue) }
                             }
-                            .padding(.leading, 20)
-                            .disabled(!options.includeTranscript)
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .frame(maxWidth: 200, alignment: .leading)
                         }
+                        Text(formatHint)
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.text2)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(formatHint)
                     }
-                    if format == .markdown {
-                        Toggle(L("export.opt.wikilinks"), isOn: $options.keepWikilinks)
-                        Toggle(L("export.opt.frontmatter"), isOn: $options.keepFrontmatter)
+
+                    if hasOptions {
+                        VStack(alignment: .leading, spacing: Brand.spacing.s) {
+                            Text(L("export.include"))
+                                .font(Brand.callout)
+                                .foregroundStyle(Brand.color.text)
+                            if case .source(let source) = request.target {
+                                Toggle(L("export.opt.summary"), isOn: $options.includeSummary)
+                                Toggle(L("export.opt.tasks"), isOn: $options.includeTasks)
+                                Toggle(source.kind == .email ? L("export.opt.emails") : L("export.opt.transcript"),
+                                       isOn: $options.includeTranscript)
+                                if source.kind == .meeting {
+                                    Group {
+                                        Toggle(L("export.opt.timestamps"), isOn: $options.includeTimestamps)
+                                        Toggle(L("export.opt.names"), isOn: $options.resolveSpeakerNames)
+                                    }
+                                    .padding(.leading, Brand.spacing.xl)
+                                    .disabled(!options.includeTranscript)
+                                }
+                            }
+                            if format == .markdown {
+                                Toggle(L("export.opt.wikilinks"), isOn: $options.keepWikilinks)
+                                Toggle(L("export.opt.frontmatter"), isOn: $options.keepFrontmatter)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                        .font(Brand.body)
+                        .foregroundStyle(Brand.color.text)
+                    }
+
+                    if let savedURL {
+                        VStack(alignment: .leading, spacing: Brand.spacing.s) {
+                            HStack(alignment: .firstTextBaseline, spacing: Brand.spacing.s) {
+                                Image(systemName: "checkmark.circle").foregroundStyle(Brand.color.success)
+                                Text(L("export.saved", savedURL.lastPathComponent))
+                                    .foregroundStyle(Brand.color.text)
+                                    .lineLimit(2)
+                                    .truncationMode(.middle)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            HStack(spacing: Brand.spacing.s) {
+                                Button(L("export.open")) { NSWorkspace.shared.open(savedURL) }
+                                    .buttonStyle(.brandSecondary)
+                                Button(L("wiki.showInFinder")) { NSWorkspace.shared.activateFileViewerSelecting([savedURL]) }
+                                    .buttonStyle(.brandSecondary)
+                            }
+                        }
+                        .font(Brand.body)
+                        .padding(Brand.spacing.m)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+                            .fill(Brand.color.accentSoft))
+                    }
+                    if let error {
+                        Text(error)
+                            .font(Brand.body)
+                            .foregroundStyle(Brand.color.danger)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .toggleStyle(.checkbox)
+                .padding(Brand.spacing.xxl)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if let savedURL {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    Text(L("export.saved", savedURL.lastPathComponent)).lineLimit(2)
-                    Spacer()
-                    Button(L("wiki.showInFinder")) { NSWorkspace.shared.activateFileViewerSelecting([savedURL]) }
-                    Button(L("export.open")) { NSWorkspace.shared.open(savedURL) }
-                }
-                .font(.callout)
-                .padding(10)
-                .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-            }
-            if let error { Text(error).foregroundStyle(.red).font(.callout).fixedSize(horizontal: false, vertical: true) }
-
-            HStack {
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            HStack(spacing: Brand.spacing.s) {
                 Button {
                     Task { await copy() }
                 } label: {
                     Label(copied ? L("export.copied") : L("export.copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
+                .buttonStyle(.brandSecondary)
+                .fixedSize()
                 .disabled(busy)
                 .help(L("export.copyHelp"))
-                Spacer()
-                if busy { ProgressView().controlSize(.small) }
+                Spacer(minLength: Brand.spacing.s)
+                if busy { BrandLoader(size: 16) }
                 Button(savedURL == nil ? L("common.cancel") : L("common.close")) { dismiss() }
+                    .buttonStyle(.brandSecondary)
+                    .fixedSize()
                     .keyboardShortcut(.cancelAction)
                 Button(L("export.save")) { Task { await save() } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.brandPrimary)
+                    .fixedSize()
                     .keyboardShortcut(.defaultAction)
                     .disabled(busy || nothingSelected)
             }
+            .padding(.horizontal, Brand.spacing.xxl)
+            .padding(.vertical, Brand.spacing.m)
         }
-        .padding(24)
-        .frame(width: 540)
+        .background(Brand.color.surface)
+        .frame(minWidth: 440, idealWidth: 500, maxWidth: 640, minHeight: 300, idealHeight: 440, maxHeight: 640)
         .onChange(of: formatRaw) { savedURL = nil; copied = false }
     }
 
@@ -118,9 +160,17 @@ struct ExportSheet: View {
         }
     }
 
+    private var displaySymbol: String? {
+        switch request.target {
+        case .source(let source): source.symbol
+        case .page(let path, _): SourceLabels.symbol(forPath: path)
+        case .tasks: "checklist"
+        }
+    }
+
     private var displayTitle: String {
         switch request.target {
-        case .source(let source): "\(source.emoji) \(source.title)"
+        case .source(let source): source.title
         case .page(_, let title): title
         case .tasks(let tasks, let title): "\(title) · \(L("tasks.count", tasks.count))"
         }

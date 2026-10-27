@@ -273,10 +273,18 @@ struct AddEmailSheet: View {
 
     @ViewBuilder private var projectPicker: some View {
         if let thread = chosenThread {
+            // §14.2: a thread in a project keeps it; one in Sin asignar is moved by a rule (never by the default project),
+            // exactly as the engine does on save.
+            let rule = thread.projectSlug == nil ? inboxThreadRule : nil
             LabeledContent(L("menu.project")) {
-                Text(state.projectName(thread.projectSlug)).foregroundStyle(.secondary)
+                Text(state.projectName(rule?.projectSlug ?? thread.projectSlug)).foregroundStyle(.secondary)
             }
             .help(L("email.projectLocked"))
+            if let rule {
+                Text(L("rules.mail.byRule", ruleLabel(rule.rule)))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } else {
             Picker(L("menu.project"), selection: Binding(get: { projectSlug }, set: {
                 projectSlug = $0
@@ -291,13 +299,21 @@ struct AddEmailSheet: View {
                 }
             }
             if let rule = routedRule {
-                Text(L("rules.mail.byRule", RoutingStore.displayName(for: rule, projects: state.projects, language: Localizer.language)))
+                Text(L("rules.mail.byRule", ruleLabel(rule)))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else if routedByDefault {
                 Text(L("rules.mail.byDefault")).font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The rule that will move the chosen Sin asignar thread on save (no hit counted here).
+    private var inboxThreadRule: RoutingDecision? {
+        guard let email = edited() else { return nil }
+        let preview = state.engine.routingPreview(.mail(email, ownerEmails: ownerEmails))
+        guard let decision = preview.decision, preview.projectSlug != nil else { return nil }
+        return decision
     }
 
     // MARK: Logic

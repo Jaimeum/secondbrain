@@ -76,18 +76,111 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
         self.autoImportEnabled = autoImportEnabled
     }
 
+    /// Rules this version can't read (a field or operator from a newer version), kept as written and saved back in
+    /// place: the vault may be shared with a newer app (another Mac, a synced folder) and its rules must survive.
+    var unreadableRules: [PreservedRule] = []
+    /// Top-level keys from a newer version, saved back untouched.
+    var unknownKeys: [String: JSONValue] = [:]
+
+    struct PreservedRule: Equatable, Sendable {
+        /// The readable rule it came after (nil = first): where it goes back on save.
+        var after: String?
+        var raw: JSONValue
+    }
+
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+        case rules, defaultProjectSlug, mailSyncCursors, autoImportEnabled
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        // One unreadable rule (a field from a newer version) must not lose the others.
-        rules = (try c.decodeIfPresent([Lossy<RoutingRule>].self, forKey: .rules) ?? []).compactMap(\.value)
+        // One unreadable rule (a field from a newer version) must not lose the others, nor itself.
+        rules = []
+        var previous: String?
+        for item in try c.decodeIfPresent([LossyRule].self, forKey: .rules) ?? [] {
+            if let rule = item.rule {
+                rules.append(rule)
+                previous = rule.id
+            } else if let raw = item.raw {
+                unreadableRules.append(PreservedRule(after: previous, raw: raw))
+            }
+        }
         defaultProjectSlug = try c.decodeIfPresent(String.self, forKey: .defaultProjectSlug)
         mailSyncCursors = (try? c.decodeIfPresent([String: Date].self, forKey: .mailSyncCursors)) ?? [:]
         autoImportEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .autoImportEnabled)) ?? true
+        let all = try decoder.container(keyedBy: JSONValue.Key.self)
+        for key in all.allKeys where CodingKeys(rawValue: key.stringValue) == nil {
+            if let v = try? all.decode(JSONValue.self, forKey: key) { unknownKeys[key.stringValue] = v }
+        }
     }
 
-    private struct Lossy<T: Decodable>: Decodable {
-        let value: T?
-        init(from decoder: Decoder) throws { value = try? T(from: decoder) }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        let anchored = Dictionary(grouping: unreadableRules, by: \.after)
+        var list: [RuleOrRaw] = (anchored[nil] ?? []).map { .raw($0.raw) }
+        for rule in rules { list += [.rule(rule)] + (anchored[rule.id] ?? []).map { .raw($0.raw) } }
+        let ids = Set(rules.map(\.id))
+        list += unreadableRules.filter { $0.after.map { !ids.contains($0) } ?? false }.map { .raw($0.raw) }   // its rule is gone
+        try c.encode(list, forKey: .rules)
+        try c.encodeIfPresent(defaultProjectSlug, forKey: .defaultProjectSlug)
+        try c.encode(mailSyncCursors, forKey: .mailSyncCursors)
+        try c.encode(autoImportEnabled, forKey: .autoImportEnabled)
+        var extra = encoder.container(keyedBy: JSONValue.Key.self)
+        for (key, value) in unknownKeys where CodingKeys(rawValue: key) == nil { try extra.encode(value, forKey: JSONValue.Key(key)) }
+    }
+
+    private struct LossyRule: Decodable {
+        let rule: RoutingRule?
+        let raw: JSONValue?
+        init(from decoder: Decoder) throws {
+            rule = try? RoutingRule(from: decoder)
+            raw = rule == nil ? try? JSONValue(from: decoder) : nil
+        }
+    }
+
+    private enum RuleOrRaw: Encodable {
+        case rule(RoutingRule), raw(JSONValue)
+        func encode(to encoder: Encoder) throws {
+            switch self {
+            case .rule(let r): try r.encode(to: encoder)
+            case .raw(let v): try v.encode(to: encoder)
+            }
+        }
+    }
+}
+
+/// Any JSON value, kept as read (rules and settings written by a newer version).
+enum JSONValue: Codable, Equatable, Sendable {
+    case null, bool(Bool), number(Double), string(String), array([JSONValue]), object([String: JSONValue])
+
+    struct Key: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(_ s: String) { stringValue = s }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+        else if let n = try? c.decode(Double.self) { self = .number(n) }
+        else if let s = try? c.decode(String.self) { self = .string(s) }
+        else if let a = try? c.decode([JSONValue].self) { self = .array(a) }
+        else { self = .object(try c.decode([String: JSONValue].self)) }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .null: try c.encodeNil()
+        case .bool(let b): try c.encode(b)
+        case .number(let n): try c.encode(n)
+        case .string(let s): try c.encode(s)
+        case .array(let a): try c.encode(a)
+        case .object(let o): try c.encode(o)
+        }
     }
 }
 
@@ -155,8 +248,10 @@ public enum RoutingError: LocalizedError {
 // MARK: - Matching
 
 /// Pure rule evaluation (no state). Fields are kind-agnostic: on a meeting `sender*` is the organizer and `subject`
-/// the title; on a mail `organizerEmail` is the sender and `title` the subject. `attendee*` look at the recipients
-/// minus the owner; `recipient` at all of them (an alias of the owner, `acme@me.com`, is a valid rule).
+/// the title; on a mail `title` is the subject. `organizerEmail` is the exception: meetings only, so «¿Las reuniones
+/// que organiza ana@acme.com…?» never sorts Ana's mail too. `attendee*` look at the recipients minus the owner;
+/// `recipient` at all of them (an alias of the owner, `acme@me.com`, is a valid rule). Subjects are compared as
+/// written and without "RE:"/"Fwd:"/"RV:" prefixes, so "el asunto es «Weekly sync»" follows the replies.
 public enum RuleMatcher {
     /// All conditions hold (AND). A rule without conditions, or a condition with an empty value, never matches.
     /// `enabled` is not checked here (the editor's "Probar" tests a disabled rule too): see `firstMatch`.
@@ -173,8 +268,10 @@ public enum RuleMatcher {
         let v = fold(c.value)
         guard !v.isEmpty else { return false }
         switch c.field {
-        case .senderEmail, .organizerEmail:
+        case .senderEmail:
             return s.sender.map { address($0, c.op, v) } ?? false
+        case .organizerEmail:
+            return s.kind == .meeting && (s.sender.map { address($0, c.op, v) } ?? false)
         case .senderDomain:
             return s.sender.flatMap(domain).map { domainMatch($0, c.op, v) } ?? false
         case .senderName:
@@ -186,10 +283,17 @@ public enum RuleMatcher {
         case .attendeeDomain:
             return s.recipients.contains { a in !s.isOwner(a) && (domain(a).map { domainMatch($0, c.op, v) } ?? false) }
         case .subject, .title:
-            return compare(fold(s.subject), c.op, v)
+            return subject(s.subject, c.op, v)
         case .anyText:
-            return [s.subject, s.text].contains { compare(fold($0), c.op, v) }
+            return subject(s.subject, c.op, v) || compare(fold(s.text), c.op, v)
         }
+    }
+
+    /// The subject as written, else without its reply/forward prefixes ("RE: Fwd: Weekly sync" → "Weekly sync").
+    static func subject(_ raw: String, _ op: RuleOperator, _ v: String) -> Bool {
+        if compare(fold(raw), op, v) { return true }
+        let bare = EmailParser.normalizeSubject(raw)
+        return bare != raw.trimmingCharacters(in: .whitespacesAndNewlines) && compare(fold(bare), op, v)
     }
 
     /// Case- and accent-insensitive, trimmed ("Ñandú " → "nandu").
@@ -197,9 +301,29 @@ public enum RuleMatcher {
         s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// The condition as compared (folded value): used to spot equivalent rules.
+    /// The condition as compared, so rules that match the same things look the same (§14.3 doesn't offer a rule that
+    /// exists, the editor flags duplicates): folded value; a domain without "@", "*." or dots around it; and an
+    /// address field `is` a domain ("senderEmail is acme.com") as the domain field it behaves like.
     static func normalized(_ c: RuleCondition) -> RuleCondition {
-        RuleCondition(field: c.field, op: c.op, value: fold(c.value))
+        let v = fold(c.value)
+        let addressIsDomain = c.op == .is && !isEmail(v)
+        switch c.field {
+        case .senderDomain, .attendeeDomain:
+            return RuleCondition(field: c.field, op: c.op, value: bareDomain(v))
+        case .senderEmail where addressIsDomain:
+            return RuleCondition(field: .senderDomain, op: .is, value: bareDomain(v))
+        case .attendeeEmail where addressIsDomain:
+            return RuleCondition(field: .attendeeDomain, op: .is, value: bareDomain(v))
+        case .organizerEmail where addressIsDomain, .recipient where addressIsDomain:
+            return RuleCondition(field: c.field, op: .is, value: bareDomain(v))
+        default:
+            return RuleCondition(field: c.field, op: c.op, value: v)
+        }
+    }
+
+    /// "ana@acme.com" (not "@acme.com" nor "acme.com").
+    static func isEmail(_ v: String) -> Bool {
+        (v.firstIndex(of: "@").map { $0 != v.startIndex }) ?? false
     }
 
     /// Domain of an address, lowercased ("ana@Mail.Acme.com" → "mail.acme.com").
@@ -234,8 +358,7 @@ public enum RuleMatcher {
     /// An address field: `is` with a domain ("acme.com", "@acme.com") compares domains; otherwise the email itself.
     static func address(_ a: EmailAddress, _ op: RuleOperator, _ v: String) -> Bool {
         guard let e = a.email.map(fold), !e.isEmpty else { return false }
-        let isEmailValue = (v.firstIndex(of: "@").map { $0 != v.startIndex }) ?? false
-        if op == .is, !isEmailValue { return domain(a).map { domainMatch($0, .is, v) } ?? false }
+        if op == .is, !isEmail(v) { return domain(a).map { domainMatch($0, .is, v) } ?? false }
         return compare(e, op, v)
     }
 
@@ -298,18 +421,38 @@ public enum RuleMatcher {
     }
 
     public func remove(id: String) throws {
-        try mutate { $0.rules.removeAll { $0.id == id } }
+        try mutate { s in
+            guard let i = s.rules.firstIndex(where: { $0.id == id }) else { return }
+            s.rules.remove(at: i)
+            // Rules of a newer version that came after it keep their place.
+            let before = i > 0 ? s.rules[i - 1].id : nil
+            for j in s.unreadableRules.indices where s.unreadableRules[j].after == id { s.unreadableRules[j].after = before }
+        }
     }
 
-    /// Reorders like SwiftUI's `onMove` (offsets of `settings.rules` as shown).
+    /// Reorders like SwiftUI's `onMove` (offsets of `settings.rules` as shown). The offsets become rule ids and the move
+    /// is applied to what is on disk, so a rule added meanwhile by `sb rules add` or another Mac is kept.
     public func move(fromOffsets: IndexSet, toOffset: Int) throws {
-        try mutate(fromDisk: false) { s in
-            let moving = fromOffsets.filter { s.rules.indices.contains($0) }.map { s.rules[$0] }
-            let before = fromOffsets.filter { $0 < toOffset }.count
-            for i in fromOffsets.sorted(by: >) where s.rules.indices.contains(i) { s.rules.remove(at: i) }
-            let at = max(0, min(s.rules.count, toOffset - before))
-            s.rules.insert(contentsOf: moving, at: at)
+        let shown = settings.rules
+        let moving = fromOffsets.sorted().filter { shown.indices.contains($0) }.map { shown[$0].id }
+        guard !moving.isEmpty else { return }
+        let movingSet = Set(moving)
+        // The rule they land before (nil = the end).
+        let anchor = shown[max(0, min(toOffset, shown.count))...].first { !movingSet.contains($0.id) }?.id
+        try mutate { s in
+            let moved = moving.compactMap { id in s.rules.first { $0.id == id } }
+            s.rules.removeAll { movingSet.contains($0.id) }
+            let at = anchor.flatMap { a in s.rules.firstIndex { $0.id == a } } ?? s.rules.count
+            s.rules.insert(contentsOf: moved, at: at)
         }
+    }
+
+    /// Re-reads the file when something else changed it (`sb rules add`, another Mac through a synced vault): disk
+    /// wins, hit counts merged. Nothing is written.
+    public func refresh() {
+        guard let disk = Self.read(fileURL, backupCorrupt: false) else { return }
+        let next = Self.merged(disk: disk, memory: settings)
+        if next != settings { settings = next }
     }
 
     public func setDefaultProject(_ slug: String?) throws {
@@ -399,7 +542,7 @@ public enum RuleMatcher {
             switch c.field {
             case .senderDomain: return cap(l.t("de @\(domain)", "from @\(domain)"))
             case .senderEmail: return cap(l.t("de ", "from ") + (isEmail ? v : "@\(domain)"))
-            case .organizerEmail: return cap(l.t("organiza ", "organized by ") + (isEmail ? v : "@\(domain)"))
+            case .organizerEmail: return cap(l.t("reuniones de ", "meetings by ") + (isEmail ? v : "@\(domain)"))
             case .attendeeDomain: return cap(l.t("con @\(domain)", "with @\(domain)"))
             case .attendeeEmail: return cap(l.t("con ", "with ") + (isEmail ? v : "@\(domain)"))
             case .recipient: return cap(l.t("para ", "to ") + (isEmail ? v : "@\(domain)"))
@@ -426,7 +569,7 @@ public enum RuleMatcher {
         case .startsWith: op = l.t("empieza con", "starts with")
         case .endsWith: op = l.t("termina con", "ends with")
         }
-        return cap("\(field) \(op) «\(v)»")
+        return cap("\(field) \(op) " + l.t("«\(v)»", "“\(v)”"))
     }
 
     // MARK: Suggestion (§14.3)
@@ -485,10 +628,23 @@ public enum RuleMatcher {
         return RoutingRule(name: name, conditions: [condition], projectSlug: projectSlug)
     }
 
+    /// §14.3: the rule offered after `subject` was put in `projectSlug` by hand, or nil: no project, nothing sensible to
+    /// propose, an equivalent rule exists, or an enabled rule already matches `subject`. In that last case the
+    /// assignment either came from a rule (the user is correcting it, not teaching one) or overrides one, and a new
+    /// rule — added last — could never fire before it: "Sí, siempre" would be a broken promise.
+    public nonisolated static func offeredRule(for subject: RoutingSubject, projectSlug: String?, existing: [RoutingRule],
+                                               language: String, projectName: String? = nil) -> RoutingRule? {
+        guard let projectSlug, RuleMatcher.firstMatch(existing, subject) == nil,
+              let rule = suggestedRule(for: subject, projectSlug: projectSlug, language: language, projectName: projectName),
+              !existing.contains(where: { $0.hasSameConditions(as: rule) })
+        else { return nil }
+        return rule
+    }
+
     // MARK: Persistence
 
-    private func mutate(fromDisk: Bool = true, _ body: (inout RoutingSettings) throws -> Void) throws {
-        var next = fromDisk ? Self.merged(disk: Self.read(fileURL, backupCorrupt: false), memory: settings) : settings
+    private func mutate(_ body: (inout RoutingSettings) throws -> Void) throws {
+        var next = Self.merged(disk: Self.read(fileURL, backupCorrupt: false), memory: settings)
         try body(&next)
         try Self.write(next, to: fileURL)
         settings = next

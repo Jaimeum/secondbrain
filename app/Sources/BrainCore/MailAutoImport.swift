@@ -52,7 +52,9 @@ public extension BrainEngine {
                            accounts accountList: [ConnectedAccount]? = nil,
                            provider makeProvider: ((ConnectedAccount) -> MailCalendarProvider)? = nil) async -> MailAutoImportReport {
         var report = MailAutoImportReport()
-        let autoRules = routing.autoAddRules
+        routing.refresh()   // a rule added by `sb rules add` or another Mac meanwhile counts too
+        // A rule whose project was deleted adds nothing (its mail would land in the default project or Sin asignar).
+        let autoRules = routing.autoAddRules.filter { $0.projectSlug == nil || validProject($0.projectSlug) != nil }
         let mailAccounts = (accountList ?? accounts.mailAccounts).filter { $0.provider.hasMail }
         guard routing.settings.autoImportEnabled, !autoRules.isEmpty, !mailAccounts.isEmpty, cap > 0 else {
             report.idle = true
@@ -124,7 +126,7 @@ public extension BrainEngine {
                     break   // the cursor stays before it: retried next cycle
                 }
                 let parsed = MailImport.parsedEmail(full, account: account, ownerEmails: owners, language: config.uiLanguage)
-                guard let decision = routing.match(.mail(parsed, ownerEmails: owners)), decision.rule.autoAddMail else {
+                guard let decision = routing.match(.mail(parsed, ownerEmails: owners)), decision.rule.autoAddMail, decides(decision) else {
                     cursor = summary.date
                     continue
                 }
@@ -142,8 +144,11 @@ public extension BrainEngine {
                     let added = try addMailMessages([full], account: account, threadKey: threadKey, projectSlug: nil, routeIfUnassigned: true)
                     for src in added { report.record(src) }
                     budget -= added.count
+                } catch EngineError.emptyEmail, EngineError.duplicateEmail {
+                    // Nothing to add, now or later.
                 } catch {
                     Log.error("auto-add: could not add a message of \(account.id): \(error)")
+                    break   // the cursor stays before it: retried next cycle
                 }
                 cursor = summary.date
             }

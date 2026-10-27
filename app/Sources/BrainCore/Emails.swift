@@ -356,20 +356,24 @@ public extension BrainEngine {
             if let inProject = VaultStore.projectSlug(of: folder) { return (inProject, nil, false) }
             inboxThread = true
         }
-        if let d = routing.route(.mail(email, ownerEmails: vault.ownerEmails())) {
-            if d.projectSlug == nil { return (nil, d, true) }
-            if let p = validProject(d.projectSlug) { return (p, d, true) }
+        let subject = RoutingSubject.mail(email, ownerEmails: vault.ownerEmails())
+        if let d = routing.match(subject), decides(d) {
+            let counted = routing.route(subject) ?? d   // only a rule that really decides counts a hit
+            return (validProject(counted.projectSlug), counted, true)
         }
         return (inboxThread ? nil : validProject(routing.settings.defaultProjectSlug), nil, true)
+    }
+
+    /// The rule's destination exists (or it is an explicit Sin asignar): otherwise it is skipped and the default project
+    /// (or Sin asignar) applies, and no hit is counted.
+    func decides(_ d: RoutingDecision) -> Bool {
+        d.projectSlug == nil || validProject(d.projectSlug) != nil
     }
 
     /// What routing would decide (rule, then default project), without recording a hit: preselection in the UI.
     /// `projectSlug` nil = inbox; `decision` nil = no rule matched (the default project, if any, applies).
     func routingPreview(_ subject: RoutingSubject) -> (projectSlug: String?, decision: RoutingDecision?) {
-        if let d = routing.match(subject) {
-            if d.projectSlug == nil { return (nil, d) }
-            if let p = validProject(d.projectSlug) { return (p, d) }
-        }
+        if let d = routing.match(subject), decides(d) { return (validProject(d.projectSlug), d) }
         return (validProject(routing.settings.defaultProjectSlug), nil)
     }
 

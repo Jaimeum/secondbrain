@@ -1,8 +1,8 @@
 import BrainCore
 import SwiftUI
 
-/// Development only (`SB_SNAPSHOT_DIR`, CONTRACT §14.6): "rules-empty", "rules", "rule-editor", "meetings-rule" and
-/// "meetings-rule-offer". The sample rules are written when their shot renders, so earlier shots stay as they were.
+/// Development only (`SB_SNAPSHOT_DIR`, CONTRACT §14.6): "rules-empty", "rules", "rule-editor", "meetings-rule",
+/// "meetings-rule-offer" and "email-routed". The sample rules are written when their shot renders, so earlier shots stay as they were.
 @MainActor
 enum RulesSnapshots {
     static func shots(state: AppState) async -> [(String, CGSize, AnyView)] {
@@ -24,6 +24,9 @@ enum RulesSnapshots {
              AnyView(SnapshotSetup { addSampleRules(state) } content: { MeetingsView(initialSegment: .week) })),
             ("meetings-rule-offer", CGSize(width: 1000, height: 640),
              AnyView(SnapshotSetup { offerOnSomeMeeting(state) } content: { MeetingsView(initialSegment: .week) })),
+            // "Agregar correo" from Sin asignar with a pasted mail a rule covers: the picker names the rule's project.
+            ("email-routed", CGSize(width: 820, height: 640),
+             AnyView(AddEmailSheet(request: EmailRequest(threadKey: nil, projectSlug: nil), initialText: routedEmailSample(state)))),
         ]
     }
 
@@ -46,6 +49,34 @@ enum RulesSnapshots {
         for rule in samples where !routing.hasEquivalentRule(rule) {
             try? routing.add(rule)
         }
+    }
+
+    /// A pasted mail from @acmelogistics.com (the demo vault's sender-domain rule).
+    static func routedEmailSample(_ state: AppState) -> String {
+        if state.config.uiLanguage == "en" {
+            return """
+            From: Sofía Herrera <sofia.herrera@acmelogistics.com>
+            To: Ana García <ana@contoso.com>
+            Date: Mon, 19 Oct 2026 10:15:00 -0600
+            Subject: Delivery windows in Puebla
+
+            Hi Ana, we can move the Puebla deliveries to Tuesday and Thursday mornings starting next week.
+            Let me know if that works for the Atlas launch.
+
+            Sofía
+            """
+        }
+        return """
+        De: Sofía Herrera <sofia.herrera@acmelogistics.com>
+        Para: Ana García <ana@contoso.com>
+        Fecha: Mon, 19 Oct 2026 10:15:00 -0600
+        Asunto: Horarios de entrega en Puebla
+
+        Hola Ana, podemos mover las entregas de Puebla a martes y jueves por la mañana desde la próxima semana.
+        Dime si te funciona para el lanzamiento de Atlas.
+
+        Sofía
+        """
     }
 
     /// The §14.3 line: a meeting of the week put in a project by hand, as if from its card.

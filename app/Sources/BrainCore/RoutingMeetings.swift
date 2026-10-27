@@ -77,17 +77,14 @@ public struct MeetingProjectResolution: Equatable, Sendable {
 
 public enum MeetingRuleOffers {
     /// The rule to offer after the user put `event` in `projectSlug` by hand, or nil: no project, the project came from a
-    /// rule, nothing sensible to propose (only the owner), or an equivalent rule already exists.
+    /// rule (or a rule matches the meeting at all), nothing sensible to propose (only the owner), or an equivalent rule
+    /// already exists (`RoutingStore.offeredRule`).
     public static func forMeeting(_ event: CalendarEvent, projectSlug: String?, previous: MeetingProjectResolution?,
                                   ownerEmails: [String], existing: [RoutingRule], language: String,
                                   projectName: String? = nil) -> RoutingRule? {
-        guard let projectSlug else { return nil }
         if previous?.rule != nil { return nil }   // it came from a rule: the user is correcting it, not teaching one
-        let subject = RoutingSubject.meeting(event, ownerEmails: ownerEmails)
-        guard let rule = RoutingStore.suggestedRule(for: subject, projectSlug: projectSlug, language: language,
-                                                     projectName: projectName) else { return nil }
-        guard !existing.contains(where: { $0.hasSameConditions(as: rule) }) else { return nil }
-        return rule
+        return RoutingStore.offeredRule(for: .meeting(event, ownerEmails: ownerEmails), projectSlug: projectSlug,
+                                        existing: existing, language: language, projectName: projectName)
     }
 }
 
@@ -162,8 +159,9 @@ public enum RuleTester {
 // MARK: - Names
 
 public extension RoutingStore {
-    /// The rule without its destination, for "por regla «…»" next to a project that is already shown: the rule's own
-    /// name, else its conditions ("Organiza ana@acme.com", "El asunto contiene «Nubia» y de @acme.com").
+    /// The rule without its destination, for "por la regla «…»" next to a project that is already shown (Correo,
+    /// Reuniones, the chips): the rule's own name, else its conditions ("Reuniones de ana@acme.com", "El asunto
+    /// contiene «Nubia» y de @acme.com").
     nonisolated static func conditionSummary(_ rule: RoutingRule, language: String) -> String {
         let name = rule.name.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty { return name }

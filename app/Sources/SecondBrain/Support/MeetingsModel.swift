@@ -227,11 +227,28 @@ final class MeetingsModel {
         resolution(for: event, state: state).recordingProject
     }
 
-    /// `projectSlug(for:)` when a recording actually starts: a rule that decides counts a hit ("n veces").
-    func projectSlugForRecording(_ event: CalendarEvent, state: AppState) -> String? {
+    /// "Grabar" on a meeting: the recording goes to `projectSlug(for:)`. A rule that decided it counts a hit ("n veces")
+    /// only once the recording really started (no microphone permission, a recorder error… count nothing).
+    func record(_ event: CalendarEvent, state: AppState) async {
         let r = resolution(for: event, state: state)
-        if r.rule != nil { _ = state.engine.routing.route(routingSubject(event)) }
-        return r.recordingProject
+        await state.startRecording(for: event, projectSlug: r.recordingProject)
+        if r.rule != nil, event.matches(state.recordingEventId) { _ = state.engine.routing.route(routingSubject(event)) }
+    }
+
+    /// The calendar event a recording is tied to: from the agenda when it is loaded, else asked of the calendars around
+    /// the recording's date (the agenda starts today, and Sin asignar is mostly yesterday's meetings). nil if not found.
+    func event(for source: SourceRecord, state: AppState) async -> CalendarEvent? {
+        guard let id = source.calendarEventId else { return nil }
+        if let cached = event(id: id) { return cached }
+        let store = state.engine.accounts
+        let date = source.eventDate ?? source.createdAt
+        let from = date.addingTimeInterval(-86_400), to = date.addingTimeInterval(86_400)
+        for account in store.calendarAccounts {
+            if let list = try? await store.provider(for: account).events(from: from, to: to), let found = list.first(where: { $0.matches(id) }) {
+                return found
+            }
+        }
+        return nil
     }
 
     /// "¿Es de 🚀 Acme?" — only while nothing decided the event (no choice, no rule, no default project).
@@ -254,54 +271,24 @@ final class MeetingsModel {
         // Recording this meeting right now: the recording follows the new choice.
         if event.matches(state.recordingEventId) { state.recordingProjectSlug = choice?.projectSlug }
         // MARK: v0.4 routing — §14.3: one quiet "always?" line after a manual choice that didn't come from a rule.
-        if let placement, let slug = choice?.projectSlug {
-            let rule = MeetingRuleOffers.forMeeting(event, projectSlug: slug, previous: previous, ownerEmails: myEmails.sorted(),
-                                            existing: state.engine.routing.rules, language: state.config.uiLanguage)
-            ruleOffer = rule.map { MeetingRuleOffer(eventId: event.id, placement: placement, rule: $0) }
-        } else if ruleOffer?.eventId == event.id {
-            ruleOffer = nil
+        if let placement, let slug = choice?.projectSlug,
+           let rule = MeetingRuleOffers.forMeeting(event, projectSlug: slug, previous: previous, ownerEmails: myEmails.sorted(),
+                                                   existing: state.engine.routing.rules, language: state.config.uiLanguage) {
+            ruleOfferTarget = MeetingRuleOfferTarget(eventId: event.id, placement: placement)
+            ruleOffer.show(rule, projectLabel: state.projectName(slug), kind: .meeting)
+        } else if ruleOfferTarget?.eventId == event.id {
+            ruleOffer.dismiss()
+            ruleOfferTarget = nil
         }
     }
 
     // MARK: Rule offer (§14.3)
 
-    /// The offer on screen (at most one): "¿Las reuniones que organiza ana@acme.com a 🚀 Acme? · Sí, siempre · Solo esta vez".
-    var ruleOffer: MeetingRuleOffer?
-    @ObservationIgnored private var offerDismissal: Task<Void, Never>?
-
-    /// "Sí, siempre": creates the rule and shows "Regla creada · Deshacer" for a few seconds.
-    func acceptRuleOffer(state: AppState) {
-        guard var offer = ruleOffer, offer.createdRuleId == nil else { return }
-        do {
-            try state.engine.routing.add(offer.rule)
-            offer.createdRuleId = offer.rule.id
-            ruleOffer = offer
-            error = nil
-            dismissOffer(after: 6, id: offer.id)
-        } catch {
-            self.error = FriendlyError.message(error)
-            ruleOffer = nil
-        }
-    }
-
-    /// "Deshacer" after "Regla creada".
-    func undoRuleOffer(state: AppState) {
-        guard let id = ruleOffer?.createdRuleId else { return }
-        try? state.engine.routing.remove(id: id)
-        ruleOffer = nil
-    }
-
-    /// "Solo esta vez".
-    func dismissRuleOffer() { ruleOffer = nil }
-
-    private func dismissOffer(after seconds: Double, id: UUID) {
-        offerDismissal?.cancel()
-        offerDismissal = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
-            guard !Task.isCancelled, let self, self.ruleOffer?.id == id else { return }
-            self.ruleOffer = nil
-        }
-    }
+    /// «¿Las reuniones que organiza ana@acme.com a 🚀 Acme de ahora en adelante?» · Sí, siempre · Solo esta vez: the same
+    /// `RuleOffer` as Correo (same words, timings and "Regla creada · Deshacer"; one offer in the app at a time).
+    let ruleOffer = RuleOffer()
+    /// Which chip the offer belongs under (it shows nowhere else).
+    private(set) var ruleOfferTarget: MeetingRuleOfferTarget?
 }
 
 /// Where a project chip is shown: the rule offer appears under the chip the user clicked, nowhere else.
@@ -309,12 +296,8 @@ enum MeetingChipPlacement: Hashable {
     case card, hero, detail, prep
 }
 
-/// §14.3 offer for one event.
-struct MeetingRuleOffer: Equatable {
-    let id = UUID()
+/// Where the §14.3 offer of Reuniones shows: under the chip of this event that the user used.
+struct MeetingRuleOfferTarget: Equatable {
     let eventId: String
     let placement: MeetingChipPlacement
-    let rule: RoutingRule
-    /// Set once "Sí, siempre" created it ("Regla creada · Deshacer").
-    var createdRuleId: String?
 }

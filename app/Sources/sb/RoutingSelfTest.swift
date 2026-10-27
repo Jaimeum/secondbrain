@@ -214,7 +214,7 @@ import Foundation
          "isFromOwner pasted email → recipient")
     // Meetings.
     t.eq(suggest(meeting)?.conditions, [RuleCondition(field: .organizerEmail, op: .is, value: "ana@acme.com")], "meeting → organizer")
-    t.eq(suggest(meeting)?.name, "Organiza ana@acme.com → 🚀 Acme", "organizer rule name")
+    t.eq(suggest(meeting)?.name, "Reuniones de ana@acme.com → 🚀 Acme", "organizer rule name")
     var ownMeeting = ev
     ownMeeting.organizer = a("jaime@dive.ai")
     t.eq(suggest(.meeting(ownMeeting, ownerEmails: ["jaime@dive.ai"]))?.conditions,

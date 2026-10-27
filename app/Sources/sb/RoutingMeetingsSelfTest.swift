@@ -73,7 +73,7 @@ import Foundation
                                      existing: [], language: "es", projectName: "🤝 Alianza")
     t.check(offer?.conditions == [RuleCondition(field: .organizerEmail, op: .is, value: "ana@acme.com")] && offer?.projectSlug == "nubia",
             "offer: organizer is ana@acme.com")
-    t.eq(offer?.name ?? "", "Organiza ana@acme.com → 🤝 Alianza", "offer name in Spanish")
+    t.eq(offer?.name ?? "", "Reuniones de ana@acme.com → 🤝 Alianza", "offer name in Spanish")
     let mine = event("e2", organizer: owner, attendees: [owner, "luis@banco.mx"])
     let byDomain = MeetingRuleOffers.forMeeting(mine, projectSlug: "nubia", previous: nil, ownerEmails: [owner], existing: [], language: "en",
                                         projectName: "🤝 Alianza")
@@ -92,11 +92,11 @@ import Foundation
     let equivalent = RoutingRule(.organizerEmail, .is, " ANA@acme.com ", projectSlug: "acme")
     t.check(MeetingRuleOffers.forMeeting(byAna, projectSlug: "nubia", previous: nil, ownerEmails: [owner], existing: [equivalent],
                                  language: "es") == nil, "offer: an equivalent rule exists → nothing")
-    t.check(store.hasEquivalentRule(offer!) == true, "store sees the stored rule as equivalent to the offer")
+    t.check(offer.map { store.hasEquivalentRule($0) } == true, "store sees the stored rule as equivalent to the offer")
 
     // --- Names.
-    t.eq(RoutingStore.conditionSummary(ruleAcme, language: "es"), "Organiza ana@acme.com", "summary: es")
-    t.eq(RoutingStore.conditionSummary(ruleAcme, language: "en"), "Organized by ana@acme.com", "summary: en")
+    t.eq(RoutingStore.conditionSummary(ruleAcme, language: "es"), "Reuniones de ana@acme.com", "summary: es")
+    t.eq(RoutingStore.conditionSummary(ruleAcme, language: "en"), "Meetings by ana@acme.com", "summary: en")
     let two = RoutingRule(conditions: [RuleCondition(field: .subject, op: .contains, value: "Nubia"),
                                        RuleCondition(field: .senderDomain, op: .is, value: "acme.com")], projectSlug: "nubia")
     t.eq(RoutingStore.conditionSummary(two, language: "es"), "El asunto contiene «Nubia» y de @acme.com", "summary: two conditions")
@@ -104,7 +104,7 @@ import Foundation
          "Bancos", "summary: the rule's own name")
     t.eq(RoutingStore.displayName(for: two, projects: projects, language: "es"), "El asunto contiene «Nubia» y de @acme.com → 🤝 Alianza",
          "displayName generated with the project")
-    t.eq(RoutingStore.displayName(for: unassignRule, projects: projects, language: "en"), "The title contains «newsletter» → Unassigned",
+    t.eq(RoutingStore.displayName(for: unassignRule, projects: projects, language: "en"), "The title contains “newsletter” → Unassigned",
          "displayName: no project")
     t.eq(RoutingStore.displayName(for: goneRule, projects: projects, language: "es"), "El título contiene «x» → gone",
          "displayName: deleted project shows its slug")
@@ -134,12 +134,12 @@ import Foundation
     let result = RuleTester.run(domainRule, mails: mails, events: events, ownerEmails: [owner])
     t.eq(result.checkedMails, 50, "Probar looks at the newest 50 mails")
     t.eq(result.mails.count, 25, "Probar: half of them are from acme.com")
-    t.check(result.mails.allSatisfy { Int($0.id.dropFirst())! < 50 }, "Probar: only the newest ones")
+    t.check(result.mails.allSatisfy { (Int($0.id.dropFirst()) ?? .max) < 50 }, "Probar: only the newest ones")
     t.eq(result.events.map(\.id), ["e1", "e5"], "Probar: meetings organized from acme.com")
     t.eq(result.checkedEvents, 3, "Probar: counts the events looked at")
 
     // --- Global auto-check switch (§14.5): default on, tolerant decode, persisted.
-    let legacy = #"{"rules":[],"mailSyncCursors":{}}"#.data(using: .utf8)!
+    let legacy = Data(#"{"rules":[],"mailSyncCursors":{}}"#.utf8)
     t.check((try? JSONDecoder.sb.decode(RoutingSettings.self, from: legacy))?.autoImportEnabled == true, "autoImportEnabled defaults to on")
     try? store.setAutoImportEnabled(false)
     let reread = RoutingStore(fileURL: root.appendingPathComponent("routing.json"))

@@ -1310,3 +1310,14 @@
 "meetings.past.empty.message" = "When you record a meeting, its summary shows up here.";
 "prep.eyebrow" = "Prep";
 "prep.briefing" = "What I prepared";
+
+/* v0.5 — mail */
+"mail.backToList" = "Emails";
+"mail.clearSearch" = "Clear search";
+"mail.unread" = "Unread";
+"mail.inBrain.help" = "Already in the brain. Click to view or remove it.";
+"mail.seeUnassigned" = "View in Unassigned";
+"mail.savedIn" = "Saved to %@";
+"mail.saveConversationNoProject" = "Save thread (%d) without a project";
+"mail.more" = "More actions";
+"email.editFrom" = "Correct sender";

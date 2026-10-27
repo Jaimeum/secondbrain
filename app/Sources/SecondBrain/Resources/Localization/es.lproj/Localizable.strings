@@ -1310,3 +1310,14 @@
 "meetings.past.empty.message" = "Cuando grabes una reunión, aquí encontrarás su resumen.";
 "prep.eyebrow" = "Preparación";
 "prep.briefing" = "Lo que preparé";
+
+/* v0.5 — mail */
+"mail.backToList" = "Correos";
+"mail.clearSearch" = "Borrar búsqueda";
+"mail.unread" = "Sin leer";
+"mail.inBrain.help" = "Ya está en el cerebro. Clic para verlo o quitarlo.";
+"mail.seeUnassigned" = "Ver en Sin asignar";
+"mail.savedIn" = "Guardado en %@";
+"mail.saveConversationNoProject" = "Guardar hilo (%d) sin proyecto";
+"mail.more" = "Más acciones";
+"email.editFrom" = "Corregir remitente";

@@ -1254,3 +1254,134 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
   Búsqueda con ⌘F (campo simple). Se mantiene la pestaña **Grafo** y "Ver en el grafo" en el wiki.
 - **Tema**: queda como lo implementó el skeleton (Ajustes + menú Ver). Verificar contraste del grafo en
   claro y oscuro y que las WebViews cambian al instante.
+
+## 13. v0.4 — Repositorios de GitHub por proyecto (varios repos, varias ramas, al día)
+
+Objetivo: que cada proyecto pueda llevar **N repositorios** y, en cada uno, **solo las ramas que el
+usuario elige** (ej. `main` + `development`), que el cerebro se mantenga al día solo (intervalo
+configurable) aunque los repos cambien mucho (force-push, rebases, ramas borradas), y que las preguntas
+puedan cruzar código ↔ correos ↔ reuniones ↔ personas. Solo lectura, siempre: la app nunca escribe en
+GitHub (solo `GET`).
+
+Archivos nuevos: `BrainCore/GitHub/GitHubModels.swift` (tipos públicos, ya escrito — no cambiar ni quitar
+públicos, sí añadir), `GitHubClient.swift`, `GitHubAuth.swift`, `GitHubStore.swift`, `GitHubSync.swift`,
+`GitHubDemo.swift`; app `Views/ReposView.swift`, `Views/AddRepoSheet.swift`, `Views/GitHubSettings.swift`,
+`Support/GitHubModel.swift`; CLI `sb/GitHubCommands.swift`, `sb/GitHubSelfTest.swift`.
+Compartidos: bloques mínimos marcados `// MARK: v0.4 github`. **No** se agrega un case a `AccountProvider`.
+
+### 13.1 Conexión (una sola configuración en GitHub)
+Orden de credenciales (`GitHubAuth.resolveToken()`):
+1. Token guardado en Keychain (service `app.secondbrain.mac`, account `github-token`, JSON `GitHubCredential`).
+2. Variable `SB_GITHUB_TOKEN` (CLI/tests).
+Formas de conectar (UI Ajustes → **GitHub**):
+- **Conectar GitHub** (principal): OAuth **Device Flow** de una *GitHub OAuth App* de SecondBrain
+  (la única configuración en GitHub: Settings → Developer settings → OAuth Apps → New, marcar
+  "Enable Device Flow"; callback cualquiera, ej. `http://127.0.0.1`). Client id inyectado en build:
+  `~/.config/secondbrain/github-client-id.txt` → `oauth-defaults.json` `githubClientId`
+  (`OAuthAppRegistration.githubClientId`, override `SB_GITHUB_CLIENT_ID` y Ajustes → GitHub → Avanzado).
+  Sin secreto. Scopes `repo read:org read:user user:email` (GitHub no tiene un scope "solo lectura de
+  privados"; la app solo hace GET y lo dice). Flujo: `POST https://github.com/login/device/code` →
+  la app muestra el código grande (`ABCD-1234`, botón Copiar) + "Abrir GitHub" (abre `verification_uri`)
+  → sondea `POST https://github.com/login/oauth/access_token` cada `interval` s (respeta `slow_down`,
+  `authorization_pending`, `expired_token`, `access_denied`) → guarda.
+- **Usar mi sesión de GitHub CLI** (si `gh` está instalado y logueado): `gh auth token` (busca `gh` en
+  `/opt/homebrew/bin`, `/usr/local/bin`, `zsh -lc 'command -v gh'`); se copia el token a Keychain.
+- **Pegar un token personal** (Avanzado): fine-grained PAT recomendado con permisos *solo lectura*
+  Contents, Metadata, Pull requests, Issues (texto de ayuda con el enlace
+  `https://github.com/settings/personal-access-tokens/new`).
+Tras guardar: `GET /user` → `GitHubAccount` (login, nombre, avatar) en `data/github/account.json`.
+Errores: 401 → `.unauthorized` ("Vuelve a conectar GitHub"); 403 con `X-RateLimit-Remaining: 0` →
+`.rateLimited(resetAt)`; 403/404 con mensaje de *OAuth App access restrictions* o SAML SSO →
+`.orgRestricted(org:)` → hoja "Tu organización tiene que aprobar SecondBrain en GitHub" con pasos
+(Org → Settings → Third-party access → OAuth app policy → aprobar; o SSO: github.com/settings/connections/applications/<client_id> → Grant/Authorize) y alternativa "usa un token personal".
+
+### 13.2 Qué se sigue (`data/github/repos.json`, `GitHubStore`)
+`TrackedRepo` = (proyecto, owner/name, ramas elegidas, rama principal, leer código sí/no). Un repo puede
+estar en dos proyectos (dos `TrackedRepo` distintos). Ramas no elegidas se ignoran por completo.
+Rama elegida que desaparece en GitHub → estado `.gone` (se conserva la info aprendida, la UI ofrece
+"Dejar de seguir"). Rama renombrada = se ve como borrada; la UI sugiere elegir la nueva.
+
+### 13.3 Sincronización (`GitHubSync`)
+Por cada `TrackedRepo` y cada rama seguida:
+1. `GET /repos/{o}/{r}/branches/{b}` (ETag/`If-None-Match`; 304 = nada que hacer, no gasta cuota).
+2. Si `head` == `lastSyncedSHA` y no hay cambios de PR/issues → nada (sin raw, sin Claude).
+3. Si cambió: `GET /repos/{o}/{r}/compare/{lastSyncedSHA}...{head}`:
+   - `status` `ahead` → commits nuevos (≤ 100 listados; resto contado) + archivos cambiados (≤ 200).
+   - `diverged`/`behind` o 404 del SHA viejo → **historial reescrito** (force-push/rebase): se registra
+     "commits que ya no están en la rama" (los que estaban en `knownCommits` y no en los últimos 100 de la
+     rama) y los nuevos.
+   - primer sync (sin `lastSyncedSHA`): resumen inicial: README (≤ 8 000 chars), árbol de primer nivel +
+     `docs/` (≤ 300 rutas), últimos 30 commits, lenguajes, descripción, topics.
+4. PRs: `GET /repos/{o}/{r}/pulls?state=all&sort=updated&direction=desc` hasta `updated_at` <
+   `lastActivitySync`; solo PRs cuya `base` o `head` es una rama seguida. Issues abiertos/cerrados
+   actualizados (excluye PRs), ≤ 50 por sync. Releases/tags nuevas. Cuerpos truncados a 2 000 chars.
+5. Comparación entre ramas: si el repo sigue ≥ 2 ramas, `compare/{principal}...{otra}`: "development
+   va N commits adelante / M atrás de main" + títulos de los commits adelante (≤ 30).
+6. Escribe UN raw por repo y sync: `projects/<p>/raw/github/<owner>-<repo>/YYYY-MM-DD-HHmm-sync.md`
+   (frontmatter `type: github-sync`, `project`, `repo: owner/name`, `branches: [..]`, `heads: {rama: sha}`,
+   `date`, `rewritten: [ramas]`, `gone: [ramas]`, `source_url`) → `SourceRecord(kind: .github,
+   externalId: "github:<owner>/<repo>@<sha-cortos>")` → Job ingest normal (cola serial existente, historial,
+   deshacer). Commit author: `login` + nombre + email (para ligar personas).
+7. **Código** (si `readCode` y tamaño del repo ≤ `GitHubLimits.maxRepoKB` = 512 000): cuando cambia el
+   head, `GET /repos/{o}/{r}/tarball/{sha}` → se extrae con `/usr/bin/tar` en un temporal y se reemplaza
+   atómicamente `data/github/checkouts/<owner>__<repo>/<rama-slug>/` (sin `.git`; borra `node_modules`,
+   binarios > 2 MB). Fuera del vault (no entra en grafo ni historial). Se escribe
+   `data/github/checkouts/<owner>__<repo>/<rama-slug>/.sb-head` con el sha.
+8. Actualiza `TrackedBranch.lastSyncedSHA/At/state/etag/knownCommits(≤ 300)` y guarda. Errores por repo
+   no detienen los demás; quedan en `TrackedRepo.lastError`.
+Concurrencia: 1 sync a la vez (`GitHubSync` es un actor); máx 4 repos en paralelo dentro de un sync.
+Cuota: si `X-RateLimit-Remaining` < 100 se pausa hasta `reset`.
+
+### 13.4 Mantenerse al día
+- `AppConfig.githubSyncMinutes: Int` (default 60; 0 = solo manual; opciones UI 15 / 60 / 360 / 1440 /
+  Manual). `AppState` corre un timer mientras la app vive (también en el menú de barra): al arrancar si
+  está vencido, y luego cada intervalo. "Sincronizar ahora" por repo y global. `sb github sync` para cron.
+- La ingesta **reemplaza** lo viejo, no apila: el comando `ingest` para `type: github-sync` mantiene
+  páginas vivas `wiki/repos/<owner>-<repo>.md` (qué es, stack, estructura, ramas seguidas con su estado y
+  diferencias, PRs abiertos, últimas versiones, quién trabaja en qué) y `wiki/repos/<owner>-<repo>/<rama>.md`
+  (cambios recientes por fecha, últimos ~60 días resumidos; más viejo condensado). Historial reescrito:
+  marcar con `> [!conflict]` las afirmaciones basadas en commits que ya no existen y moverlas a
+  "Reescrito el <fecha>". Rama `gone`: marcar "Ya no existe en GitHub (desde <fecha>)". PRs → si
+  mencionan decisiones/alcance, enlazar a `wiki/decisions/` y `tasks.md`; personas: `people/<nombre>.md`
+  con `github: <login>` en frontmatter (mapear por email/nombre a personas existentes antes de crear).
+- Graph: carpeta `repos/` → `GraphNodeKind.repo` (nuevo case; color/icono `chevron.left.forwardslash.chevron.right`).
+
+### 13.5 Preguntas que cruzan todo
+- `ClaudeRunner.runPrompt(_:mode:model:extraDirs:)` (nuevo parámetro con default `[]`) añade
+  `--add-dir <dir>` por cada directorio (solo `ask`/query, modo readOnly; ingest NO lee checkouts).
+- `BrainEngine.ask` (scope proyecto → checkouts de sus repos; global → todos) pasa esos dirs y antepone a
+  los argumentos un bloque `repos:` (una línea por rama: `owner/name@rama (sha corto, sincronizado <fecha>)
+  → <ruta absoluta>`). `query.md`: "si la pregunta es de código/arquitectura/qué cambió, lee
+  `wiki/repos/*` primero y luego busca en el checkout (Grep/Glob/Read); cita archivo:línea y rama; si las
+  ramas difieren, dilo. Cruza con correos/reuniones/personas (ej. ¿lo que pidió X en el correo ya está en
+  development?)".
+- `MeetingPrep`: el prompt de preparación incluye "cambios recientes del código del proyecto (repos)
+  relevantes para los asistentes" cuando el proyecto tiene repos.
+
+### 13.6 UI
+- Pestaña de proyecto **Código** (`ProjectTab.code`, icono `chevron.left.forwardslash.chevron.right`,
+  después de Fuentes). Sin GitHub conectado: estado vacío "Conecta GitHub para que aprenda de tus
+  repositorios" + botón. Con conexión y sin repos: "Agrega los repositorios de este proyecto" + **Agregar
+  repositorio**. Lista: tarjeta por repo (owner/name, descripción, "Actualizado hace 5 min", botón ↻,
+  menú ⋯: Elegir ramas · Abrir en GitHub · Leer código sí/no · Dejar de seguir) con chips por rama:
+  `main ✓ a1b2c3d · hace 2 h`, estados ⚠ reescrita (tooltip), ✕ ya no existe, ⟳ sincronizando, y línea
+  "development: 12 adelante · 3 atrás de main". Pie: "Se actualiza cada hora · Cambiar" (abre Ajustes).
+- **AddRepoSheet**: buscador sobre `GET /user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member`
+  (paginado, cache 5 min) + "o pega la URL" (acepta `owner/name`, https y ssh) → paso 2: ramas
+  (`GET /branches`, paginado) con la principal marcada y sugeridas `develop|development|dev|testing|test|staging|qa`
+  preseleccionadas si existen; buscador si > 20; toggle "Leer el código (para preguntas técnicas)";
+  botón "Seguir N ramas" → guarda y lanza el primer sync.
+- Ajustes → **GitHub**: cuenta (avatar/login, Desconectar) o botones de conexión (§13.1), "Actualizar
+  repositorios: Cada 15 min · Cada hora · Cada 6 h · Cada día · Solo a mano", última sincronización global,
+  Avanzado (client id, pegar token). Hoja de confianza: 👁 Solo leo tus repositorios · 💻 El código se
+  queda en esta Mac · 🔌 Desconecta cuando quieras.
+- Demo: `SB_DEMO_GITHUB=1` → `GitHubDemo` (cuenta + 2 repos inventados con main/development, uno
+  reescrito, PRs) para snapshots: `repos`, `add-repo`, `settings-github`.
+- Strings: prefijo `github.` / `repos.` en bloque `/* v0.4 — GitHub */` al final de es/en.
+
+### 13.7 CLI
+`sb github status` · `sb github login --token <t> | --gh` · `sb github logout` · `sb github add <owner/name>
+--project <slug> --branches main,development [--no-code]` · `sb github remove <id>` · `sb github sync
+[--project slug] [--repo id]` (luego `sb run` procesa ingestas) · `sb github selftest` (fixtures con
+`HTTPTransport` inyectado, sin red: delta normal, primer sync, force-push, rama borrada, 304, rate limit,
+org restringida, paginación, tarball extract).

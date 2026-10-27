@@ -112,6 +112,8 @@ public final class ClaudeRunner: Sendable {
         }
         // Running from inside another Claude Code session must not look like a nested one.
         env.removeValue(forKey: "CLAUDECODE")
+        // MARK: v0.4 github — never load CLAUDE.md files from `--add-dir` folders (repo checkouts are data).
+        env.removeValue(forKey: "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD")
         return env
     }
 }

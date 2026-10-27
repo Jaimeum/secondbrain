@@ -25,13 +25,19 @@ struct GitHubSection: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L("github.none")).foregroundStyle(.secondary)
                     HStack(spacing: 10) {
+                        // Without SecondBrain's OAuth App (no client id yet) the GitHub CLI session is the way in.
+                        if ghAvailable && !hasClientId {
+                            Button(L("github.useCLI")) { connect = GitHubConnectRequest(method: .ghCLI) }
+                                .buttonStyle(.borderedProminent)
+                        }
                         Button {
                             connect = GitHubConnectRequest(method: .deviceFlow)
                         } label: {
                             Label(L("github.connect"), systemImage: "chevron.left.forwardslash.chevron.right")
                         }
                         .buttonStyle(.borderedProminent)
-                        if ghAvailable {
+                        .tint(ghAvailable && !hasClientId ? .secondary : nil)
+                        if ghAvailable && hasClientId {
                             Button(L("github.useCLI")) { connect = GitHubConnectRequest(method: .ghCLI) }
                         }
                     }
@@ -62,6 +68,8 @@ struct GitHubSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if !github.orphanedRepos.isEmpty { orphans }
+
             GitHubAdvancedFields()
         } header: {
             Text(L("github.section"))
@@ -78,6 +86,25 @@ struct GitHubSection: View {
             if github.isDemo { ghAvailable = true; return }
             ghAvailable = await Task.detached(priority: .utility) { GitHubAuth.locateGH() != nil }.value
         }
+    }
+
+    private var hasClientId: Bool { GitHubAuth.clientId(config: state.config) != nil }
+
+    /// Repos whose project was deleted (e.g. in Finder): not synced any more; here they can be unfollowed.
+    private var orphans: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("github.orphans.title")).font(.callout.weight(.semibold))
+            Text(L("github.orphans.hint")).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(github.orphanedRepos) { repo in
+                HStack {
+                    Text("\(repo.fullName) · \(repo.projectSlug)").foregroundStyle(.secondary)
+                    Spacer()
+                    Button(L("github.orphans.remove"), role: .destructive) { try? github.remove(repoId: repo.id) }
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private var intervalBinding: Binding<Int> {
@@ -274,6 +301,7 @@ struct GitHubConnectSheet: View {
     @ViewState private var connector: GitHubConnector
     @ViewState private var copied = false
     @ViewState private var showOrgHelp = false
+    @ViewState private var ghAvailable = false
 
     init(method: GitHubAuthMethod = .deviceFlow, preview: GitHubConnectPhase? = nil) {
         self.method = method
@@ -294,6 +322,10 @@ struct GitHubConnectSheet: View {
         .onChange(of: connector.connected) { if connector.connected != nil { dismiss() } }
         .onDisappear { connector.cancel() }
         .sheet(isPresented: $showOrgHelp) { GitHubOrgHelpSheet() }
+        .task {
+            if state.engine.github.isDemo { ghAvailable = true; return }
+            ghAvailable = await Task.detached(priority: .utility) { GitHubAuth.locateGH() != nil }.value
+        }
     }
 
     // MARK: Trust (§13.6: 👁 · 💻 · 🔌)
@@ -411,6 +443,19 @@ struct GitHubConnectSheet: View {
             }
             HStack {
                 Button(L("common.close")) { dismiss() }.keyboardShortcut(.cancelAction)
+                if notConfigured {
+                    // No OAuth App yet: the other ways in (the GitHub CLI's session, a token in Avanzado).
+                    SettingsLink { Text(L("github.failed.openSettings")) }
+                    if ghAvailable {
+                        Button {
+                            connector.start(.ghCLI, state: state)
+                        } label: {
+                            Label(L("github.useCLI"), systemImage: "terminal")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                    }
+                }
                 if org {
                     Button(L("github.org.howTo")) { showOrgHelp = true }.buttonStyle(.borderedProminent)
                 } else if !notConfigured {

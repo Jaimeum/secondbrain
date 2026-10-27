@@ -1380,7 +1380,7 @@ Cuota: si `X-RateLimit-Remaining` < 100 se pausa hasta `reset`.
 - Strings: prefijo `github.` / `repos.` en bloque `/* v0.4 — GitHub */` al final de es/en.
 
 ### 13.7 CLI
-`sb github status` · `sb github login --token <t> | --gh` · `sb github logout` · `sb github add <owner/name>
+`sb github status` · `sb github login --token - | --gh` (`-` = token from stdin) · `sb github logout` · `sb github add <owner/name>
 --project <slug> --branches main,development [--no-code]` · `sb github remove <id>` · `sb github sync
 [--project slug] [--repo id]` (luego `sb run` procesa ingestas) · `sb github selftest` (fixtures con
 `HTTPTransport` inyectado, sin red: delta normal, primer sync, force-push, rama borrada, 304, rate limit,

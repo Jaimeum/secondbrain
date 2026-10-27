@@ -39,7 +39,8 @@ final class GitHubModel {
     /// of starting another (GitHubSync runs one at a time anyway).
     @discardableResult
     func sync(state: AppState, project: String? = nil, repoId: String? = nil, scheduled: Bool = false) async -> GitHubSyncReport? {
-        if let running { _ = await running.value }
+        // Every waiter re-checks after waking: the first one takes the slot (synchronously, below), the rest wait again.
+        while let running { _ = await running.value }
         let engine = state.engine
         guard engine.github.isConnected else { return nil }
         isSyncing = true

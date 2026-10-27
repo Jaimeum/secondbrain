@@ -1052,3 +1052,12 @@
 "repos.readCode.toggle" = "Leer el código (para preguntas técnicas)";
 "repos.readCode.hint" = "Guardo una copia del código de esas ramas en esta Mac, sin historial, para responder dónde está o cómo funciona algo.";
 "repos.readCode.tooBig" = "Este repositorio es muy grande para copiar su código. Igual aprendo de sus cambios, pull requests e issues.";
+
+/* v0.4 — GitHub (revisión) */
+"graph.kind.repo" = "Repositorio";
+"graph.kinds.repo" = "Repositorios";
+"wikiGroup.repos" = "Repositorios";
+"github.failed.openSettings" = "Abrir Ajustes → GitHub";
+"github.orphans.title" = "Repositorios de proyectos que ya no existen";
+"github.orphans.hint" = "Su proyecto se borró, así que ya no los actualizo. Puedes dejar de seguirlos.";
+"github.orphans.remove" = "Dejar de seguir";

@@ -18,6 +18,8 @@ struct AddRepoSheet: View {
     @ViewState private var resolving = false
     @ViewState private var branches: [GitHubBranchInfo] = []
     @ViewState private var loadingBranches = false
+    /// Only a successful fetch can say a followed branch is gone (a failed one says nothing).
+    @ViewState private var branchesLoaded = false
     @ViewState private var selected: Set<String> = []
     @ViewState private var branchQuery = ""
     @ViewState private var readCode = true
@@ -192,7 +194,7 @@ struct AddRepoSheet: View {
                     ForEach(visibleBranches(info), id: \.self) { name in
                         BranchPickRow(name: name, isDefault: name == info.defaultBranch, isSuggested: isSuggested(name),
                                       isProtected: branches.first { $0.name == name }?.isProtected ?? false,
-                                      isGone: !loadingBranches && !branches.contains { $0.name == name },
+                                      isGone: branchesLoaded && !branches.contains { $0.name == name },
                                       isOn: Binding(get: { selected.contains(name) },
                                                     set: { if $0 { selected.insert(name) } else { selected.remove(name) } }))
                     }
@@ -248,10 +250,12 @@ struct AddRepoSheet: View {
 
     private func loadBranches(_ info: GitHubRepoInfo) async {
         loadingBranches = true
+        branchesLoaded = false
         defer { loadingBranches = false }
         do {
             let list = try await github.branches(owner: info.owner, name: info.name)
             branches = list
+            branchesLoaded = true
             guard selected.isEmpty else { return }
             if let followed {
                 selected = Set(followed.branches.map(\.name))

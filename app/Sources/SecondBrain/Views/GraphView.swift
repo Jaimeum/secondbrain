@@ -65,7 +65,8 @@ struct GraphView: View {
 
     /// Everything but nodes/edges: labels, palette, flags.
     private func payloadBase() -> [String: Any] {
-        let kinds: [GraphNodeKind] = [.project, .meeting, .email, .document, .note, .url, .person, .topic, .decision, .question, .task, .page]
+        let kinds: [GraphNodeKind] = [.project, .meeting, .email, .document, .note, .url, .person, .topic, .decision, .question, .task, .page,
+                                     .repo]   // MARK: v0.4 github
         var singular: [String: String] = [:]
         var plural: [String: String] = [:]
         for k in kinds {

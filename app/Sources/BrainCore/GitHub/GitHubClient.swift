@@ -48,7 +48,7 @@ public struct GitHubClient: Sendable {
             throw GitHubError.network(error.localizedDescription)
         }
         let response = GitHubResponse(data: data, http: http)
-        await gate.record(remaining: response.rateRemaining, reset: response.rateReset)
+        await gate.record(remaining: response.rateRemaining, reset: response.rateReset, serverDate: response.serverDate)
         if response.status == 304 || (200..<300).contains(response.status) { return response }
         throw Self.mapError(status: response.status, headers: response.headers, body: data, path: url.path)
     }
@@ -77,6 +77,9 @@ public struct GitHubClient: Sendable {
         }
         return out
     }
+
+    /// GitHub's clock (`Date` header) at the latest response this client received; nil before any.
+    public func lastServerDate() async -> Date? { await gate.serverDate }
 
     func decode<T: Decodable>(_ type: T.Type, _ data: Data) throws -> T {
         do { return try GitHubJSON.decoder.decode(T.self, from: data) } catch {
@@ -150,12 +153,22 @@ public struct GitHubClient: Sendable {
                            maxItems: maxItems, maxPages: 4) { pr in since.map { pr.updatedAt < $0 } ?? false }
     }
 
-    /// Issues (pull requests excluded) updated since `since`, newest first.
-    public func issues(_ owner: String, _ name: String, since: Date?, maxItems: Int = GitHubLimits.maxIssuesPerSync) async throws -> [GHIssue] {
-        var query = [("state", "all"), ("sort", "updated"), ("direction", "desc"), ("per_page", "50")]
+    /// Issues (pull requests excluded) updated since `since`, newest first. Pages until `maxItems` real issues are
+    /// collected or the list ends (GitHub mixes PRs into /issues).
+    public func issues(_ owner: String, _ name: String, since: Date?, maxItems: Int = GitHubLimits.maxIssuesPerSync,
+                       maxPages: Int = 5) async throws -> [GHIssue] {
+        var query = [("state", "all"), ("sort", "updated"), ("direction", "desc"), ("per_page", "100")]
         if let since { query.append(("since", GitHubJSON.iso(since))) }
-        let all = try await paginate(GHIssue.self, Self.repoPath(owner, name) + "/issues", query: query, maxItems: maxItems * 2, maxPages: 3)
-        return Array(all.filter { $0.pullRequest == nil }.prefix(maxItems))
+        var out: [GHIssue] = []
+        var next: URL? = url(Self.repoPath(owner, name) + "/issues", query: query)
+        var pages = 0
+        while let page = next, pages < maxPages, out.count < maxItems {
+            let response = try await get(url: page)
+            pages += 1
+            out += try decode([GHIssue].self, response.data).filter { $0.pullRequest == nil }
+            next = response.nextPage
+        }
+        return Array(out.prefix(maxItems))
     }
 
     public func releases(_ owner: String, _ name: String, perPage: Int = 10) async throws -> [GHRelease] {
@@ -280,6 +293,16 @@ public struct GitHubResponse: Sendable {
     public var rateRemaining: Int? { headers["x-ratelimit-remaining"].flatMap { Int($0) } }
     public var rateReset: Date? { headers["x-ratelimit-reset"].flatMap(TimeInterval.init).map { Date(timeIntervalSince1970: $0) } }
     public var nextPage: URL? { headers["link"].flatMap(Self.nextLink) }
+    /// `Date: Tue, 27 Oct 2026 14:02:03 GMT` (GitHub's clock).
+    public var serverDate: Date? { headers["date"].flatMap { Self.httpDate.date(from: $0) } }
+
+    static let httpDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f
+    }()
 
     /// `<https://api.github.com/…&page=2>; rel="next", <…>; rel="last"` → the `next` URL.
     public static func nextLink(_ header: String) -> URL? {
@@ -298,11 +321,13 @@ actor GitHubRateGate {
     let maxWait: TimeInterval
     private var remaining: Int?
     private var reset: Date?
+    private(set) var serverDate: Date?
     init(maxWait: TimeInterval) { self.maxWait = maxWait }
 
-    func record(remaining: Int?, reset: Date?) {
+    func record(remaining: Int?, reset: Date?, serverDate: Date? = nil) {
         if let remaining { self.remaining = remaining }
         if let reset { self.reset = reset }
+        if let serverDate { self.serverDate = max(serverDate, self.serverDate ?? serverDate) }
     }
 
     func waitIfNeeded() async throws {

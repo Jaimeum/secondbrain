@@ -181,7 +181,7 @@ struct WikiBrowser: View {
 enum WikiGrouping {
     struct Group { let key: String; let title: String; let pages: [WikiPage] }
 
-    private static let order = ["general", "meetings", "emails", "sources", "topics", "decisions", "people", "questions"]
+    private static let order = ["general", "meetings", "emails", "sources", "topics", "decisions", "repos", "people", "questions"]   // MARK: v0.4 github: repos
     private static let generalOrder = ["overview", "index", "tasks", "timeline", "health", "log"]
 
     static func groupKey(_ path: String) -> String {
@@ -227,6 +227,7 @@ enum WikiGrouping {
         case "decisions": L("wikiGroup.decisions")
         case "people": L("wikiGroup.people")
         case "questions": L("wikiGroup.questions")
+        case "repos": L("wikiGroup.repos")   // MARK: v0.4 github
         default: key.capitalized
         }
     }
@@ -240,6 +241,7 @@ enum WikiGrouping {
         case "decisions": return "checkmark.seal"
         case "people": return "person"
         case "questions": return "questionmark.bubble"
+        case "repos": return "chevron.left.forwardslash.chevron.right"   // MARK: v0.4 github
         default:
             switch baseName(path) {
             case "overview": return "sparkles"

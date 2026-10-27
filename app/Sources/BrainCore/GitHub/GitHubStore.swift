@@ -16,21 +16,29 @@ import Observation
     public private(set) var lastSync: GitHubSyncReport?
     /// When the last sync of every repo finished (what `isDue` counts from).
     public private(set) var lastGlobalSyncAt: Date?
+    /// A token is saved (or in `SB_GITHUB_TOKEN`). Cached so views never read the Keychain while rendering; refreshed on
+    /// reload, connect, disconnect and when `credentials` / `environment` change.
+    public private(set) var hasCredential = false
+    /// Repos whose project folder no longer exists: not synced, not due, no checkouts for questions (Ajustes → GitHub
+    /// lists them to stop following). Set by `BrainEngine` from the vault's projects.
+    public private(set) var orphanedRepoIds: Set<String> = []
     public let isDemo: Bool
 
     @ObservationIgnored public private(set) var paths: DataPaths
     @ObservationIgnored private let configProvider: () -> AppConfig
     /// Where the token lives (Keychain in the app; memory in tests).
-    @ObservationIgnored public var credentials: GitHubCredentialStorage
+    @ObservationIgnored public var credentials: GitHubCredentialStorage { didSet { refreshCredential() } }
     /// The network (tests inject fixtures).
     @ObservationIgnored public var transport: HTTPTransport
     /// Tarball downloads straight to disk (nil = through `transport`, as tests do).
     @ObservationIgnored public var downloader: GitHubDownloader?
-    @ObservationIgnored public var environment: [String: String]
+    @ObservationIgnored public var environment: [String: String] { didSet { refreshCredential() } }
     /// Longest pause for GitHub's rate limit before a sync stops with `.rateLimited`.
     @ObservationIgnored public var maxRateWait: TimeInterval = 90
     @ObservationIgnored private var myReposCache: (at: Date, repos: [GitHubRepoInfo])?
     @ObservationIgnored private var syncer: (token: String, sync: GitHubSync)?
+    /// The last sync started in this process (`BrainEngine.syncGitHub` chains the next one after it).
+    @ObservationIgnored var syncTail: Task<Void, Never>?
 
     public nonisolated static var demoRequested: Bool { ProcessInfo.processInfo.environment["SB_DEMO_GITHUB"] == "1" }
     public static let myReposCacheSeconds: TimeInterval = 300
@@ -54,14 +62,29 @@ import Observation
     public func repos(project: String) -> [TrackedRepo] { repos.filter { $0.projectSlug == project } }
     public func repo(id: String) -> TrackedRepo? { repos.first { $0.id == id } }
     /// A token is available (Keychain or `SB_GITHUB_TOKEN`).
-    public var isConnected: Bool { isDemo ? account != nil : credential() != nil }
+    public var isConnected: Bool { isDemo ? account != nil : hasCredential }
+
+    /// The repos that are synced (their project still exists).
+    public var activeRepos: [TrackedRepo] { repos.filter { !orphanedRepoIds.contains($0.id) } }
+    public var orphanedRepos: [TrackedRepo] { repos.filter { orphanedRepoIds.contains($0.id) } }
+
+    /// Marks the repos whose project is not in `known` (an empty `known` — e.g. the vault isn't reachable — marks none).
+    public func markOrphans(knownProjects known: Set<String>) {
+        let ids = known.isEmpty ? [] : Set(repos.filter { !known.contains($0.projectSlug) }.map(\.id))
+        if ids != orphanedRepoIds { orphanedRepoIds = ids }
+    }
+
+    func refreshCredential() {
+        let has = credential() != nil
+        if has != hasCredential { hasCredential = has }
+    }
 
     /// Now ≥ last global sync + `config.githubSyncMinutes` (false when that is 0 = manual, or nothing is followed).
     public var isDue: Bool { isDue(now: Date()) }
 
     public func isDue(now: Date) -> Bool {
         let minutes = configProvider().githubSyncMinutes
-        guard minutes > 0, !repos.isEmpty, isConnected else { return false }
+        guard minutes > 0, !activeRepos.isEmpty, isConnected else { return false }
         guard let last = lastGlobalSyncAt else { return true }
         return now >= last.addingTimeInterval(TimeInterval(minutes) * 60)
     }
@@ -73,6 +96,7 @@ import Observation
             if repos.isEmpty { repos = GitHubDemo.repos() }
             return
         }
+        refreshCredential()
         account = Self.read(GitHubAccount.self, paths.githubAccount)
         repos = Self.read([TrackedRepo].self, paths.githubRepos) ?? []
         if let state = Self.read(LastSyncFile.self, paths.githubLastSync) {
@@ -145,6 +169,7 @@ import Observation
         self.account = account
         syncer = nil
         myReposCache = nil
+        refreshCredential()
         Log.info("github: connected as \(user.login) (\(cred.method.rawValue))")
         return account
     }
@@ -164,6 +189,7 @@ import Observation
         myReposCache = nil
         guard !isDemo else { return }
         credentials.delete()
+        refreshCredential()
         try? FileManager.default.removeItem(at: paths.githubAccount)
         Log.info("github: disconnected")
     }
@@ -246,22 +272,39 @@ import Observation
         repos = Self.read([TrackedRepo].self, paths.githubRepos) ?? repos
     }
 
-    /// Deletes checkout folders no followed branch (with code reading on) needs any more.
+    /// Deletes checkout folders no followed branch (with code reading on, repo not too big) needs any more, across
+    /// every project. The folders are renamed away right here (instant) and deleted off the main thread.
     func pruneCheckouts() {
         guard !isDemo else { return }
         let fm = FileManager.default
         let root = paths.githubCheckouts
         var wanted: [String: Set<String>] = [:]
-        for r in repos where r.readCode {
+        for r in repos where r.readCode && (r.sizeKB ?? 0) <= GitHubLimits.maxRepoKB {
             let dir = GitHubSync.repoCheckoutDir(root: root, owner: r.owner, name: r.name).lastPathComponent
             wanted[dir, default: []].formUnion(r.branches.map { GitHubSync.branchSlug($0.name) })
         }
+        var doomed: [URL] = []
         for repoDir in (try? fm.contentsOfDirectory(atPath: root.path)) ?? [] where !repoDir.hasPrefix(".") {
             let url = root.appendingPathComponent(repoDir)
-            guard let keep = wanted[repoDir] else { try? fm.removeItem(at: url); continue }
+            guard let keep = wanted[repoDir] else { doomed.append(url); continue }
             for branchDir in (try? fm.contentsOfDirectory(atPath: url.path)) ?? [] where !keep.contains(branchDir) {
-                try? fm.removeItem(at: url.appendingPathComponent(branchDir))
+                doomed.append(url.appendingPathComponent(branchDir))
             }
+        }
+        Self.trash(doomed, root: root)
+    }
+
+    /// Renames each folder to `<root>/.trash-<uuid>` and deletes it in the background (a big checkout can take seconds).
+    nonisolated static func trash(_ urls: [URL], root: URL) {
+        guard !urls.isEmpty else { return }
+        let fm = FileManager.default
+        var moved: [URL] = []
+        for url in urls {
+            let target = root.appendingPathComponent(".trash-\(UUID().uuidString.lowercased())")
+            if (try? fm.moveItem(at: url, to: target)) != nil { moved.append(target) } else { moved.append(url) }
+        }
+        Task.detached(priority: .utility) {
+            for url in moved { try? FileManager.default.removeItem(at: url) }
         }
     }
 
@@ -269,7 +312,7 @@ import Observation
     public func checkouts(project: String?) -> [RepoCheckout] {
         var out: [RepoCheckout] = []
         var seen = Set<String>()
-        for r in repos where r.readCode && (project == nil || r.projectSlug == project) {
+        for r in repos where r.readCode && (project == nil || r.projectSlug == project) && !orphanedRepoIds.contains(r.id) {
             for b in r.branches {
                 let dir = GitHubSync.checkoutDir(root: paths.githubCheckouts, owner: r.owner, name: r.name, branch: b.name)
                 guard !seen.contains(dir.path) else { continue }

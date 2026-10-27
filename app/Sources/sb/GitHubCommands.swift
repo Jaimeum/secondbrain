@@ -20,7 +20,7 @@ struct GitHubCmd: AsyncParsableCommand {
             } else if gh.isConnected {
                 print("GitHub: token from SB_GITHUB_TOKEN (no saved account)")
             } else {
-                print("GitHub: not connected (sb github login --gh | --token T | --device)")
+                print("GitHub: not connected (sb github login --gh | --token - (stdin) | --device)")
             }
             let minutes = engine.config.githubSyncMinutes
             print("Auto sync: " + (minutes == 0 ? "manual only" : "every \(minutes) min")
@@ -44,7 +44,7 @@ struct GitHubCmd: AsyncParsableCommand {
 
     struct Login: AsyncParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Connect GitHub: --gh (GitHub CLI session), --token, or --device (OAuth device flow).")
-        @Option(help: "A personal access token (fine-grained, read-only recommended)") var token: String?
+        @Option(help: "A personal access token (fine-grained, read-only recommended). Use `--token -` to read it from stdin (keeps it out of shell history and `ps`).") var token: String?
         @Flag(help: "Copy the token of your `gh` session") var gh = false
         @Flag(help: "OAuth device flow with SecondBrain's GitHub app") var device = false
 
@@ -53,7 +53,9 @@ struct GitHubCmd: AsyncParsableCommand {
             let store = engine.github
             let account: GitHubAccount
             if let token {
-                account = try await store.connect(token: token, method: .personalToken)
+                let value = token == "-" ? (readLine(strippingNewline: true) ?? "") : token
+                if token != "-" { eprint("warning: a token on the command line ends up in shell history; prefer `--token -` (stdin)") }
+                account = try await store.connect(token: value, method: .personalToken)
             } else if gh {
                 account = try await store.connectWithGHCLI()
             } else if device {
@@ -65,7 +67,7 @@ struct GitHubCmd: AsyncParsableCommand {
                 print("Waiting for approval…")
                 account = try await store.finishDeviceFlow(code)
             } else {
-                throw CLIError("Choose one: --gh, --token <t> or --device")
+                throw CLIError("Choose one: --gh, --token - (reads the token from stdin) or --device")
             }
             print("Connected as @\(account.login)" + (account.name.map { " (\($0))" } ?? ""))
         }

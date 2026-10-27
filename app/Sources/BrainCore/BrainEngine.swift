@@ -148,6 +148,7 @@ private final class ConfigBox: @unchecked Sendable {
         if autoProcess { startWatching() }
         // MARK: v0.4 github — demo repos go under a project this vault has
         if github.isDemo, projects.get(GitHubDemo.projectSlug) == nil { github.adoptDemoProject(projects.list().first?.slug) }
+        if !github.isDemo { github.markOrphans(knownProjects: Set(projects.list().map(\.slug))) }   // MARK: v0.4 github
         pruneHistory()
         kick()
         releaseQueueIfIdle()

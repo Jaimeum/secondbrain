@@ -14,6 +14,7 @@ struct ReposView: View {
     @ViewState private var pendingRemove: TrackedRepo?
     @ViewState private var showOrgHelp = false
     @ViewState private var error: String?
+    @ViewState private var ghAvailable = false
 
     private var github: GitHubStore { state.engine.github }
     private var model: GitHubModel { GitHubModel.shared }
@@ -31,7 +32,7 @@ struct ReposView: View {
                     }
                 } else {
                     EmptyStateView(symbol: "chevron.left.forwardslash.chevron.right", title: L("repos.connect.title"),
-                                   message: L("repos.connect.message"), actionTitle: L("github.connect")) {
+                                   message: L("repos.connect.message"), actionTitle: connectTitle) {
                         showConnect = true
                     }
                 }
@@ -42,7 +43,11 @@ struct ReposView: View {
         .sheet(item: $sheet) { request in
             AddRepoSheet(projectSlug: projectSlug, editing: request.repo)
         }
-        .sheet(isPresented: $showConnect) { GitHubConnectSheet() }
+        .sheet(isPresented: $showConnect) { GitHubConnectSheet(method: connectMethod) }
+        .task {
+            if github.isDemo { return }
+            ghAvailable = await Task.detached(priority: .utility) { GitHubAuth.locateGH() != nil }.value
+        }
         .sheet(isPresented: $showOrgHelp) { GitHubOrgHelpSheet() }
         .confirmationDialog(L("repos.remove.confirm", pendingRemove?.fullName ?? ""),
                             isPresented: Binding(get: { pendingRemove != nil }, set: { if !$0 { pendingRemove = nil } })) {
@@ -110,6 +115,13 @@ struct ReposView: View {
         .padding(12)
     }
 
+    /// Without SecondBrain's OAuth App (no client id yet), the GitHub CLI's session is the way to connect.
+    private var connectMethod: GitHubAuthMethod {
+        GitHubAuth.clientId(config: state.config) == nil && ghAvailable ? .ghCLI : .deviceFlow
+    }
+
+    private var connectTitle: String { connectMethod == .ghCLI ? L("github.useCLI") : L("github.connect") }
+
     private var isProjectSyncing: Bool { repos.contains { github.syncing.contains($0.id) } }
 
     private var disconnectedBanner: some View {
@@ -117,7 +129,7 @@ struct ReposView: View {
             Image(systemName: "powerplug").foregroundStyle(.orange)
             Text(L("repos.disconnected")).font(.callout).fixedSize(horizontal: false, vertical: true)
             Spacer()
-            Button(L("github.connect")) { showConnect = true }
+            Button(connectTitle) { showConnect = true }
         }
         .padding(12)
         .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))

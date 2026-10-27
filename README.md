@@ -89,7 +89,7 @@ En **Ajustes → Cuentas** pulsa **Conectar GitHub** (código de dispositivo en 
   - "¿Lo que pidió Ana en el correo ya está en development?"
   - "Prepárame la llamada de alcance con lo que cambió esta semana."
   - "¿Qué PRs siguen abiertos y qué dijo el cliente sobre ellos?"
-- **Terminal:** `sb github status`, `sb github login --token|--gh|--device`, `sb github logout`, `sb github add`, `sb github remove`, `sb github sync [--project] [--repo] [--if-due]`.
+- **Terminal:** `sb github status`, `sb github login --gh|--device|--token -` (`--token -` reads the token from stdin, e.g. `pbpaste | sb github login --token -`), `sb github logout`, `sb github add`, `sb github remove`, `sb github sync [--project] [--repo] [--if-due]`.
 - **Organizaciones que restringen apps:** si tu organización exige aprobación, pídele a un admin aprobar SecondBrain (Third-party access policy) o autoriza el token con SAML SSO.
 
 ## Apariencia

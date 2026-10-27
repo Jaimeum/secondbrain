@@ -156,33 +156,58 @@ public enum GitHubAuth {
         return path.hasPrefix("/") && fm.isExecutableFile(atPath: path) ? URL(fileURLWithPath: path) : nil
     }
 
-    /// The token of the user's `gh` session (`gh auth token`). Throws `.notConnected` when gh is missing or logged out.
+    /// The token of the user's `gh` session for github.com (`gh auth token --hostname github.com`; never an Enterprise
+    /// host's token, which must not be sent to api.github.com). Throws `.notConnected` when gh is missing or logged out.
     public static func ghCLIToken() throws -> String {
         guard let gh = locateGH() else { throw GitHubError.notConnected }
-        let out = try run(gh, ["auth", "token"])
+        let out = try run(gh, ["auth", "token", "--hostname", "github.com"])
         let token = out.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         guard out.status == 0, !token.isEmpty, !token.contains(" ") else { throw GitHubError.notConnected }
         return token
     }
 
+    /// Runs `binary` with a hard `timeout`: stdout is read on another thread and the process is killed when it hangs
+    /// (a Keychain prompt for gh's token, a login shell profile that never returns). stderr is discarded.
     static func run(_ binary: URL, _ args: [String], timeout: TimeInterval = 15) throws -> (status: Int32, stdout: String) {
         let process = Process()
         process.executableURL = binary
         process.arguments = args
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = (["/opt/homebrew/bin", "/usr/local/bin"] + [env["PATH"] ?? "/usr/bin:/bin"]).joined(separator: ":")
+        // Only github.com: an Enterprise host from the environment must never answer for it.
+        for key in ["GH_HOST", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"] { env.removeValue(forKey: key) }
         process.environment = env
         let out = Pipe()
         process.standardOutput = out
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+        let collected = RunOutput()
+        let reader = out.fileHandleForReading
         try process.run()
-        let deadline = Date().addingTimeInterval(timeout)
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        while process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
-        if process.isRunning { process.terminate() }
-        process.waitUntilExit()
-        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+        DispatchQueue.global(qos: .userInitiated).async {
+            collected.set(reader.readDataToEndOfFile())
+        }
+        let deadline = DispatchTime.now() + timeout
+        if exited.wait(timeout: deadline) == .timedOut {
+            process.terminate()
+            if exited.wait(timeout: .now() + 2) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                _ = exited.wait(timeout: .now() + 2)
+            }
+            Log.error("github: \(binary.lastPathComponent) timed out after \(Int(timeout)) s")
+            throw GitHubError.notConnected
+        }
+        // A grandchild may still hold stdout open: don't wait for it past the deadline.
+        guard collected.done.wait(timeout: deadline) == .success else { throw GitHubError.notConnected }
+        return (process.terminationStatus, String(decoding: collected.data, as: UTF8.self))
+    }
+
+    private final class RunOutput: @unchecked Sendable {
+        let done = DispatchSemaphore(value: 0)
+        private(set) var data = Data()
+        func set(_ d: Data) { data = d; done.signal() }
     }
 }
 

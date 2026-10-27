@@ -11,8 +11,9 @@
   const KIND_COLORS = {
     project: '#5b5bd6', meeting: '#6e56cf', email: '#0090ff', document: '#f76b15', note: '#ad7f58', url: '#05a2c2',
     person: '#8b8e99', topic: '#30a46c', decision: '#d6409f', question: '#e2a336', task: '#12a594', page: '#5d6577',
+    repo: '#3e63dd',
   };
-  const KIND_ORDER = ['meeting', 'email', 'document', 'note', 'url', 'topic', 'decision', 'question', 'task', 'person', 'page', 'project'];
+  const KIND_ORDER = ['meeting', 'email', 'document', 'note', 'url', 'topic', 'decision', 'question', 'task', 'repo', 'person', 'page', 'project'];
   // Same icons as the rest of the app (SF Symbols waveform, envelope, person, checkmark.seal, lightbulb,
   // questionmark.bubble, doc.text …), drawn as small inline SVGs.
   const GLYPH_PATHS = {
@@ -27,6 +28,7 @@
     url: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
     task: 'M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6h9M11 12h9M11 18h9',
     page: 'M6 3h8l4 4v14H6zM14 3v4h4',
+    repo: 'M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16',
     project: 'M3 6.5h6l2 2h10V19H3z',
     search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.5 15.5L20 20',
     fit: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',

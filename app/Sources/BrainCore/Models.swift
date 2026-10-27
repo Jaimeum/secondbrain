@@ -135,6 +135,8 @@ public struct DataPaths: Sendable {
     public var githubLastSync: URL { github.appendingPathComponent("last-sync.json") }
     /// `data/github/checkouts/<owner>__<repo>/<branch-slug>/` (outside the vault: no graph, no history).
     public var githubCheckouts: URL { github.appendingPathComponent("checkouts") }
+    /// `flock` held for a whole sync, so the app and `sb github sync` (cron) never sync the same repos at once.
+    public var githubSyncLock: URL { github.appendingPathComponent("sync.lock") }
 
     public func ensureExist() throws {
         for dir in [sessions, sources, jobs, history, models, logs] {

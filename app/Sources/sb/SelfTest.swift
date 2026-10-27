@@ -31,6 +31,7 @@ struct SelfTest: AsyncParsableCommand {
         await t.groupAsync("graph") { await testGraph(t, root: root.appendingPathComponent("graph")) }  // MARK: v0.3 graph
         await t.groupAsync("mail") { await testMail(t, root: root.appendingPathComponent("mail")) }   // MARK: v0.3 mail
         await t.groupAsync("routing") { await testRouting(t, root: root.appendingPathComponent("routing")) }   // MARK: v0.4 routing
+        await t.groupAsync("routing-mail") { await testRoutingMail(t, root: root.appendingPathComponent("routing-mail")) }   // MARK: v0.4 routing mail
         if let v01 {
             await t.groupAsync("migration") { await testMigration(t, source: URL(fileURLWithPath: v01), root: root.appendingPathComponent("v01")) }
         }

@@ -929,3 +929,22 @@
 "prep.askMore" = "Ask me something else…";
 "prep.askPlaceholder" = "For example: what did I promise Laura?";
 "prep.saveQuestion" = "Briefing for “%@”";
+
+/* v0.4 — Rules */
+"rules.offer.from" = "Everything from %1$@ to %2$@ from now on?";
+"rules.offer.to" = "Everything sent to %1$@ into %2$@ from now on?";
+"rules.offer.organizer" = "Meetings and mail from %1$@ to %2$@ from now on?";
+"rules.offer.with" = "Everything that includes %1$@ to %2$@ from now on?";
+"rules.offer.always" = "Yes, always";
+"rules.offer.once" = "Just this once";
+"rules.offer.created" = "Rule created";
+"rules.offer.undo" = "Undo";
+"rules.offer.done" = "Done";
+"rules.mail.byRule" = "By the rule “%@”";
+"rules.mail.byDefault" = "Default project";
+"rules.auto.title" = "Mail added";
+"rules.auto.one" = "I added 1 email to %@.";
+"rules.auto.many" = "I added %1$d emails to %2$@.";
+"rules.auto.part" = "%1$d to %2$@";
+"rules.auto.mixed" = "I added %1$d emails: %2$@.";
+"rules.auto.more" = "The rest in a bit.";

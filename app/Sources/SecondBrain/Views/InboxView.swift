@@ -6,6 +6,9 @@ struct InboxView: View {
     @Environment(AppState.self) private var state
     @ViewState private var error: String?
     @ViewState private var showNote = false
+    // MARK: v0.4 routing
+    /// §14.3 offer after "Asignar" of an email (or a recording tied to a calendar event).
+    @ViewState private var ruleOffer = RuleOffer()
 
     private var waiting: [SourceRecord] {
         state.engine.sources.filter { $0.status == .needsProject }
@@ -24,7 +27,7 @@ struct InboxView: View {
                     if !waiting.isEmpty {
                         Section(L("inbox.needsProject")) {
                             ForEach(waiting) { source in
-                                InboxRow(source: source, onError: { error = $0 })
+                                InboxRow(source: source, onError: { error = $0 }, onAssigned: offerRule)
                             }
                         }
                     }
@@ -49,6 +52,14 @@ struct InboxView: View {
                 .listStyle(.inset)
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if ruleOffer.current != nil {
+                RuleOfferBar(offer: ruleOffer)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: ruleOffer.current)
         .navigationTitle(L("inbox.title"))
         .navigationSubtitle(L("inbox.subtitle"))
         .toolbar {
@@ -63,12 +74,18 @@ struct InboxView: View {
             Text(error ?? "")
         }
     }
+
+    /// The row is gone once assigned, so the offer lives at the bottom of the list. `subject` was read before the move.
+    private func offerRule(_ subject: RoutingSubject?, _ slug: String) {
+        ruleOffer.propose(subject, projectSlug: slug, state: state)
+    }
 }
 
 private struct InboxRow: View {
     @Environment(AppState.self) private var state
     let source: SourceRecord
     var onError: (String) -> Void
+    var onAssigned: (RoutingSubject?, String) -> Void = { _, _ in }
 
     @ViewState private var showNewProject = false
 
@@ -130,7 +147,14 @@ private struct InboxRow: View {
     }
 
     private func assign(_ slug: String) {
-        do { try state.engine.assign(sourceId: source.id, to: slug) } catch {
+        // An email from its raw; a recording through its calendar event, when Reuniones has it loaded.
+        let subject = source.kind == .email || source.kind == .meeting
+            ? state.engine.routingSubject(forSourceId: source.id, event: MeetingsModel.shared.event(id: source.calendarEventId))
+            : nil
+        do {
+            try state.engine.assign(sourceId: source.id, to: slug)
+            onAssigned(subject, slug)
+        } catch {
             onError((error as? EngineError)?.errorDescription ?? L("sources.moveFailed"))
         }
     }

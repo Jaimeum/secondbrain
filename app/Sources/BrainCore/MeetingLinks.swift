@@ -281,3 +281,14 @@ public extension BrainEngine {
         sources.last { $0.calendarEventId == eventId }
     }
 }
+
+// MARK: v0.4 routing
+
+extension BrainEngine {
+    /// A recording tied to a calendar event, as the rules see it (organizer, attendees, title, notes). nil without
+    /// the event (the caller passes it from its cache) or when `event` isn't the one the recording is tied to.
+    public func meetingRoutingSubject(_ src: SourceRecord, event: CalendarEvent?, ownerEmails: [String]) -> RoutingSubject? {
+        guard let event, let eventId = src.calendarEventId, event.matches(eventId) else { return nil }
+        return .meeting(event, ownerEmails: ownerEmails)
+    }
+}

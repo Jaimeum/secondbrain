@@ -929,3 +929,22 @@
 "prep.askMore" = "Pregúntame algo más…";
 "prep.askPlaceholder" = "Por ejemplo: ¿qué le prometí a Laura?";
 "prep.saveQuestion" = "Preparación para «%@»";
+
+/* v0.4 — Reglas */
+"rules.offer.from" = "¿Todo lo de %1$@ a %2$@ de ahora en adelante?";
+"rules.offer.to" = "¿Todo lo que va para %1$@ a %2$@ de ahora en adelante?";
+"rules.offer.organizer" = "¿Las reuniones y correos de %1$@ a %2$@ de ahora en adelante?";
+"rules.offer.with" = "¿Todo lo que incluya a %1$@ a %2$@ de ahora en adelante?";
+"rules.offer.always" = "Sí, siempre";
+"rules.offer.once" = "Solo esta vez";
+"rules.offer.created" = "Regla creada";
+"rules.offer.undo" = "Deshacer";
+"rules.offer.done" = "Listo";
+"rules.mail.byRule" = "Por la regla «%@»";
+"rules.mail.byDefault" = "Proyecto por defecto";
+"rules.auto.title" = "Correo agregado";
+"rules.auto.one" = "Agregué 1 correo a %@.";
+"rules.auto.many" = "Agregué %1$d correos a %2$@.";
+"rules.auto.part" = "%1$d a %2$@";
+"rules.auto.mixed" = "Agregué %1$d correos: %2$@.";
+"rules.auto.more" = "El resto, en un rato.";

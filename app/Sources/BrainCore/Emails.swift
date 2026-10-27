@@ -373,6 +373,41 @@ public extension BrainEngine {
         return (validProject(routing.settings.defaultProjectSlug), nil)
     }
 
+    /// What a stored source looks like to the rules (§14.3 offer after "Asignar" in Sin asignar): an email from its raw's
+    /// frontmatter (from/to/cc/subject + the new text); a meeting from its calendar event (`event`, when the caller has it
+    /// cached and it is the one the recording is tied to). nil when there is nothing to go by.
+    func routingSubject(forSourceId id: String, event: CalendarEvent? = nil) -> RoutingSubject? {
+        guard let src = source(id) else { return nil }
+        let owners = vault.ownerEmails()
+        if src.kind == .meeting { return meetingRoutingSubject(src, event: event, ownerEmails: owners) }
+        guard src.kind == .email, let raw = src.rawPath, let text = try? vault.read(raw) else { return nil }
+        let yaml = Frontmatter.split(text).yaml ?? ""
+        let from = Frontmatter.field("from", in: text).flatMap { EmailParser.parseAddresses($0).first }
+        let recipients = (Self.quotedList("to", in: yaml) + Self.quotedList("cc", in: yaml)).flatMap(EmailParser.parseAddresses)
+        guard from?.email != nil || recipients.contains(where: { $0.email != nil }) else { return nil }
+        return RoutingSubject(kind: .mail, sender: from, recipients: recipients, subject: Frontmatter.field("subject", in: text) ?? "",
+                              text: VaultStore.emailBody(text).body, ownerEmails: owners)
+    }
+
+    /// Items of a flow list of quoted strings as `YAML.list` writes it (`to: ["Ana <a@x.com>", "B, C <b@y.com>"]`): a comma
+    /// inside a quoted name doesn't split it.
+    internal static func quotedList(_ key: String, in yaml: String) -> [String] {
+        guard let line = yaml.components(separatedBy: "\n").first(where: { $0.hasPrefix(key + ":") }) else { return [] }
+        var out: [String] = [], current = "", inQuotes = false, escaped = false
+        for ch in line.dropFirst(key.count + 1) {
+            if inQuotes {
+                if escaped { current.append(ch); escaped = false } else if ch == "\\" { escaped = true } else if ch == "\"" {
+                    inQuotes = false
+                    out.append(current)
+                    current = ""
+                } else { current.append(ch) }
+            } else if ch == "\"" {
+                inQuotes = true
+            }
+        }
+        return out.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
     /// `addMailMessages` (CONTRACT §12.4) with the §14.2 switch: `routeIfUnassigned: false` when the user chose the
     /// inbox on purpose. The plain call routes (same as `true`).
     @discardableResult

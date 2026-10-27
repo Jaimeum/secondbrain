@@ -148,6 +148,7 @@ final class AppState {
         reloadTemplates()
         refreshTasks()
         MeetingsModel.shared.start(state: self)   // MARK: v0.3 meetings — agenda for Reuniones and the banners
+        MailAutoImporter.shared.start(state: self)   // MARK: v0.4 routing — §14.5 auto-add of mail by rule
         for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
             engine.recordingFinished(manifest)
         }

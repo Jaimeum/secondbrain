@@ -39,6 +39,13 @@ final class MailModel {
         var paths: [String]
     }
 
+    /// Why the smart button points where it does (CONTRACT §14.2: picked > thread > rule > default > Sin asignar).
+    enum DestinationReason: Equatable {
+        case none, picked, thread, rule(RoutingRule), defaultProject
+        /// v0.3 behavior when there are no rules nor a default project: the last project used from Correo.
+        case lastUsed
+    }
+
     /// "Aprendiendo del correo… · Deshacer" (6 s).
     struct Toast: Identifiable, Equatable {
         let id = UUID()
@@ -63,6 +70,11 @@ final class MailModel {
     private(set) var detailError: String?
     /// Where the smart button adds to (nil = Sin asignar).
     private(set) var projectSlug: String?
+    // MARK: v0.4 routing
+    private(set) var destinationReason: DestinationReason = .none
+    /// §14.3: «¿Todo lo de @acme.com a 🚀 Acme de ahora en adelante?» after a manual pick.
+    let ruleOffer = RuleOffer()
+    @ObservationIgnored private var ownerEmails: [String] = []
     private(set) var isSaving = false
     private(set) var toast: Toast?
     var actionError: String?
@@ -100,6 +112,7 @@ final class MailModel {
     /// Called from `.task`: picks an account, loads (cache first) and the known people.
     func start(state: AppState) {
         self.state = state
+        ownerEmails = ownerAddresses()
         if account?.id != accountId || accountId == nil { accountId = account?.id }
         refreshKnown()
         load()
@@ -230,6 +243,7 @@ final class MailModel {
     func refreshKnown() {
         guard let state, state.vaultRevision != knownRevision else { return }
         knownRevision = state.vaultRevision
+        ownerEmails = ownerAddresses()
         let vault = state.engine.vault
         knownTask?.cancel()
         knownTask = Task {
@@ -297,7 +311,7 @@ final class MailModel {
                 }
                 guard !Task.isCancelled else { return }
                 detail = found
-                if !projectPicked { projectSlug = suggestedProject(for: found) }
+                if !projectPicked { (projectSlug, destinationReason) = suggestedDestination(for: found) }
             } catch {
                 guard !Task.isCancelled, !(error is CancellationError) else { return }
                 detailError = FriendlyError.message(error)
@@ -318,17 +332,51 @@ final class MailModel {
         return try await provider.fetchThread(id: id)
     }
 
-    /// Project of the stored thread, else the last one used from Correo, else Sin asignar.
-    private func suggestedProject(for detail: Detail) -> String? {
-        guard let state else { return nil }
-        if detail.existingThreadKey != nil, let slug = detail.existingThreadProject, state.project(slug) != nil { return slug }
-        if let last = state.config.lastMailProjectSlug, state.project(last) != nil { return last }
-        return nil
+    /// §14.2: the stored thread's project, else a rule, else the default project (only for a new thread: the default
+    /// never moves a thread that lives in Sin asignar), else Sin asignar. Without rules nor a default project, the last
+    /// project used from Correo (v0.3).
+    private func suggestedDestination(for detail: Detail) -> (String?, DestinationReason) {
+        guard let state else { return (nil, .none) }
+        if detail.existingThreadKey != nil, let slug = detail.existingThreadProject, state.project(slug) != nil { return (slug, .thread) }
+        let preview = state.engine.routingPreview(routingSubject(detail))
+        if let decision = preview.decision { return (preview.projectSlug, .rule(decision.rule)) }
+        if detail.existingThreadKey == nil, let slug = preview.projectSlug { return (slug, .defaultProject) }
+        let routing = state.engine.routing.settings
+        if routing.rules.isEmpty, routing.defaultProjectSlug == nil, let last = state.config.lastMailProjectSlug, state.project(last) != nil {
+            return (last, .lastUsed)
+        }
+        return (nil, .none)
+    }
+
+    /// people/README.md's addresses plus the connected accounts' (a rule never targets the owner or their colleagues' domain).
+    private func ownerAddresses() -> [String] {
+        let vault = state?.engine.vault.ownerEmails() ?? []
+        return vault + accounts.map { $0.email.lowercased() }.filter { !vault.contains($0) }
+    }
+
+    /// The open message as the rules see it (to + cc, the new text).
+    func routingSubject(_ detail: Detail) -> RoutingSubject {
+        .mail(detail.parsed, ownerEmails: ownerEmails)
+    }
+
+    /// Rules changed (a rule was just created, edited in Reglas…): the button follows unless the user picked.
+    func routingChanged() {
+        guard !projectPicked, let detail else { return }
+        (projectSlug, destinationReason) = suggestedDestination(for: detail)
     }
 
     func pickProject(_ slug: String?) {
         projectPicked = true
         projectSlug = slug
+        destinationReason = .picked
+    }
+
+    /// A list row's destination by rule or default project (nil = nothing decides it: no chip). No hit is counted.
+    func routedDestination(for message: MailMessageSummary) -> (projectSlug: String, rule: RoutingRule?)? {
+        guard let state else { return nil }
+        let preview = state.engine.routingPreview(.mail(message, ownerEmails: ownerEmails))
+        guard let slug = preview.projectSlug else { return nil }
+        return (slug, preview.decision?.rule)
     }
 
     // MARK: In the brain
@@ -365,10 +413,24 @@ final class MailModel {
         if let key = detail.existingThreadKey, detail.existingThreadProject == nil || detail.existingThreadProject == project {
             threadKey = key
         }
+        let subject = routingSubject(detail)
+        let reason = destinationReason
+        let picked = projectPicked
         do {
-            let added = try state.engine.addMailMessages(list, account: account, threadKey: threadKey, projectSlug: project)
+            // The button already applied §14.2 and says where it goes: that is what happens (an explicit Sin asignar
+            // must not be routed again; a conversation is routed by what the open message says, not its oldest one).
+            let added = try state.engine.addMailMessages(list, account: account, threadKey: threadKey, projectSlug: project,
+                                                         routeIfUnassigned: false)
             if project != state.config.lastMailProjectSlug { state.update { $0.lastMailProjectSlug = project } }
             state.bumpVault()
+            // MARK: v0.4 routing — the rule that chose the destination counts a hit; a manual pick offers a rule.
+            if !added.isEmpty, !detail.projectLocked {
+                if case .rule = reason, !picked { _ = state.engine.routing.route(subject) }
+                let routed = state.engine.routingPreview(subject).projectSlug
+                if picked || reason == .lastUsed, let project, project != routed {
+                    ruleOffer.propose(subject, projectSlug: project, state: state)
+                }
+            }
             guard let first = added.first else {
                 showToast(Toast(text: L("mail.alreadyInBrain"), sourceIds: []))
                 return
@@ -407,7 +469,10 @@ final class MailModel {
     /// The toast goes away only once everything was forgotten, so a failure can be retried.
     func undo() {
         guard let toast, let state else { return }
-        if forgetAll(toast.sourceIds.reversed(), state: state) { dismissToast() }
+        if forgetAll(toast.sourceIds.reversed(), state: state) {
+            dismissToast()
+            if ruleOffer.current?.phase == .asking { ruleOffer.dismiss() }   // the assignment it was about is gone
+        }
     }
 
     /// Chip menu "Quitar".
@@ -467,6 +532,44 @@ final class MailModel {
             guard isLoading || detailLoading || (selectedId != nil && detail == nil && detailError == nil) else { return }
             try? await Task.sleep(for: .milliseconds(50))
         }
+    }
+
+    /// `DebugSnapshots` "mail-rule-offer": opens a message from a corporate sender, picks a project by hand and shows
+    /// the §14.3 offer (nothing is added nor written). Development only.
+    static func snapshotRuleOffer(state: AppState) async -> MailModel? {
+        state.engine.autoProcess = false
+        let model = MailModel()
+        model.start(state: state)
+        await model.waitUntilReady()
+        model.setFilter(.all)
+        guard let project = state.projects.first else { return nil }
+        // A sender no rule covers yet, outside the owner's domain and not a webmail: the offer proposes its domain.
+        let ownDomains = Set(model.accounts.compactMap { $0.email.split(separator: "@").last.map(String.init) })
+        let target = model.messages.first { m in
+            guard let e = m.from.email, let d = e.split(separator: "@").last.map(String.init) else { return false }
+            return model.routedDestination(for: m) == nil && !ownDomains.contains(d) && !RoutingStore.isPublicDomain(d)
+        } ?? model.messages.first
+        guard let target else { return nil }
+        model.select(target.id)
+        await model.waitUntilReady()
+        guard let detail = model.detail else { return nil }
+        model.pickProject(project.slug)
+        model.ruleOffer.propose(model.routingSubject(detail), projectSlug: project.slug, state: state)
+        return model
+    }
+
+    /// `DebugSnapshots` "mail-rule-routed": opens the first message a rule sends somewhere (the button names the rule's
+    /// project with "Por la regla «…»" under it). Writes nothing. Development only.
+    static func snapshotRouted(state: AppState) async -> MailModel? {
+        let model = MailModel()
+        model.start(state: state)
+        await model.waitUntilReady()
+        model.setFilter(.all)
+        guard let target = model.messages.first(where: { model.routedDestination(for: $0)?.rule != nil && model.source(for: $0.id) == nil })
+        else { return nil }
+        model.select(target.id)
+        await model.waitUntilReady()
+        return model
     }
 
     /// `DebugSnapshots` "mail-added": opens the newest message of a conversation and presses the smart button, so the

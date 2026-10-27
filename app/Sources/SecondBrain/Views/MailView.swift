@@ -30,7 +30,7 @@ struct MailView: View {
                         .overlay(alignment: .bottom) {
                             if let toast = model.toast {
                                 MailToastView(toast: toast) { model.undo() }
-                                    .padding(.bottom, 78)   // floats above the action bar
+                                    .padding(.bottom, model.ruleOffer.current == nil ? 78 : 130)   // floats above the action bar (and the rule offer)
                                     .transition(.move(edge: .bottom).combined(with: .opacity))
                             }
                         }
@@ -46,9 +46,14 @@ struct MailView: View {
                     .help(L("mail.paste"))
             }
         }
-        .task(id: hasMailAccounts) { if hasMailAccounts { model.start(state: state) } }
+        .task(id: hasMailAccounts) {
+            guard hasMailAccounts else { return }
+            model.start(state: state)
+            MailAutoImporter.shared.runNow()   // MARK: v0.4 routing — §14.5 on opening Correo
+        }
         .onChange(of: state.accountsRevision) { model.accountsChanged() }
         .onChange(of: state.vaultRevision) { model.refreshKnown() }
+        .onChange(of: state.engine.routing.settings) { model.routingChanged() }   // MARK: v0.4 routing
         .alert(L("activity.conflictTitle"), isPresented: Binding(get: { model.undoConflict != nil },
                                                                 set: { if !$0 { model.undoConflict = nil } })) {
             Button(L("activity.undoAnyway"), role: .destructive) {
@@ -213,6 +218,7 @@ private struct MailListPane: View {
 }
 
 private struct MailRow: View {
+    @Environment(AppState.self) private var state
     let message: MailMessageSummary
     let isMine: Bool
     let source: SourceRecord?
@@ -247,6 +253,14 @@ private struct MailRow: View {
                     .lineLimit(2)
                 if let source {
                     InBrainChip(source: source, model: model)
+                        .padding(.top, 3)
+                } else if let routed = model.routedDestination(for: message) {
+                    // MARK: v0.4 routing — where a rule (or the default project) would send it.
+                    RoutedProjectChip(label: state.projectName(routed.projectSlug),
+                                      help: routed.rule.map {
+                                          L("rules.mail.byRule", RoutingStore.displayName(for: $0, projects: state.projects,
+                                                                                         language: Localizer.language))
+                                      } ?? L("rules.mail.byDefault"))
                         .padding(.top, 3)
                 }
             }

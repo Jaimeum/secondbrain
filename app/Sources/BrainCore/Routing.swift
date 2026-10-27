@@ -67,9 +67,13 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
     public var rules: [RoutingRule]              // order = priority; the first one that matches wins
     public var defaultProjectSlug: String?       // nil = Sin asignar
     public var mailSyncCursors: [String: Date]   // accountId → last mail checked by auto-add
+    /// §14.5 "Revisar el correo cada 15 min": the global switch of `MailAutoImporter` (only acts with `autoAddMail` rules).
+    public var autoImportEnabled: Bool
 
-    public init(rules: [RoutingRule] = [], defaultProjectSlug: String? = nil, mailSyncCursors: [String: Date] = [:]) {
+    public init(rules: [RoutingRule] = [], defaultProjectSlug: String? = nil, mailSyncCursors: [String: Date] = [:],
+                autoImportEnabled: Bool = true) {
         self.rules = rules; self.defaultProjectSlug = defaultProjectSlug; self.mailSyncCursors = mailSyncCursors
+        self.autoImportEnabled = autoImportEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -78,6 +82,7 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
         rules = (try c.decodeIfPresent([Lossy<RoutingRule>].self, forKey: .rules) ?? []).compactMap(\.value)
         defaultProjectSlug = try c.decodeIfPresent(String.self, forKey: .defaultProjectSlug)
         mailSyncCursors = (try? c.decodeIfPresent([String: Date].self, forKey: .mailSyncCursors)) ?? [:]
+        autoImportEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .autoImportEnabled)) ?? true
     }
 
     private struct Lossy<T: Decodable>: Decodable {
@@ -316,6 +321,14 @@ public enum RuleMatcher {
         try mutate { $0.mailSyncCursors[accountId] = date }
     }
 
+    /// §14.5 global switch ("Revisar el correo cada 15 min").
+    public func setAutoImportEnabled(_ on: Bool) throws {
+        try mutate { $0.autoImportEnabled = on }
+    }
+
+    /// Enabled rules that add new matching mail by themselves (§14.5).
+    public var autoAddRules: [RoutingRule] { settings.rules.filter { $0.enabled && $0.autoAddMail } }
+
     /// The first enabled rule that matches, without recording a hit (previews, preselection, "Probar").
     public func match(_ subject: RoutingSubject) -> RoutingDecision? {
         RuleMatcher.firstMatch(settings.rules, subject).map { RoutingDecision(rule: $0, projectSlug: $0.projectSlug) }
@@ -438,12 +451,17 @@ public enum RuleMatcher {
     /// Mail: corporate sender domain → `senderDomain is`; public domain → `senderEmail is`; sent by the owner → the
     /// first other recipient (domain or address), or nil. Meeting: `organizerEmail is`; organized by the owner (or no
     /// organizer) → first other attendee (`attendeeDomain is`, or `attendeeEmail is` for a public domain), or nil.
+    /// A colleague (same domain as one of the owner's addresses) gets the address too: "todo lo de @mi-empresa.com"
+    /// would catch every internal mail.
     /// `projectName` ("🚀 Acme") fills `name` in `language`; without it the name stays empty (generated on display).
     public nonisolated static func suggestedRule(for subject: RoutingSubject, projectSlug: String?, language: String,
                                                  projectName: String? = nil) -> RoutingRule? {
+        let ownerDomains = Set(subject.ownerEmails.compactMap { RuleMatcher.domain(EmailAddress(name: nil, email: $0)) })
         func byAddress(_ a: EmailAddress, domainField: RuleField, emailField: RuleField) -> RuleCondition? {
             guard let email = a.email?.lowercased(), email.contains("@") else { return nil }
-            guard let d = RuleMatcher.domain(a), !isPublicDomain(d) else { return RuleCondition(field: emailField, op: .is, value: email) }
+            guard let d = RuleMatcher.domain(a), !isPublicDomain(d), !ownerDomains.contains(d) else {
+                return RuleCondition(field: emailField, op: .is, value: email)
+            }
             return RuleCondition(field: domainField, op: .is, value: d)
         }
         let others = subject.recipients.filter { !subject.isOwner($0) && $0.email != nil }

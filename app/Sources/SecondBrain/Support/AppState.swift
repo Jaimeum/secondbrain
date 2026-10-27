@@ -149,6 +149,7 @@ final class AppState {
         refreshTasks()
         MeetingsModel.shared.start(state: self)   // MARK: v0.3 meetings — agenda for Reuniones and the banners
         GitHubModel.shared.start(state: self)   // MARK: v0.4 github — keeps the followed repos up to date (§13.4)
+        MailAutoImporter.shared.start(state: self)   // MARK: v0.4 routing — §14.5 auto-add of mail by rule
         for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
             engine.recordingFinished(manifest)
         }

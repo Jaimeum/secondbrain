@@ -39,7 +39,9 @@ public final class HistoryStore: @unchecked Sendable {
 
     private let lock = NSLock()
     private var hashCache: [String: (size: Int, mtime: Date, hash: String)] = [:]
-    private static let ignoredNames: Set<String> = [".git", ".obsidian", ".DS_Store", ".trash"]
+    // v0.4: `.secondbrain/` is app state (routing rules and their hit counts change while Claude works): never part of
+    // a change, never restored by undo.
+    private static let ignoredNames: Set<String> = [".git", ".obsidian", ".DS_Store", ".trash", ".secondbrain"]
 
     public init(vaultRoot: URL, historyDir: URL) {
         self.vaultRoot = vaultRoot

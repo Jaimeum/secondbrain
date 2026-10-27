@@ -17,9 +17,16 @@ struct MailDetailView: View {
                         .frame(maxWidth: 760, alignment: .leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                // MARK: v0.4 routing — §14.3 offer, above the action bar.
+                if model.ruleOffer.current != nil {
+                    RuleOfferBar(offer: model.ruleOffer)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
+                }
                 Divider()
                 actionBar(detail)
             }
+            .animation(.snappy(duration: 0.25), value: model.ruleOffer.current)
         } else if model.detailLoading {
             ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let error = model.detailError {
@@ -101,7 +108,12 @@ struct MailDetailView: View {
                 } else {
                     smartButton(detail, pending: pending.count)
                 }
-                Text(L("mail.readOnly")).font(.caption).foregroundStyle(.tertiary)
+                if !pending.isEmpty, !detail.projectLocked, let why = destinationWhy {
+                    Text(why).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        .help(L("mail.readOnly"))
+                } else {
+                    Text(L("mail.readOnly")).font(.caption).foregroundStyle(.tertiary)
+                }
             }
             Spacer(minLength: 8)
             if let error = model.actionError {
@@ -162,6 +174,18 @@ struct MailDetailView: View {
                     Text(destination(nil))
                 }
             }
+        }
+    }
+
+    /// "Por la regla «De @acme.com → 🚀 Acme»" / "Proyecto por defecto" under the smart button.
+    private var destinationWhy: String? {
+        switch model.destinationReason {
+        case .rule(let rule):
+            return L("rules.mail.byRule", RoutingStore.displayName(for: rule, projects: state.projects, language: Localizer.language))
+        case .defaultProject:
+            return L("rules.mail.byDefault")
+        default:
+            return nil
         }
     }
 

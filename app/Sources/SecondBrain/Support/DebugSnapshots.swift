@@ -100,6 +100,7 @@ enum DebugSnapshots {
                                   AnyView(WikiBrowser(scope: .project(slug), selection: .constant(topic.id)))))
                 }
             }
+            shots += await RulesSnapshots.shots(state: state)   // MARK: v0.4 rules
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
                 if name.hasPrefix("graph") || name.hasPrefix("web-") {   // views with a WKWebView
@@ -112,6 +113,15 @@ enum DebugSnapshots {
             // accounts) pressed through the default-action shortcut: the next shot must be the last step.
             if only.isEmpty || "onboarding-accounts".hasPrefix(only) {
                 await renderOnboardingAccounts(state: state, dir: dir)
+            }
+            // MARK: v0.4 routing — the §14.3 offer in Correo after a manual pick (writes nothing).
+            if only.isEmpty || "mail-rule-offer".hasPrefix(only), let mail = await MailModel.snapshotRuleOffer(state: state) {
+                await render(MailView(model: mail).environment(state), size: CGSize(width: 1000, height: 640),
+                             to: dir.appendingPathComponent("mail-rule-offer.png"))
+            }
+            if only.isEmpty || "mail-rule-routed".hasPrefix(only), let mail = await MailModel.snapshotRouted(state: state) {
+                await render(MailView(model: mail).environment(state), size: CGSize(width: 1000, height: 640),
+                             to: dir.appendingPathComponent("mail-rule-routed.png"))
             }
             // MARK: v0.3 mail — after the smart button: ✓ chips + "Aprendiendo del correo… · Deshacer" (writes to the vault).
             if let mail = await MailModel.snapshotAfterAdd(state: state) {

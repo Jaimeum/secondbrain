@@ -1385,3 +1385,117 @@ Cuota: si `X-RateLimit-Remaining` < 100 se pausa hasta `reset`.
 [--project slug] [--repo id]` (luego `sb run` procesa ingestas) · `sb github selftest` (fixtures con
 `HTTPTransport` inyectado, sin red: delta normal, primer sync, force-push, rama borrada, 304, rate limit,
 org restringida, paginación, tarball extract).
+
+## 14. v0.4 — Reglas de enrutamiento (correos y reuniones → proyectos)
+
+Problema: una sola cuenta recibe correo y reuniones de todos los proyectos. El usuario define reglas
+("lo que venga de @acme.com va a 🚀 Acme", "si el asunto dice 'Nubia' va a 🤝 Alianza"); lo que no coincide
+cae a **Sin asignar** (o a un proyecto por defecto que él elija) y desde ahí lo asigna a mano; al asignar a
+mano, la app ofrece convertirlo en regla con un clic. Las reglas viven en el vault (viajan con el cerebro).
+
+### 14.1 Tipos (`BrainCore/Routing.swift`)
+```swift
+public enum RuleField: String, Codable, CaseIterable, Sendable {
+    case senderEmail, senderDomain, senderName, recipient /* to/cc, email o dominio */, subject,
+         attendeeEmail, attendeeDomain, organizerEmail, title /* reunión */, anyText /* asunto+título+cuerpo/notas */
+}
+public enum RuleOperator: String, Codable, CaseIterable, Sendable { case contains, `is`, startsWith, endsWith }
+public struct RuleCondition: Codable, Hashable, Sendable { public var field: RuleField; public var op: RuleOperator; public var value: String }
+public struct RoutingRule: Codable, Identifiable, Hashable, Sendable {
+    public var id: String                 // uuid
+    public var name: String               // humano; vacío = generado ("De @acme.com → 🚀 Acme")
+    public var enabled: Bool
+    public var conditions: [RuleCondition]   // TODAS deben cumplirse (AND); una regla por cada "o"
+    public var projectSlug: String?       // nil = "Sin asignar" explícito (ej. para newsletters)
+    public var autoAddMail: Bool          // v14.5: agregar solos los correos nuevos que coincidan (default false)
+    public var createdAt: Date
+    public var hits: Int                  // veces que decidió algo
+    public var lastHitAt: Date?
+}
+public struct RoutingSettings: Codable, Equatable, Sendable {
+    public var rules: [RoutingRule]       // orden = prioridad; la primera que coincide gana
+    public var defaultProjectSlug: String?   // nil = Sin asignar
+    public var mailSyncCursors: [String: Date]   // accountId → último correo revisado por auto-agregar
+}
+/// Lo que se evalúa, sea correo (conectado o pegado) o reunión.
+public struct RoutingSubject: Sendable, Equatable {
+    public enum Kind: Sendable { case mail, meeting }
+    public var kind: Kind
+    public var sender: EmailAddress?      // correo: from · reunión: organizer
+    public var recipients: [EmailAddress] // to+cc · asistentes
+    public var subject: String            // asunto · título
+    public var text: String               // cuerpo/snippet · notas (puede ir vacío)
+    public static func mail(_ m: MailMessageSummary) -> RoutingSubject
+    public static func mail(_ p: ParsedEmail) -> RoutingSubject
+    public static func meeting(_ e: CalendarEvent) -> RoutingSubject
+}
+public struct RoutingDecision: Equatable, Sendable { public var rule: RoutingRule; public var projectSlug: String? }
+
+@MainActor @Observable public final class RoutingStore {       // vault/.secondbrain/routing.json (atómico)
+    public private(set) var settings: RoutingSettings
+    public init(fileURL: URL)
+    public func reload(fileURL: URL)
+    public func add(_ rule: RoutingRule) throws; update(_:) throws; remove(id:) throws; move(fromOffsets:toOffset:) throws
+    public func setDefaultProject(_ slug: String?) throws
+    public func route(_ subject: RoutingSubject) -> RoutingDecision?   // primera regla habilitada que coincide; registra hit
+    public func resolvedProject(_ subject: RoutingSubject) -> String?  // decisión ?? defaultProjectSlug
+    /// Propuesta de regla a partir de una asignación manual: dominio corporativo del remitente (no gmail/outlook/
+    /// hotmail/yahoo/icloud/proton…) → senderDomain is; si es dominio público → senderEmail is; reunión → organizerEmail
+    /// is (o attendeeDomain si el organizador es el dueño). Nombre generado en el idioma de la UI.
+    public static func suggestedRule(for subject: RoutingSubject, projectSlug: String?, language: String) -> RoutingRule
+}
+public enum RuleMatcher { public static func matches(_ rule: RoutingRule, _ s: RoutingSubject) -> Bool }  // puro, testeable
+```
+Comparación: case-insensitive, sin acentos (folding), trim; `senderDomain`/`attendeeDomain`/`recipient` comparan el
+dominio completo o un sufijo con punto (`is acme.com` acepta `mail.acme.com`); `anyText` busca en asunto+texto;
+`attendee*` coincide si **algún** asistente cumple (excluyendo al dueño del vault). `BrainEngine.routing: RoutingStore`
+creado en init (se recarga en `reload`). `DataPaths` no cambia (el archivo está en el vault).
+
+### 14.2 Dónde se aplica (orden de precedencia)
+1. **Elección explícita del usuario** (botón/selector) siempre gana.
+2. **Hilo existente**: un correo de un hilo que ya vive en un proyecto va a ese proyecto (como hoy).
+3. **Regla** (`route`).
+4. **Proyecto por defecto** (`defaultProjectSlug`), si lo fijó.
+5. **Sin asignar** → Inbox + `classify` de Claude como hoy (la sugerencia de Claude se muestra, nunca asigna sola).
+Puntos de entrada: `addEmail(s)` conectados y pegados cuando `projectSlug == nil` y el llamador no marcó
+"Sin asignar" explícito (nuevo parámetro `routeIfUnassigned: Bool = true`; la UI pasa `false` cuando el usuario eligió
+Inbox a propósito); `MailModel.suggestedProject` (preselección del botón "Agregar a …"); `AddEmailSheet` (preselección);
+`MeetingsModel`/`MeetingCard` (una regla que coincide se muestra como proyecto **confirmado** con un subtítulo
+"por regla «…»", sin la pregunta ✓/✗; `MeetingLinks` manual sigue ganando); grabación desde una reunión usa ese proyecto.
+
+### 14.3 Aprender de la asignación manual (lo importante para el usuario)
+Cada vez que el usuario asigna a mano algo que NO vino de una regla, la app ofrece **una** línea discreta, no modal,
+con la regla propuesta ya redactada en lenguaje humano y dos botones:
+- Correo (conectado, pegado o desde Sin asignar): «¿Todo lo de **@acme.com** a 🚀 Acme de ahora en adelante?» ·
+  **Sí, siempre** · **Solo esta vez**. "Sí, siempre" crea la regla (`suggestedRule`) y muestra "Regla creada · Deshacer".
+- Reunión (✓ en la sugerencia o selector manual): «¿Las reuniones que organiza **ana@acme.com** a 🚀 Acme?» · igual.
+- Sin asignar (Inbox): al asignar un correo o una reunión ligada a evento, la misma línea.
+Si ya existe una regla equivalente (mismas condiciones), no se ofrece. Si el remitente es el propio dueño, se propone
+por dominio del destinatario principal o no se ofrece. Nunca más de una oferta por acción.
+
+### 14.4 Pantalla de reglas (Ajustes → **Reglas**, y botón "Reglas…" en la barra de Correo y de Reuniones)
+Lista ordenable (arrastrar), cada fila: toggle · nombre humano ("De @acme.com → 🚀 Acme") · "n veces" · menú (Editar,
+Duplicar, Eliminar). Botón **Nueva regla** → `RuleEditorSheet`: una frase construida con menús, sin formularios técnicos:
+«Cuando [el remitente ▾] [es ▾] [________] (+ y también…) → mandar a [🚀 Acme ▾]» con campos legibles
+(el remitente / el dominio del remitente / el asunto / un asistente / el organizador / el título / cualquier texto) y
+operadores (contiene / es / empieza con / termina con); opción "Agregar solos los correos nuevos que coincidan" (14.5);
+botón **Probar** que evalúa la regla contra los últimos 50 correos cargados y las reuniones de la semana y muestra
+"Coincidiría con 7 correos y 2 reuniones" con una lista corta. Abajo de la lista: «Lo que no coincide con ninguna regla va a
+[Sin asignar ▾]». Estado vacío: "Aún no hay reglas. Cuando asignes un correo o una reunión a un proyecto te propondré una."
+
+### 14.5 Agregar solos (opcional, por regla)
+`MailAutoImporter` (app, `Support/MailAutoImporter.swift`): cada 15 min y al abrir Correo, por cada cuenta con correo:
+lista mensajes desde `mailSyncCursors[account]` (primera vez: desde la fecha de creación de la regla más antigua con
+`autoAddMail`, máx. 7 días atrás), descarta ya importados (`externalId`), rutea; los que caen en una regla con
+`autoAddMail` se agregan (`addMailMessages`, hilo completo no: solo el mensaje; máx. 20 por ciclo, el resto al siguiente);
+avanza el cursor; notificación local "Agregué 3 correos a 🚀 Acme" (una por ciclo). Sin cuentas o sin reglas auto → no hace
+nada. Errores de cuenta → silencio + fila "Vuelve a conectar" en Correo. Un toggle global en Ajustes → Reglas:
+"Revisar el correo cada 15 min" (default activado cuando existe al menos una regla con auto).
+
+### 14.6 CLI, tests, snapshots, strings
+`sb rules` (list) · `sb rules add --field senderDomain --op is --value acme.com --project acme` · `sb route --from
+"ana@acme.com" --subject "..." [--attendee x]` imprime la decisión. `sb/RoutingSelfTest.swift`: matcher (folding, dominios,
+AND, orden/prioridad, disabled), persistencia, suggestedRule (dominio corporativo vs público, dueño), precedencia 14.2 con
+un vault temporal (hilo existente > regla > default > inbox), auto-importer con DemoProvider (cursor, cap, dedupe).
+Snapshots: `rules`, `rules-empty`, `rule-editor`, `mail-rule-offer`, `meetings-rule`. Strings: bloque "v0.4 — Reglas" /
+"v0.4 — Rules" al final de ambos archivos, prefijo `rules.`.

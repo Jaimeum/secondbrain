@@ -45,6 +45,7 @@ struct SettingsView: View {
             }
 
             AccountsSection()
+            RulesSection()   // MARK: v0.4 rules
 
             // MARK: v0.4 github
             GitHubSection()

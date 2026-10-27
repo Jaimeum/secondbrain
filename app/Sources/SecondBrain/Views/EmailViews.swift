@@ -33,6 +33,12 @@ struct AddEmailSheet: View {
     @ViewState private var parseTask: Task<Void, Never>?
     @ViewState private var matchTask: Task<Void, Never>?
     @ViewState private var matching = false   // thread suggestion in flight: saving now could start a duplicate thread
+    // MARK: v0.4 routing — preselection by rule/default (§14.2) and the §14.3 offer after saving.
+    @ViewState private var projectPicked = false
+    @ViewState private var routedRule: RoutingRule?
+    @ViewState private var routedByDefault = false
+    @ViewState private var ruleOffer = RuleOffer()
+    @ViewState private var saved = false
 
     private var fixedThread: EmailThread? {
         guard let key = request.threadKey else { return nil }
@@ -73,19 +79,30 @@ struct AddEmailSheet: View {
             .padding(.horizontal, 22)
 
             Divider().padding(.top, 14)
-            HStack {
-                if let error {
-                    Text(error).foregroundStyle(.red).font(.callout).lineLimit(3)
+            if saved {
+                // Saved: the rule offer stays here ~10 s (non-modal); the sheet closes when it goes away.
+                HStack(spacing: 12) {
+                    RuleOfferBar(offer: ruleOffer)
+                    Button(L("rules.offer.done")) { dismiss() }
+                        .keyboardShortcut(.defaultAction)
                 }
-                Spacer()
-                Button(L("common.cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(L("email.save"), action: save)
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(parsed == nil || matching || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(16)
+            } else {
+                HStack {
+                    if let error {
+                        Text(error).foregroundStyle(.red).font(.callout).lineLimit(3)
+                    }
+                    Spacer()
+                    Button(L("common.cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                    Button(L("email.save"), action: save)
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(parsed == nil || matching || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(16)
             }
-            .padding(16)
         }
+        .onChange(of: ruleOffer.current == nil) { _, gone in if gone && saved { dismiss() } }
         .frame(width: 820, height: 640)
         .onAppear(perform: start)
         .onChange(of: text) { scheduleParse() }
@@ -261,12 +278,24 @@ struct AddEmailSheet: View {
             }
             .help(L("email.projectLocked"))
         } else {
-            Picker(L("menu.project"), selection: $projectSlug) {
+            Picker(L("menu.project"), selection: Binding(get: { projectSlug }, set: {
+                projectSlug = $0
+                projectPicked = true
+                routedRule = nil
+                routedByDefault = false
+            })) {
                 Text(L("inbox.title")).tag(String?.none)
                 Divider()
                 ForEach(state.projects) { project in
                     Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
                 }
+            }
+            if let rule = routedRule {
+                Text(L("rules.mail.byRule", RoutingStore.displayName(for: rule, projects: state.projects, language: Localizer.language)))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if routedByDefault {
+                Text(L("rules.mail.byDefault")).font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -341,7 +370,17 @@ struct AddEmailSheet: View {
             if !userPickedThread {
                 if let best = matches.first, best.score >= 0.8 { choice = .existing(best.thread.key) } else { choice = .new }
             }
+            applyRouting(email)
         }
+    }
+
+    /// §14.2 preselection: no project asked for, none picked, no thread → the rule (or the default project) decides.
+    private func applyRouting(_ email: ParsedEmail) {
+        guard request.projectSlug == nil, !projectPicked, chosenThread == nil else { return }
+        let preview = state.engine.routingPreview(.mail(email, ownerEmails: ownerEmails))
+        projectSlug = preview.projectSlug
+        routedRule = preview.decision?.rule
+        routedByDefault = preview.decision == nil && preview.projectSlug != nil
     }
 
     /// The parsed email with the user's corrections applied.
@@ -369,20 +408,32 @@ struct AddEmailSheet: View {
         do {
             let thread = chosenThread
             let project = thread == nil ? projectSlug : nil
+            // The picker already shows the §14.2 result: a new thread goes exactly there (an explicit Sin asignar is not
+            // routed again); an existing thread follows the engine's precedence.
+            let route = thread != nil
             var added: [SourceRecord]
             if all.count > 1 {
                 // The whole conversation, oldest first; the newest one carries the user's corrections.
                 var list = all
                 list[list.count - 1] = email
-                added = try state.engine.addEmails(list, threadKey: thread?.key, projectSlug: project)
+                added = try state.engine.addEmails(list, threadKey: thread?.key, projectSlug: project, routeIfUnassigned: route)
                 if added.isEmpty { throw EngineError.duplicateEmail(email.subject ?? "") }
             } else {
-                added = [try state.engine.addEmail(email, threadKey: thread?.key, projectSlug: project)]
+                added = [try state.engine.addEmail(email, threadKey: thread?.key, projectSlug: project, routeIfUnassigned: route)]
             }
             if let templateId {
                 for source in added { state.engine.setTemplate(sourceId: source.id, templateId: templateId) }
             }
             state.bumpVault()
+            // MARK: v0.4 routing — the deciding rule counts a hit; a manual project offers a rule (§14.3).
+            let subject = RoutingSubject.mail(email, ownerEmails: ownerEmails)
+            if thread == nil, routedRule != nil, !projectPicked { _ = state.engine.routing.route(subject) }
+            if thread == nil, let project, projectPicked || request.projectSlug != nil,
+               project != state.engine.routingPreview(subject).projectSlug,
+               ruleOffer.propose(subject, projectSlug: project, state: state) {
+                saved = true
+                return
+            }
             dismiss()
         } catch {
             self.error = FriendlyError.message(error)

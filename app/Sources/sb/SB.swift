@@ -15,6 +15,7 @@ struct SB: AsyncParsableCommand {
                       Reformat.self, TimelineCmd.self, SetDate.self, Export.self, SelfTest.self,
                       DemoVaultCmd.self, GraphCmd.self,  // MARK: v0.3 graph
                       GitHubCmd.self]  // MARK: v0.4 github
+                      + [RulesCmd.self, RouteCmd.self]  // MARK: v0.4 routing
     )
 }
 

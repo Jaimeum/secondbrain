@@ -3,7 +3,7 @@ import BrainCore
 import SwiftUI
 
 /// "Agregar correo": paste an email (reads the clipboard if it looks like one), check what was understood,
-/// pick its thread (suggested automatically), its project and format, and save.
+/// pick its thread (suggested automatically) and its project, and save. Sized per §15.3 (ideal 760×520).
 struct AddEmailSheet: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
@@ -27,7 +27,6 @@ struct AddEmailSheet: View {
     @ViewState private var choice: ThreadChoice = .new
     @ViewState private var userPickedThread = false
     @ViewState private var projectSlug: String?
-    @ViewState private var templateId: String?
     @ViewState private var error: String?
     @ViewState private var fromClipboard = false
     @ViewState private var parseTask: Task<Void, Never>?
@@ -53,200 +52,306 @@ struct AddEmailSheet: View {
 
     @ViewState private var ownerEmails: [String] = []
 
+    /// Width of the label column of the fields, so Asunto/De/Para/Enviado and Proyecto line up across the cards.
+    private static let labelWidth: CGFloat = 64
+    @ViewState private var editingFrom = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(fixedThread.map { L("email.nextTitle", $0.subject) } ?? L("email.title"))
-                    .font(.title2.weight(.semibold)).lineLimit(1)
-                Spacer()
-                Button {
-                    if let s = NSPasteboard.general.string(forType: .string) { text = s; fromClipboard = true }
-                } label: {
-                    Label(L("email.pasteAgain"), systemImage: "doc.on.clipboard")
-                }
-                .controlSize(.small)
-            }
-            .padding([.horizontal, .top], 22)
-            .padding(.bottom, 12)
+            Text(fixedThread.map { L("email.nextTitle", $0.subject) } ?? L("email.title"))
+                .font(Brand.title)
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(1)
+                .padding([.horizontal, .top], 22)
+                .padding(.bottom, 12)
 
             HStack(alignment: .top, spacing: 18) {
-                pasteArea.frame(minWidth: 320)
+                pasteArea.frame(minWidth: 260, maxWidth: .infinity, maxHeight: .infinity)
                 ScrollView {
-                    details.padding(.trailing, 4)
+                    details.padding(.trailing, 4).padding(.bottom, 4)
                 }
-                .frame(width: 360)
+                .frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
             }
             .padding(.horizontal, 22)
+            .frame(maxHeight: .infinity)
 
-            Divider().padding(.top, 14)
-            if saved {
-                // Saved: the rule offer stays here ~10 s (non-modal); the sheet closes when it goes away.
-                HStack(spacing: 12) {
-                    RuleOfferBar(offer: ruleOffer)
-                    Button(L("rules.offer.done")) { dismiss() }
-                        .keyboardShortcut(.defaultAction)
-                }
-                .padding(16)
-            } else {
-                HStack {
-                    if let error {
-                        Text(error).foregroundStyle(.red).font(.callout).lineLimit(3)
-                    }
-                    Spacer()
-                    Button(L("common.cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                    Button(L("email.save"), action: save)
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(parsed == nil || matching || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                .padding(16)
-            }
+            Rectangle().fill(Brand.color.line).frame(height: 1).padding(.top, 14)
+            footer
         }
-        .onChange(of: ruleOffer.current == nil) { _, gone in if gone && saved { dismiss() } }
-        .frame(width: 820, height: 640)
+        .font(Brand.body)
+        .background(Brand.color.surface)
+        .frame(minWidth: 640, idealWidth: 760, maxWidth: .infinity, minHeight: 440, idealHeight: 520, maxHeight: .infinity)
         .onAppear(perform: start)
         .onChange(of: text) { scheduleParse() }
         .onChange(of: subject) { refreshMatches() }
         .onChange(of: from) { refreshMatches() }
     }
 
+    /// Error on its own row; then Cancelar · Guardar, or (after saving with a manual project) the §14.3 offer and Listo.
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if saved {
+                // Saved: the offer stays until answered or timed out; the sheet closes only with Listo.
+                HStack(spacing: 12) {
+                    if ruleOffer.current != nil {
+                        RuleOfferBar(offer: ruleOffer)
+                    } else {
+                        Label(L("mail.saved"), systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Brand.color.success)
+                        Spacer(minLength: 0)
+                    }
+                    Button(L("rules.offer.done")) { dismiss() }
+                        .buttonStyle(.brandPrimary)
+                        .keyboardShortcut(.defaultAction)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    Button(L("common.cancel")) { dismiss() }
+                        .buttonStyle(.brandSecondary)
+                        .keyboardShortcut(.cancelAction)
+                    Button(L("email.save"), action: save)
+                        .buttonStyle(.brandPrimary)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(parsed == nil || matching || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .padding(16)
+        .animation(Brand.motion.animation(), value: ruleOffer.current)
+    }
+
     // MARK: Left: the pasted text
 
     private var pasteArea: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(fromClipboard ? L("email.fromClipboard") : L("email.pasteHint"))
-                .font(.callout).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(fromClipboard ? L("email.fromClipboard") : L("email.pasteHint"))
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    if let s = NSPasteboard.general.string(forType: .string) { text = s; fromClipboard = true }
+                } label: {
+                    Label(L("email.pasteAgain"), systemImage: "doc.on.clipboard")
+                }
+                .buttonStyle(.plain)
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.accent)
+                .lineLimit(1)
+                .layoutPriority(1)
+            }
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $text)
-                    .font(.system(.callout, design: .monospaced))
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text)
                     .scrollContentBackground(.hidden)
                     .padding(8)
                 if text.isEmpty {
                     Text(L("email.placeholder"))
-                        .font(.callout)
-                        .foregroundStyle(.tertiary)
+                        .font(Brand.body)
+                        .foregroundStyle(Brand.color.text3)
                         .padding(14)
                         .allowsHitTesting(false)
                 }
             }
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
+            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+                .strokeBorder(Brand.color.line, lineWidth: 1))
         }
     }
 
     // MARK: Right: what was understood
 
     @ViewBuilder private var details: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             if all.count > 1 {
                 Label(L("email.several", all.count), systemImage: "square.stack")
-                    .font(.callout)
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                    .fixedSize(horizontal: false, vertical: true)
+                    .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
             }
             if parsed == nil {
                 VStack(spacing: 10) {
-                    Image(systemName: "envelope.open").font(.system(size: 34, weight: .light)).foregroundStyle(.tertiary)
-                    Text(L("email.waiting")).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Image(systemName: "envelope.open")
+                        .font(Brand.font(34))
+                        .foregroundStyle(Brand.color.text3)
+                    Text(L("email.waiting"))
+                        .foregroundStyle(Brand.color.text2)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
             } else {
                 understood
                 threadBox
-                VStack(alignment: .leading, spacing: 10) {
-                    projectPicker
-                    TemplatePicker(scope: .email, selection: $templateId, projectSlug: chosenThread?.projectSlug ?? projectSlug)
-                }
+                projectRow.padding(.horizontal, 12)
             }
         }
+    }
+
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
+        return VStack(alignment: .leading, spacing: 10, content: content)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Brand.color.card, in: shape)
+            .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
+    }
+
+    private func gridLabel(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(Brand.color.text2)
+            .lineLimit(1)
+            .frame(width: Self.labelWidth, alignment: .leading)
     }
 
     private var understood: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label(L("email.understood"), systemImage: "envelope.fill").font(.headline)
-                Spacer()
+        card {
+            HStack(spacing: 8) {
+                Label(L("email.understood"), systemImage: "envelope")
+                    .font(Brand.callout)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
                 if isMine {
-                    Chip(text: L("email.isMine"), tint: .accentColor, symbol: "person.fill")
+                    BrandChip(text: L("email.isMine"), symbol: "person.fill", active: true)
                         .help(L("email.isMineHelp"))
                 }
             }
-            field(L("email.subject"), text: $subject)
-            field(L("email.from"), text: $from)
-            field(L("email.to"), text: $to)
-            HStack {
-                Text(L("email.date")).frame(width: 64, alignment: .leading).foregroundStyle(.secondary)
-                DatePicker("", selection: Binding(get: { date }, set: { date = $0; hasDate = true }),
-                           displayedComponents: [.date, .hourAndMinute])
-                    .labelsHidden()
-                    .fixedSize()
-                Spacer()
-            }
-            if !hasDate {
-                Label(L("email.noDate"), systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text(L("email.dateHint", Fmt.relativeDay(date))).font(.caption).foregroundStyle(.secondary)
-            }
-            if ownerEmails.isEmpty {
-                Text(L("email.noOwnerEmails")).font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 8) {
+                GridRow {
+                    gridLabel(L("email.subject"))
+                    TextField("", text: $subject).textFieldStyle(.roundedBorder)
+                }
+                GridRow {
+                    gridLabel(L("email.from"))
+                    fromCell
+                }
+                GridRow {
+                    gridLabel(L("email.to"))
+                    TextField("", text: $to).textFieldStyle(.roundedBorder)
+                }
+                GridRow {
+                    gridLabel(L("email.date"))
+                    VStack(alignment: .leading, spacing: 4) {
+                        DatePicker("", selection: Binding(get: { date }, set: { date = $0; hasDate = true }),
+                                   displayedComponents: [.date, .hourAndMinute])
+                            .labelsHidden()
+                            .fixedSize()   // a system control of fixed width, alone in its cell
+                        if !hasDate {
+                            Label(L("email.noDate"), systemImage: "exclamationmark.triangle")
+                                .font(Brand.caption)
+                                .foregroundStyle(Brand.color.warning)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
             }
         }
-        .padding(12)
-        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private func field(_ label: String, text: Binding<String>) -> some View {
-        HStack {
-            Text(label).frame(width: 64, alignment: .leading).foregroundStyle(.secondary)
-            TextField("", text: text).textFieldStyle(.roundedBorder)
+    /// "De": the name over the address (two lines, readable), editable with the pencil; a plain field when the paste
+    /// had no clear sender.
+    @ViewBuilder private var fromCell: some View {
+        let address = Self.address(from)
+        if editingFrom || address.name == nil || address.email == nil {
+            TextField("", text: $from).textFieldStyle(.roundedBorder)
+        } else {
+            HStack(alignment: .top, spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(address.name ?? "").foregroundStyle(Brand.color.text).lineLimit(1)
+                    Text(address.email ?? "")
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(from)
+                Button { editingFrom = true } label: {
+                    Image(systemName: "pencil").foregroundStyle(Brand.color.text2)
+                }
+                .buttonStyle(.plain)
+                .help(L("email.editFrom"))
+            }
         }
     }
 
     @ViewBuilder private var threadBox: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(L("email.thread"), systemImage: "bubble.left.and.bubble.right").font(.headline)
+        card {
+            Label(L("email.thread"), systemImage: "bubble.left.and.bubble.right")
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.text)
             if let fixedThread {
-                threadSummary(fixedThread, reason: nil)
+                threadSummary(fixedThread)
             } else {
-                if let best = matches.first, best.score >= 0.5 {
-                    VStack(alignment: .leading, spacing: 6) {
+                let best = matches.first.flatMap { $0.score >= 0.5 ? $0 : nil }
+                if let best {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(best.score >= 0.8 ? L("email.looksLike", best.thread.subject) : L("email.mightBe", best.thread.subject))
-                            .font(.callout.weight(.medium))
+                            .font(Brand.callout)
+                            .foregroundStyle(Brand.color.text)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(threadFacts(best.thread) + " · " + best.reason).font(.caption).foregroundStyle(.secondary)
+                        Text(threadFacts(best.thread) + " · " + best.reason)
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.text2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                }
-                Picker("", selection: Binding(get: { choice }, set: { choice = $0; userPickedThread = true })) {
-                    if let best = matches.first, best.score >= 0.5 {
+                    Picker("", selection: Binding(get: { choice }, set: { choice = $0; userPickedThread = true })) {
                         Text(L("email.addToThread")).tag(ThreadChoice.existing(best.thread.key))
+                        Text(L("email.newThread")).tag(ThreadChoice.new)
                     }
-                    Text(L("email.newThread")).tag(ThreadChoice.new)
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
                 }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-                Menu(otherThreadTitle) {
-                    ForEach(allThreads.sorted { ($0.lastDate ?? .distantPast) > ($1.lastDate ?? .distantPast) }) { thread in
-                        Button("\(thread.subject) — \(state.projectName(thread.projectSlug))") {
-                            choice = .existing(thread.key)
-                            userPickedThread = true
-                        }
-                    }
+                if let thread = chosenThread, thread.key != best?.thread.key {
+                    threadSummary(thread)
+                } else if best == nil {
+                    Text(L("email.newThread")).foregroundStyle(Brand.color.text2)
                 }
-                .disabled(allThreads.isEmpty)
-                .fixedSize()
-                if let thread = chosenThread, thread.key != matches.first?.thread.key || (matches.first?.score ?? 0) < 0.5 {
-                    threadSummary(thread, reason: nil)
-                }
+                otherThreadMenu
             }
         }
-        .padding(12)
-        .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// "Elegir otro hilo…": the 15 most recent threads (and "Nuevo hilo" to go back).
+    private var otherThreadMenu: some View {
+        Menu {
+            if case .existing = choice {
+                Button(L("email.newThread")) { choice = .new; userPickedThread = true }
+                Divider()
+            }
+            ForEach(allThreads.sorted { ($0.lastDate ?? .distantPast) > ($1.lastDate ?? .distantPast) }.prefix(15)) { thread in
+                Button("\(thread.subject) — \(state.projectName(thread.projectSlug))") {
+                    choice = .existing(thread.key)
+                    userPickedThread = true
+                }
+            }
+        } label: {
+            Text(otherThreadTitle)
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.accent)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .disabled(allThreads.isEmpty)
     }
 
     private var otherThreadTitle: String {
@@ -256,54 +361,74 @@ struct AddEmailSheet: View {
         return L("email.otherThread")
     }
 
-    private func threadSummary(_ thread: EmailThread, reason: String?) -> some View {
+    private func threadSummary(_ thread: EmailThread) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("«\(thread.subject)»").font(.callout.weight(.medium))
-            Text(threadFacts(thread)).font(.caption).foregroundStyle(.secondary)
+            Text("«\(thread.subject)»")
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(threadFacts(thread))
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    /// "3 correos · último 24 oct · 📁 Proyecto".
+    /// "3 correos · último 24 oct · 🚀 Proyecto".
     private func threadFacts(_ thread: EmailThread) -> String {
-        var parts = [thread.messageCount == 1 ? L("email.oneMessage") : L("email.messages", thread.messageCount)]
+        var parts = [L("email.messages", thread.messageCount)]
         if let last = thread.lastDate { parts.append(L("email.last", Fmt.day(last))) }
         parts.append(state.projectName(thread.projectSlug))
         return parts.joined(separator: " · ")
     }
 
-    @ViewBuilder private var projectPicker: some View {
-        if let thread = chosenThread {
-            // §14.2: a thread in a project keeps it; one in Sin asignar is moved by a rule (never by the default project),
-            // exactly as the engine does on save.
-            let rule = thread.projectSlug == nil ? inboxThreadRule : nil
-            LabeledContent(L("menu.project")) {
-                Text(state.projectName(rule?.projectSlug ?? thread.projectSlug)).foregroundStyle(.secondary)
-            }
-            .help(L("email.projectLocked"))
-            if let rule {
-                Text(L("rules.mail.byRule", ruleLabel(rule.rule)))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        } else {
-            Picker(L("menu.project"), selection: Binding(get: { projectSlug }, set: {
-                projectSlug = $0
-                projectPicked = true
-                routedRule = nil
-                routedByDefault = false
-            })) {
-                Text(L("inbox.title")).tag(String?.none)
-                Divider()
-                ForEach(state.projects) { project in
-                    Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
+    /// "Proyecto", in the same label column as the fields above. No "Formato" here (§15: the project's default applies).
+    @ViewBuilder private var projectRow: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 4) {
+            GridRow {
+                gridLabel(L("menu.project"))
+                if let thread = chosenThread {
+                    // §14.2: a thread in a project keeps it; one in Sin asignar is moved by a rule (never by the default
+                    // project), exactly as the engine does on save.
+                    let rule = thread.projectSlug == nil ? inboxThreadRule : nil
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(state.projectName(rule?.projectSlug ?? thread.projectSlug))
+                            .foregroundStyle(Brand.color.text)
+                            .lineLimit(1)
+                            .help(L("email.projectLocked"))
+                        if let rule {
+                            Text(L("rules.mail.byRule", ruleLabel(rule.rule)))
+                                .font(Brand.caption).foregroundStyle(Brand.color.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text(L("email.projectLocked")).font(Brand.caption).foregroundStyle(Brand.color.text2)
+                        }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Picker("", selection: Binding(get: { projectSlug }, set: {
+                            projectSlug = $0
+                            projectPicked = true
+                            routedRule = nil
+                            routedByDefault = false
+                        })) {
+                            Text(L("inbox.title")).tag(String?.none)
+                            Divider()
+                            ForEach(state.projects) { project in
+                                Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 260, alignment: .leading)
+                        if let rule = routedRule {
+                            Text(L("rules.mail.byRule", ruleLabel(rule)))
+                                .font(Brand.caption).foregroundStyle(Brand.color.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else if routedByDefault {
+                            Text(L("rules.mail.byDefault")).font(Brand.caption).foregroundStyle(Brand.color.text2)
+                        }
+                    }
                 }
-            }
-            if let rule = routedRule {
-                Text(L("rules.mail.byRule", ruleLabel(rule)))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if routedByDefault {
-                Text(L("rules.mail.byDefault")).font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -427,7 +552,7 @@ struct AddEmailSheet: View {
             // The picker already shows the §14.2 result: a new thread goes exactly there (an explicit Sin asignar is not
             // routed again); an existing thread follows the engine's precedence.
             let route = thread != nil
-            var added: [SourceRecord]
+            let added: [SourceRecord]
             if all.count > 1 {
                 // The whole conversation, oldest first; the newest one carries the user's corrections.
                 var list = all
@@ -436,9 +561,6 @@ struct AddEmailSheet: View {
                 if added.isEmpty { throw EngineError.duplicateEmail(email.subject ?? "") }
             } else {
                 added = [try state.engine.addEmail(email, threadKey: thread?.key, projectSlug: project, routeIfUnassigned: route)]
-            }
-            if let templateId {
-                for source in added { state.engine.setTemplate(sourceId: source.id, templateId: templateId) }
             }
             state.bumpVault()
             // MARK: v0.4 routing — the deciding rule counts a hit; a manual project offers a rule (§14.3).
@@ -549,23 +671,23 @@ struct ThreadSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            Rectangle().fill(Brand.color.line).frame(height: 1)
             if !loaded {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                BrandLoader(size: 24).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if messages.isEmpty {
                 EmptyStateView(symbol: "envelope", title: L("thread.empty"), message: "")
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
                         ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
-                            MessageCard(message: message, number: index + 1, startExpanded: index == messages.count - 1)
+                            MessageCard(message: message, startExpanded: index == messages.count - 1)
                         }
                     }
-                    .padding(20)
+                    .padding(Brand.spacing.content)
                 }
             }
-            Divider()
-            HStack {
+            Rectangle().fill(Brand.color.line).frame(height: 1)
+            HStack(spacing: 8) {
                 Button {
                     dismiss()
                     // Let this sheet close before the email sheet opens.
@@ -573,36 +695,65 @@ struct ThreadSheet: View {
                         state.requestEmail(threadKey: threadKey, projectSlug: thread?.projectSlug)
                     }
                 } label: {
-                    Label(L("thread.addNext"), systemImage: "plus.circle")
+                    Label(L("thread.addNext"), systemImage: "plus")
                 }
-                Spacer()
-                Button(L("common.close")) { dismiss() }.keyboardShortcut(.cancelAction)
+                .buttonStyle(.brandSecondary)
+                Spacer(minLength: 8)
+                Button(L("common.close")) { dismiss() }
+                    .buttonStyle(.brandPrimary)
+                    .keyboardShortcut(.cancelAction)
             }
             .padding(14)
         }
-        .frame(width: 720, height: 640)
+        .font(Brand.body)
+        .background(Brand.color.surface)
+        .frame(minWidth: 560, idealWidth: 680, maxWidth: .infinity, minHeight: 420, idealHeight: 520, maxHeight: .infinity)
         .task(id: state.vaultRevision) { await load() }
         .sheet(item: $export) { ExportSheet(request: $0) }
     }
 
+    /// Title and facts; "Resumen del hilo" · "Exportar" on the right when they fit, else below the title.
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "envelope.fill")
-                .font(.system(size: 18))
-                .foregroundStyle(Color.accentColor)
+            Image(systemName: "envelope")
+                .font(Brand.font(16))
+                .foregroundStyle(Brand.color.accent)
                 .frame(width: 36, height: 36)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(thread?.subject ?? threadKey).font(.title3.weight(.semibold)).lineLimit(2)
-                if let thread {
-                    Text(facts(thread)).font(.caption).foregroundStyle(.secondary)
-                    if !thread.participants.isEmpty {
-                        Text(thread.participants.map(\.display).joined(separator: ", "))
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                    }
+                .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 12) {
+                    titleBlock
+                    Spacer(minLength: 8)
+                    headerButtons
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    titleBlock
+                    headerButtons
                 }
             }
-            Spacer()
+        }
+        .padding(Brand.spacing.content)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(thread?.subject ?? threadKey)
+                .font(Brand.section)
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let thread {
+                Text(facts(thread)).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                if !thread.participants.isEmpty {
+                    Text(thread.participants.map(\.display).joined(separator: ", "))
+                        .font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(2)
+                }
+            }
+        }
+    }
+
+    private var headerButtons: some View {
+        HStack(spacing: 8) {
             if let wikiPage, let onOpenPage {
                 Button {
                     dismiss()
@@ -610,6 +761,7 @@ struct ThreadSheet: View {
                 } label: {
                     Label(L("thread.openSummary"), systemImage: "doc.text")
                 }
+                .buttonStyle(.brandSecondary)
             }
             Button {
                 if let wikiPage {
@@ -620,13 +772,14 @@ struct ThreadSheet: View {
             } label: {
                 Label(L("export.button"), systemImage: "square.and.arrow.up")
             }
+            .buttonStyle(.brandSecondary)
             .disabled(wikiPage == nil && messages.isEmpty)
         }
-        .padding(20)
+        .fixedSize()   // two short, fixed labels
     }
 
     private func facts(_ thread: EmailThread) -> String {
-        var parts = [thread.messageCount == 1 ? L("email.oneMessage") : L("email.messages", thread.messageCount)]
+        var parts = [L("email.messages", thread.messageCount)]
         if let first = thread.firstDate, let last = thread.lastDate {
             parts.append(Calendar.current.isDate(first, inSameDayAs: last) ? Fmt.day(first) : "\(Fmt.day(first)) – \(Fmt.day(last))")
         }
@@ -657,66 +810,100 @@ struct ThreadSheet: View {
     }
 }
 
+/// One email of the thread: sender (name only), "Para: …", one timestamp (when it was sent; when it was added is in
+/// the tooltip), the new text, and the quoted history folded.
 private struct MessageCard: View {
     let message: ThreadMessage
-    let number: Int
     let startExpanded: Bool
 
     @ViewState private var expanded: Bool?
     @ViewState private var showQuoted = false
 
+    private var sender: String {
+        guard !message.from.isEmpty else { return L("thread.unknownSender") }
+        let address = AddEmailSheet.address(message.from)
+        return address.name ?? address.email ?? message.from
+    }
+
+    /// "Laura Méndez, Ana García" (names only; the full addresses are in the tooltip).
+    private var recipients: String {
+        message.to.split(separator: ",").map { part in
+            let address = AddEmailSheet.address(String(part))
+            return address.name ?? address.email ?? String(part)
+        }.joined(separator: ", ")
+    }
+
     var body: some View {
+        let isExpanded = expanded ?? startExpanded
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                expanded = !(expanded ?? startExpanded)
+                withAnimation(Brand.motion.animation(fast: true)) { expanded = !isExpanded }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: (expanded ?? startExpanded) ? "chevron.down" : "chevron.right")
-                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary).frame(width: 12)
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(Brand.font(10, .semibold))
+                        .foregroundStyle(Brand.color.text2)
+                        .frame(width: 12)
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(message.from.isEmpty ? L("thread.unknownSender") : message.from).font(.body.weight(.semibold))
-                            if !message.to.isEmpty {
-                                Text("→ \(message.to)").foregroundStyle(.secondary).lineLimit(1)
-                            }
+                        Text(sender)
+                            .font(Brand.font(13, .semibold))
+                            .foregroundStyle(Brand.color.text)
+                            .lineLimit(1)
+                            .help(message.from)
+                        if !message.to.isEmpty {
+                            Text(L("mail.to", recipients))
+                                .font(Brand.caption)
+                                .foregroundStyle(Brand.color.text2)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .help(message.to)
                         }
-                        Text(L("thread.sentAdded", Fmt.dayTime(message.date), Fmt.dayTime(message.source.createdAt)))
-                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    Text("#\(number)").font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(Fmt.dayTime(message.date))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                        .help(L("thread.sentAdded", Fmt.dayTime(message.date), Fmt.dayTime(message.source.createdAt)))
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            if expanded ?? startExpanded {
+            if isExpanded {
                 Text(message.body.isEmpty ? L("thread.emptyBody") : message.body)
+                    .foregroundStyle(Brand.color.text)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 20)
                 if let quoted = message.quoted, !quoted.isEmpty {
                     DisclosureGroup(isExpanded: $showQuoted) {
                         Text(quoted)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Brand.color.text2)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 4)
                     } label: {
-                        Text(L("thread.quoted")).font(.callout).foregroundStyle(.secondary)
+                        Text(L("mail.quoted")).font(Brand.callout).foregroundStyle(Brand.color.text2)
                     }
                     .padding(.leading, 20)
                 }
             } else if !message.body.isEmpty {
                 Text(message.body.replacingOccurrences(of: "\n", with: " "))
                     .lineLimit(1)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.color.text2)
                     .padding(.leading, 20)
             }
         }
+        .font(Brand.body)
         .padding(14)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Brand.color.card, in: shape)
+        .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
     }
 }
 
@@ -733,7 +920,8 @@ struct OwnerEmailsField: View {
             TextField(L("owner.emails"), text: $text, prompt: Text(L("owner.emailsPlaceholder")))
                 .onSubmit(save)
             if showsHint {
-                Text(L("owner.emailsHint")).font(.caption).foregroundStyle(.secondary)
+                Text(L("owner.emailsHint")).font(Brand.caption).foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .onAppear(perform: load)

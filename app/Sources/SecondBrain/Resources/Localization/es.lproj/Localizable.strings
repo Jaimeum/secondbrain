@@ -1257,3 +1257,13 @@
 "onb.change" = "Cambiar…";
 "readonly.promise" = "Solo leo. Nunca envío, borro ni cambio nada.";
 "brand.name" = "secondbrain";
+/* v0.5 — mail */
+"mail.backToList" = "Correos";
+"mail.clearSearch" = "Borrar búsqueda";
+"mail.unread" = "Sin leer";
+"mail.inBrain.help" = "Ya está en el cerebro. Clic para verlo o quitarlo.";
+"mail.seeUnassigned" = "Ver en Sin asignar";
+"mail.savedIn" = "Guardado en %@";
+"mail.saveConversationNoProject" = "Guardar hilo (%d) sin proyecto";
+"mail.more" = "Más acciones";
+"email.editFrom" = "Corregir remitente";

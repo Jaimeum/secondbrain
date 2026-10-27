@@ -7,6 +7,7 @@ import Foundation
 
 public enum GraphNodeKind: String, Codable, Sendable {
     case project, meeting, email, document, note, url, person, topic, decision, question, task, page
+    case repo   // MARK: v0.4 github — wiki/repos/
 }
 
 public struct GraphNode: Codable, Identifiable, Hashable, Sendable {
@@ -108,10 +109,14 @@ public struct OAuthAppRegistration: Codable, Equatable, Sendable {
     public var googleProjectId: String?
     public var googleAuthURI: String?       // "auth_uri"
     public var googleTokenURI: String?      // "token_uri"
+    // MARK: v0.4 github — the GitHub OAuth App for the device flow (no secret).
+    public var githubClientId: String?
     public init(microsoftClientId: String? = nil, googleClientId: String? = nil, googleClientSecret: String? = nil,
-                googleProjectId: String? = nil, googleAuthURI: String? = nil, googleTokenURI: String? = nil) {
+                googleProjectId: String? = nil, googleAuthURI: String? = nil, googleTokenURI: String? = nil,
+                githubClientId: String? = nil) {
         self.microsoftClientId = microsoftClientId; self.googleClientId = googleClientId; self.googleClientSecret = googleClientSecret
         self.googleProjectId = googleProjectId; self.googleAuthURI = googleAuthURI; self.googleTokenURI = googleTokenURI
+        self.githubClientId = githubClientId
     }
 
     public static let empty = OAuthAppRegistration()
@@ -146,7 +151,10 @@ public struct OAuthAppRegistration: Codable, Equatable, Sendable {
                 ?? OAuthDefaults.googleClientSecret.nonEmptyString,
             googleProjectId: config.oauth.googleProjectId.nonEmpty ?? OAuthDefaults.bundled.googleProjectId.nonEmpty,
             googleAuthURI: config.oauth.googleAuthURI.nonEmpty ?? OAuthDefaults.bundled.googleAuthURI.nonEmpty,
-            googleTokenURI: config.oauth.googleTokenURI.nonEmpty ?? OAuthDefaults.bundled.googleTokenURI.nonEmpty
+            googleTokenURI: config.oauth.googleTokenURI.nonEmpty ?? OAuthDefaults.bundled.googleTokenURI.nonEmpty,
+            // MARK: v0.4 github
+            githubClientId: environment["SB_GITHUB_CLIENT_ID"].nonEmpty ?? config.oauth.githubClientId.nonEmpty
+                ?? OAuthDefaults.githubClientId.nonEmptyString
         )
     }
 }
@@ -160,6 +168,7 @@ public enum OAuthDefaults {
     public static var microsoftClientId: String { bundled.microsoftClientId ?? "" }
     public static var googleClientId: String { bundled.googleClientId ?? "" }
     public static var googleClientSecret: String { bundled.googleClientSecret ?? "" }
+    public static var githubClientId: String { bundled.githubClientId ?? "" }   // MARK: v0.4 github
 
     /// Where the bundled file is looked for: `SB_OAUTH_DEFAULTS`, then `<app bundle>/Contents/Resources/oauth-defaults.json`.
     public static var fileURL: URL? {

@@ -24,6 +24,9 @@ public struct AppConfig: Codable, Equatable, Sendable {
     public var oauth: OAuthAppRegistration = .empty
     /// Last project chosen in Correo's "Agregar al cerebro".
     public var lastMailProjectSlug: String? = nil
+    // MARK: v0.4 github
+    /// Minutes between automatic GitHub syncs (CONTRACT §13.4); 0 = only by hand.
+    public var githubSyncMinutes: Int = 60
 
     public static let `default` = AppConfig(
         vaultPath: "~/Documents/SecondBrain",
@@ -41,17 +44,19 @@ public struct AppConfig: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case vaultPath, dataPath, whisperModel, claudePath, ingestModel, queryModel, uiLanguage, captureMic, gitEnabled,
-             hotkeyEnabled, onboardingComplete, appearance, oauth, lastMailProjectSlug
+             hotkeyEnabled, onboardingComplete, appearance, oauth, lastMailProjectSlug,
+             githubSyncMinutes  // MARK: v0.4 github
     }
 
     public init(vaultPath: String, dataPath: String, whisperModel: String, claudePath: String?, ingestModel: String,
                 queryModel: String, uiLanguage: String, captureMic: Bool, gitEnabled: Bool, hotkeyEnabled: Bool,
                 onboardingComplete: Bool, appearance: String = "system", oauth: OAuthAppRegistration = .empty,
-                lastMailProjectSlug: String? = nil) {
+                lastMailProjectSlug: String? = nil, githubSyncMinutes: Int = 60) {
         self.vaultPath = vaultPath; self.dataPath = dataPath; self.whisperModel = whisperModel; self.claudePath = claudePath
         self.ingestModel = ingestModel; self.queryModel = queryModel; self.uiLanguage = uiLanguage; self.captureMic = captureMic
         self.gitEnabled = gitEnabled; self.hotkeyEnabled = hotkeyEnabled; self.onboardingComplete = onboardingComplete
         self.appearance = appearance; self.oauth = oauth; self.lastMailProjectSlug = lastMailProjectSlug
+        self.githubSyncMinutes = githubSyncMinutes   // MARK: v0.4 github
     }
 
     /// v0.1 fields are required; everything added later falls back to its default when missing, so an older
@@ -77,6 +82,12 @@ public struct AppConfig: Codable, Equatable, Sendable {
         }
         oauth = (try? c.decodeIfPresent(OAuthAppRegistration.self, forKey: .oauth)) ?? .empty
         lastMailProjectSlug = try? c.decodeIfPresent(String.self, forKey: .lastMailProjectSlug)
+        // MARK: v0.4 github
+        if let minutes = try? c.decodeIfPresent(Int.self, forKey: .githubSyncMinutes), minutes >= 0 {
+            githubSyncMinutes = minutes
+        } else {
+            githubSyncMinutes = 60
+        }
     }
 
     public static var configURL: URL {
@@ -116,6 +127,14 @@ public struct DataPaths: Sendable {
     public var accounts: URL { root.appendingPathComponent("accounts.json") }
     /// v0.3: calendar event / series → project links (`MeetingLinks`).
     public var meetings: URL { root.appendingPathComponent("meetings.json") }
+    // MARK: v0.4 github
+    /// `data/github/`: account.json, repos.json, last-sync.json and the code checkouts (CONTRACT §13).
+    public var github: URL { root.appendingPathComponent("github") }
+    public var githubAccount: URL { github.appendingPathComponent("account.json") }
+    public var githubRepos: URL { github.appendingPathComponent("repos.json") }
+    public var githubLastSync: URL { github.appendingPathComponent("last-sync.json") }
+    /// `data/github/checkouts/<owner>__<repo>/<branch-slug>/` (outside the vault: no graph, no history).
+    public var githubCheckouts: URL { github.appendingPathComponent("checkouts") }
 
     public func ensureExist() throws {
         for dir in [sessions, sources, jobs, history, models, logs] {
@@ -170,7 +189,10 @@ public struct SessionManifest: Codable, Equatable, Sendable {
 
 // MARK: - Sources, jobs, history
 
-public enum SourceKind: String, Codable, Sendable { case meeting, document, note, url, email }
+public enum SourceKind: String, Codable, Sendable {
+    case meeting, document, note, url, email
+    case github   // MARK: v0.4 github — one raw per repo sync (CONTRACT §13.3)
+}
 
 public enum SourceStatus: String, Codable, Sendable {
     case recording, queued, transcribing, needsProject, ingesting, done, failed

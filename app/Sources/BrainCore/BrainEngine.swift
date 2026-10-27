@@ -60,6 +60,9 @@ private final class ConfigBox: @unchecked Sendable {
     public private(set) var claude: ClaudeRunner
     /// v0.3: connected Microsoft 365 / Google accounts (CONTRACT §12.3).
     public let accounts: AccountStore
+    // MARK: v0.4 github
+    /// Followed GitHub repos per project (CONTRACT §13).
+    public let github: GitHubStore
     public private(set) var sources: [SourceRecord] = []
     public private(set) var jobs: [Job] = []
     public private(set) var isProcessing = false
@@ -114,6 +117,7 @@ private final class ConfigBox: @unchecked Sendable {
         self.queue = JobQueue(dir: paths.jobs)
         self.queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
         self.accounts = AccountStore(fileURL: paths.accounts)
+        self.github = GitHubStore(paths: paths, configProvider: { box.get() })   // MARK: v0.4 github
         Log.configure(logsDir: paths.logs)
         // MARK: v0.3 accounts — a connected address joins the owner's emails
         accounts.onConnected = { [weak self] in self?.rememberOwnerEmail(of: $0) }
@@ -142,6 +146,8 @@ private final class ConfigBox: @unchecked Sendable {
         Log.info("engine started: \(sources.count) sources, \(jobs.count) jobs, vault=\(config.vaultURL.path)"
                  + (owner ? "" : " (queue owned by pid \(queueLock.holderPid().map(String.init) ?? "?"))"))
         if autoProcess { startWatching() }
+        // MARK: v0.4 github — demo repos go under a project this vault has
+        if github.isDemo, projects.get(GitHubDemo.projectSlug) == nil { github.adoptDemoProject(projects.list().first?.slug) }
         pruneHistory()
         kick()
         releaseQueueIfIdle()
@@ -188,6 +194,7 @@ private final class ConfigBox: @unchecked Sendable {
         queue = JobQueue(dir: paths.jobs)
         queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
         accounts.reload(fileURL: paths.accounts)
+        github.reload(paths: paths)   // MARK: v0.4 github
         Log.configure(logsDir: paths.logs)
         writeGeneration += 1
         sources = []
@@ -425,8 +432,21 @@ private final class ConfigBox: @unchecked Sendable {
 
     /// Streams a read-only answer from the wiki (not queued: it is interactive).
     public func ask(_ question: String, projectSlug: String?) -> AsyncThrowingStream<ClaudeEvent, Error> {
-        claude.run(command: "query", arguments: "scope=\(projectSlug ?? "global") | \(question)",
-                   mode: .readOnly, model: config.queryModel)
+        // MARK: v0.4 github — the followed repos' code checkouts are readable (`--add-dir`) and listed after the question.
+        let checkouts = github.checkouts(project: projectSlug)
+        return claude.run(command: "query", arguments: "scope=\(projectSlug ?? "global") | \(question)" + Self.reposBlock(checkouts),
+                          mode: .readOnly, model: config.queryModel, extraDirs: checkouts.map(\.path))
+    }
+
+    /// `\n\nrepos:\n- owner/name@branch (sha, synced date) → /abs/path` (empty without checkouts). CONTRACT §13.5.
+    public nonisolated static func reposBlock(_ checkouts: [RepoCheckout]) -> String {
+        guard !checkouts.isEmpty else { return "" }
+        let lines = checkouts.map { c in
+            let sha = c.sha.map { String($0.prefix(7)) } ?? "?"
+            let synced = c.syncedAt.map { SBDate.iso($0) } ?? "?"
+            return "- \(c.repo)@\(c.branch) (\(sha), synced \(synced)) → \(c.path.path)"
+        }
+        return "\n\nrepos:\n" + lines.joined(separator: "\n")
     }
 
     public func saveAnswer(question: String, answer: String, projectSlug: String?) {
@@ -1033,6 +1053,7 @@ private final class ConfigBox: @unchecked Sendable {
         case .note: sub = "notes"
         case .document, .url: sub = "docs"
         case .email: sub = "emails"
+        case .github: sub = "github"   // MARK: v0.4 github (GitHubSync writes its own <owner>-<repo>/ subfolder)
         }
         if let projectSlug { return vault.root.appendingPathComponent("projects/\(projectSlug)/raw/\(sub)") }
         return vault.root.appendingPathComponent("_inbox/\(sub)")

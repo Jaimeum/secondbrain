@@ -121,6 +121,7 @@ extension SourceRecord {
         case .document: L("dates.document")
         case .note: L("dates.note")
         case .url: L("dates.url")
+        case .github: "GitHub"   // MARK: v0.4 github (a name, same in every language)
         }
     }
 
@@ -129,6 +130,7 @@ extension SourceRecord {
         switch kind {
         case .meeting, .note, .url: L("dates.addedF")
         case .email, .document: L("dates.addedM")
+        case .github: L("dates.addedM")   // MARK: v0.4 github
         }
     }
 
@@ -192,6 +194,7 @@ extension SourceKind {
         case .note: "note.text"
         case .url: "link"
         case .email: "envelope.fill"
+        case .github: "chevron.left.forwardslash.chevron.right"   // MARK: v0.4 github
         }
     }
 
@@ -202,6 +205,7 @@ extension SourceKind {
         case .note: "📝"
         case .url: "🔗"
         case .email: "✉️"
+        case .github: "💻"   // MARK: v0.4 github
         }
     }
 
@@ -212,6 +216,7 @@ extension SourceKind {
         case .note: L("kind.note")
         case .url: L("kind.url")
         case .email: L("kind.email")
+        case .github: "GitHub"   // MARK: v0.4 github
         }
     }
 }

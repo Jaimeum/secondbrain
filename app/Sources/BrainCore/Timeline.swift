@@ -6,6 +6,7 @@ public extension BrainEngine {
     func timeline(projectSlug: String?) async -> [TimelineEntry] {
         let snapshot = sources.filter { src in
             src.status != .recording && (projectSlug == nil || src.projectSlug == projectSlug)
+                && src.kind != .github   // MARK: v0.4 github — repo syncs live in wiki/repos, not on the timeline
         }
         let vault = self.vault, projects = self.projects, language = config.uiLanguage
         return await Task.detached(priority: .userInitiated) {
@@ -59,6 +60,7 @@ struct TimelineBuilder {
         case .document: kind = .document
         case .note: kind = .note
         case .url: kind = .url
+        case .github: kind = .document   // MARK: v0.4 github (filtered out above; kept exhaustive)
         }
         let page = pagePath(for: src)
         var title = src.title

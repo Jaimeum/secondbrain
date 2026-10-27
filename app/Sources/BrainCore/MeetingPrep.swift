@@ -95,7 +95,8 @@ public enum MeetingPrep {
 
     /// The question for "Preparar con Claude": fixed sections **Quiénes**, **Pendientes abiertos**, **Para preguntar**
     /// (3) and an agenda, in the UI language, citing the wiki.
-    public static func prepPrompt(event: CalendarEvent, language: String, projectName: String? = nil) -> String {
+    /// `repos` (v0.4 github): "owner/name" the project follows; when present the prep also covers recent code changes.
+    public static func prepPrompt(event: CalendarEvent, language: String, projectName: String? = nil, repos: [String] = []) -> String {
         let l = Lang(language)
         let when = SBDate.human(event.start, hasTime: !event.isAllDay, language: language)
         let minutes = Int((event.end.timeIntervalSince(event.start) / 60).rounded())
@@ -136,6 +137,11 @@ public enum MeetingPrep {
             ## Suggested agenda
             3 to 5 points, with approximate minutes, that fit in the meeting.
             """)
+        // MARK: v0.4 github
+        if !repos.isEmpty {
+            out += "\n" + l.t("En **Pendientes abiertos**, incluye también los cambios recientes del código del proyecto (repos: \(repos.joined(separator: ", ")); lee wiki/repos/) que sean relevantes para los asistentes.",
+                               "In **Open items**, also include recent code changes in the project (repos: \(repos.joined(separator: ", ")); read wiki/repos/) that matter to the attendees.")
+        }
         return out
     }
 

@@ -11,20 +11,23 @@ public final class ClaudeRunner: Sendable {
     }
 
     /// Reads `vault/.claude/commands/<command>.md`, strips its frontmatter, fills `$ARGUMENTS` and runs it.
-    public func run(command: String, arguments: String, mode: ClaudeMode, model: String) -> AsyncThrowingStream<ClaudeEvent, Error> {
+    /// `extraDirs` (v0.4 github): folders outside the vault Claude may also read (`--add-dir`), only in `.readOnly`.
+    public func run(command: String, arguments: String, mode: ClaudeMode, model: String,
+                    extraDirs: [URL] = []) -> AsyncThrowingStream<ClaudeEvent, Error> {
         let file = vaultURL.appendingPathComponent(".claude/commands/\(command).md")
         guard let template = try? String(contentsOf: file, encoding: .utf8) else {
             return AsyncThrowingStream { $0.finish(throwing: ClaudeError.failed("Missing command file \(file.path)")) }
         }
         let prompt = Frontmatter.strip(template).replacingOccurrences(of: "$ARGUMENTS", with: arguments)
-        return runPrompt(prompt, mode: mode, model: model)
+        return runPrompt(prompt, mode: mode, model: model, extraDirs: extraDirs)
     }
 
-    public func runPrompt(_ prompt: String, mode: ClaudeMode, model: String) -> AsyncThrowingStream<ClaudeEvent, Error> {
+    public func runPrompt(_ prompt: String, mode: ClaudeMode, model: String,
+                          extraDirs: [URL] = []) -> AsyncThrowingStream<ClaudeEvent, Error> {
         let config = configProvider()
         let vault = vaultURL
         return AsyncThrowingStream { continuation in
-            let args = Self.arguments(mode: mode, model: model)
+            let args = Self.arguments(mode: mode, model: model, extraDirs: extraDirs)
             let session = ClaudeProcess(arguments: args, prompt: prompt, cwd: vault,
                                         parser: ClaudeStreamParser(vaultURL: vault, language: config.uiLanguage),
                                         continuation: continuation)
@@ -51,9 +54,12 @@ public final class ClaudeRunner: Sendable {
     /// `--setting-sources project` drops the user's own `~/.claude/settings*.json` (whose allow rules or
     /// `additionalDirectories` could widen that) while still loading the vault's CLAUDE.md. The deny list is
     /// only a backstop for the most sensitive folders.
-    static func arguments(mode: ClaudeMode, model: String) -> [String] {
+    static func arguments(mode: ClaudeMode, model: String, extraDirs: [URL] = []) -> [String] {
         let tools = mode == .readOnly ? "Read,Glob,Grep" : "Read,Glob,Grep,Write,Edit,MultiEdit"
-        return [
+        // MARK: v0.4 github — code checkouts are added for reading only; an editing run never sees them (acceptEdits
+        // would otherwise let it write there).
+        let dirs = mode == .readOnly ? extraDirs.flatMap { ["--add-dir", $0.path] } : []
+        return dirs + [
             "-p",
             "--output-format", "stream-json", "--verbose",
             "--model", model,

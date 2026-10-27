@@ -294,6 +294,7 @@ public enum KnowledgeGraphBuilder {
             case "topics": kind = .topic
             case "decisions": kind = .decision
             case "questions": kind = .question
+            case "repos": kind = .repo   // MARK: v0.4 github
             default: kind = .page
             }
         }
@@ -309,6 +310,7 @@ public enum KnowledgeGraphBuilder {
         case "decision": return .decision
         case "question": return .question
         case "task": return .task
+        case "repo", "github-repo", "repo-branch": return .repo   // MARK: v0.4 github
         case "overview", "tasks", "timeline", "index", "people": return .page
         default: return kind
         }

@@ -66,6 +66,9 @@ extension BrainEngine {
         case .meeting: candidate = "projects/\(slug)/wiki/meetings/\(key).md"
         case .email: candidate = "projects/\(slug)/wiki/emails/\(src.threadKey ?? key).md"
         case .document, .note, .url: candidate = "projects/\(slug)/wiki/sources/\(key).md"
+        case .github:   // MARK: v0.4 github — raw/github/<owner>-<repo>/… → the repo's living page
+            let repoSlug = ((raw as NSString).deletingLastPathComponent as NSString).lastPathComponent
+            candidate = "projects/\(slug)/wiki/repos/\(repoSlug).md"
         }
         if FileManager.default.fileExists(atPath: vault.url(for: candidate).path) { return candidate }
         let wanted = ((candidate as NSString).lastPathComponent).lowercased()

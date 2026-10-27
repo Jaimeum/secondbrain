@@ -122,6 +122,7 @@ extension BrainEngine {
         case .document: parts.append("**\(lang.t("Fecha del documento", "Document date")):** \(h(when, !dateOnly))")
         case .note: parts.append("**\(lang.t("Fecha", "Date")):** \(h(when, !dateOnly))")
         case .url: parts.append("**\(lang.t("Fecha de la página", "Page date")):** \(h(when, !dateOnly))")
+        case .github: parts.append("**\(lang.t("Sincronizado de GitHub", "Synced from GitHub")):** \(h(when))")   // MARK: v0.4 github
         }
         let added = thread.flatMap { $0.map(\.createdAt).max() } ?? src.createdAt
         parts.append("**\(lang.t("Agregado al cerebro", "Added to the brain")):** \(h(added))")

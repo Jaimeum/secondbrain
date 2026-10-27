@@ -220,9 +220,12 @@ public extension BrainEngine {
     /// Saves one email as an immutable raw in its thread folder and queues it (ingest, or classify in the inbox).
     /// `threadKey` nil = new thread. `projectSlug` is ignored when the thread already lives in a project; an inbox
     /// thread given a project moves there whole. Throws `EngineError.duplicateEmail` for an exact duplicate.
+    /// v0.4: `projectSlug` nil + `routeIfUnassigned` → routing rules, then the default project (CONTRACT §14.2);
+    /// pass `false` when the user chose the inbox on purpose. `lastRoutingDecision` tells which rule decided.
     @discardableResult
-    func addEmail(_ email: ParsedEmail, threadKey: String?, projectSlug: String?) throws -> SourceRecord {
-        try addEmail(email, threadKey: threadKey, projectSlug: projectSlug, externalId: nil)
+    func addEmail(_ email: ParsedEmail, threadKey: String?, projectSlug: String?, routeIfUnassigned: Bool = true) throws -> SourceRecord {
+        lastRoutingDecision = nil
+        return try addEmail(email, threadKey: threadKey, projectSlug: projectSlug, externalId: nil, routeIfUnassigned: routeIfUnassigned)
     }
 
     /// The source added from a connected account's message (`"<provider>:<messageId>"`), if any.
@@ -234,13 +237,24 @@ public extension BrainEngine {
     /// = `"<provider>:<messageId>"`): stored in the source, the raw (`external_id:`) and `_thread.json`; adding the
     /// same message again throws `EngineError.duplicateEmail`.
     @discardableResult
-    func addEmail(_ email: ParsedEmail, threadKey: String?, projectSlug: String?, externalId: String?) throws -> SourceRecord {
+    func addEmail(_ email: ParsedEmail, threadKey: String?, projectSlug: String?, externalId: String?,
+                  routeIfUnassigned: Bool = true) throws -> SourceRecord {
         guard !email.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(email.quotedHistory ?? "").isEmpty else {
             throw EngineError.emptyEmail
         }
         if let dup = duplicateOf(email, externalId: externalId) { throw EngineError.duplicateEmail(dup.title) }
         let fm = FileManager.default
         var project = validProject(projectSlug)
+        // MARK: v0.4 routing — §14.2 steps 2–4 when nobody chose a project.
+        var routed = false
+        if projectSlug == nil, routeIfUnassigned, !routingSuppressed {
+            let r = routedProject(for: email, threadKey: threadKey)
+            if r.evaluated {
+                lastRoutingDecision = r.decision
+                project = r.project
+                routed = r.project != nil
+            }
+        }
         var folder: String
         var meta: ThreadMeta
         var moveTo: String?   // an inbox thread given a project: the whole thread moves there afterwards
@@ -317,20 +331,69 @@ public extension BrainEngine {
         enqueueAfterRaw(&src)
         Log.info("email added to thread \(meta.key) (\(folder)) as \(id)")
         if let moveTo {
-            try assignThread(meta.key, to: moveTo)
+            if routed {
+                // A rule moving an inbox thread: if the thread can't move now, the message still stays in the inbox.
+                do { try assignThread(meta.key, to: moveTo) } catch { Log.error("routing: thread \(meta.key) stays in the inbox: \(error)") }
+            } else {
+                try assignThread(meta.key, to: moveTo)
+            }
             return source(id) ?? src
         }
         return src
     }
 
+    // MARK: v0.4 routing
+
+    /// §14.2 for an email without an explicit project. A thread that lives in a project keeps it (step 2, not
+    /// evaluated). Otherwise the first matching rule (its hit is recorded; a rule to a deleted project is skipped), then
+    /// the default project — the default only for a new thread: an inbox thread is moved by a rule, never by the default.
+    internal func routedProject(for email: ParsedEmail, threadKey: String?) -> (project: String?, decision: RoutingDecision?, evaluated: Bool) {
+        var inboxThread = false
+        if let threadKey {
+            guard let folder = vault.threadFolders().first(where: { ($0 as NSString).lastPathComponent == threadKey }) else {
+                return (nil, nil, false)
+            }
+            if let inProject = VaultStore.projectSlug(of: folder) { return (inProject, nil, false) }
+            inboxThread = true
+        }
+        if let d = routing.route(.mail(email, ownerEmails: vault.ownerEmails())) {
+            if d.projectSlug == nil { return (nil, d, true) }
+            if let p = validProject(d.projectSlug) { return (p, d, true) }
+        }
+        return (inboxThread ? nil : validProject(routing.settings.defaultProjectSlug), nil, true)
+    }
+
+    /// What routing would decide (rule, then default project), without recording a hit: preselection in the UI.
+    /// `projectSlug` nil = inbox; `decision` nil = no rule matched (the default project, if any, applies).
+    func routingPreview(_ subject: RoutingSubject) -> (projectSlug: String?, decision: RoutingDecision?) {
+        if let d = routing.match(subject) {
+            if d.projectSlug == nil { return (nil, d) }
+            if let p = validProject(d.projectSlug) { return (p, d) }
+        }
+        return (validProject(routing.settings.defaultProjectSlug), nil)
+    }
+
+    /// `addMailMessages` (CONTRACT §12.4) with the §14.2 switch: `routeIfUnassigned: false` when the user chose the
+    /// inbox on purpose. The plain call routes (same as `true`).
+    @discardableResult
+    func addMailMessages(_ messages: [MailMessageFull], account: ConnectedAccount, threadKey: String?, projectSlug: String?,
+                         routeIfUnassigned: Bool) throws -> [SourceRecord] {
+        lastRoutingDecision = nil
+        let saved = routingSuppressed
+        routingSuppressed = !routeIfUnassigned
+        defer { routingSuppressed = saved }
+        return try addMailMessages(messages, account: account, threadKey: threadKey, projectSlug: projectSlug)
+    }
+
     /// Adds several messages (e.g. `parseEmails`) to one thread, oldest first; duplicates are skipped.
     @discardableResult
-    func addEmails(_ list: [ParsedEmail], threadKey: String?, projectSlug: String?) throws -> [SourceRecord] {
+    func addEmails(_ list: [ParsedEmail], threadKey: String?, projectSlug: String?, routeIfUnassigned: Bool = true) throws -> [SourceRecord] {
+        lastRoutingDecision = nil
         var key = threadKey
         var added: [SourceRecord] = []
         for email in list.sorted(by: { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }) {
             do {
-                let src = try addEmail(email, threadKey: key, projectSlug: projectSlug)
+                let src = try addEmail(email, threadKey: key, projectSlug: projectSlug, externalId: nil, routeIfUnassigned: routeIfUnassigned)
                 key = src.threadKey
                 added.append(src)
             } catch EngineError.duplicateEmail {

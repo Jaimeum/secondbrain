@@ -14,6 +14,7 @@ struct SB: AsyncParsableCommand {
                       Undo.self, Models.self, EmailCmd.self, TasksCmd.self, TaskCmd.self, TemplatesCmd.self, TemplateCmd.self,
                       Reformat.self, TimelineCmd.self, SetDate.self, Export.self, SelfTest.self,
                       DemoVaultCmd.self, GraphCmd.self]  // MARK: v0.3 graph
+                      + [RulesCmd.self, RouteCmd.self]  // MARK: v0.4 routing
     )
 }
 

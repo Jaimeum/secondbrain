@@ -60,6 +60,14 @@ private final class ConfigBox: @unchecked Sendable {
     public private(set) var claude: ClaudeRunner
     /// v0.3: connected Microsoft 365 / Google accounts (CONTRACT §12.3).
     public let accounts: AccountStore
+    // MARK: v0.4 routing
+    /// Routing rules of the vault (`.secondbrain/routing.json`, CONTRACT §14).
+    public let routing: RoutingStore
+    /// The rule that decided the project of the last email added without an explicit project (nil = no rule did:
+    /// default project or inbox). Set by `addEmail`/`addEmails`/`addMailMessages(…routeIfUnassigned:)`; transient.
+    public var lastRoutingDecision: RoutingDecision?
+    /// `addMailMessages(…, routeIfUnassigned: false)`: the wrapped call must not route.
+    @ObservationIgnored var routingSuppressed = false
     public private(set) var sources: [SourceRecord] = []
     public private(set) var jobs: [Job] = []
     public private(set) var isProcessing = false
@@ -114,6 +122,7 @@ private final class ConfigBox: @unchecked Sendable {
         self.queue = JobQueue(dir: paths.jobs)
         self.queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
         self.accounts = AccountStore(fileURL: paths.accounts)
+        self.routing = RoutingStore(fileURL: RoutingStore.fileURL(vaultRoot: config.vaultURL))   // MARK: v0.4 routing
         Log.configure(logsDir: paths.logs)
         // MARK: v0.3 accounts — a connected address joins the owner's emails
         accounts.onConnected = { [weak self] in self?.rememberOwnerEmail(of: $0) }
@@ -188,6 +197,8 @@ private final class ConfigBox: @unchecked Sendable {
         queue = JobQueue(dir: paths.jobs)
         queueLock = QueueLock(url: paths.root.appendingPathComponent("queue.lock"))
         accounts.reload(fileURL: paths.accounts)
+        routing.reload(fileURL: RoutingStore.fileURL(vaultRoot: newConfig.vaultURL))   // MARK: v0.4 routing
+        lastRoutingDecision = nil
         Log.configure(logsDir: paths.logs)
         writeGeneration += 1
         sources = []

@@ -87,7 +87,8 @@ mantiene un wiki por proyecto con todo lo que se habló. El audio nunca sale de 
 único que se envía es el texto que Claude lee con tu propia cuenta.
 
 ### Novedades
-- **Mantenimiento:** cambio interno de compilación (el registro OAuth se lee de una carpeta privada del repo). Sin cambios visibles; incluye todo lo de 0.4.0 (GitHub por proyecto y Reglas).
+- **Conectar Microsoft 365 y GitHub ya funciona desde la app:** SecondBrain quedó registrada en Microsoft (correo y calendario de Outlook, solo lectura) y en GitHub (conexión con código de dispositivo, sin pegar tokens).
+- Incluye todo lo de 0.5.0: nueva identidad **secondbrain**, navegación simplificada (Inicio · Reuniones · Correo · Pendientes · Personas), **⌘K** para buscar o preguntar y pantallas que caben en cualquier tamaño de ventana.
 
 ### Instalar
 1. Descarga **SecondBrain-$VERSION.dmg** (abajo, en *Assets*), ábrelo y arrastra **SecondBrain** a la
@@ -112,7 +113,8 @@ Records your meetings (computer audio + your mic), transcribes them **on your Ma
 per-project wiki of everything discussed. Audio never leaves your computer.
 
 ### What's new
-- **Maintenance:** internal build change (the OAuth registration is read from a private, git-ignored folder in the repo). No visible changes; includes everything from 0.4.0 (GitHub per project and Rules).
+- **Connect Microsoft 365 and GitHub from the app:** SecondBrain is now registered with Microsoft (Outlook mail and calendar, read-only) and GitHub (device-code sign-in, no token pasting).
+- Includes everything from 0.5.0: the new **secondbrain** identity, simpler navigation (Home · Meetings · Mail · Tasks · People), **⌘K** to search or ask, and screens that fit any window size.
 
 ### Install
 1. Download **SecondBrain-$VERSION.dmg** (under *Assets*), open it and drag **SecondBrain** to

@@ -62,9 +62,16 @@ Never ask questions. Never touch `raw/` or `_inbox/`.
 13. **Unmapped speakers**: meetings with `person: null` labels where another source now gives
     clear evidence (only report; map them only if the evidence meets CLAUDE.md §7).
 14. **Unprocessed sources**: raw files in the project with no source page in `wiki/meetings/`,
-    `wiki/emails/` or `wiki/sources/` (report only; the app ingests them).
+    `wiki/emails/` or `wiki/sources/` (report only; the app ingests them). GitHub syncs
+    (`raw/github/`) have no source page: they count as processed when `wiki/log.md` names them.
 15. **Pages from a template**: source pages that still contain template comments (`<!--`) or
     lack `## Acuerdos` / `## Fuente`. Never lint the `templates/` folder itself.
+16. **Repositories** (`wiki/repos/`, CLAUDE.md §8.10): branch pages with `state: gone` or
+    `state: rewritten` whose `state_since` is more than 30 days before today (gone → suggest
+    "Dejar de seguir" that branch in the project's Código tab; rewritten → its `[!conflict]`
+    callouts still open); repo pages missing from the index `## Repositorios`; repo/branch pages
+    whose `## Cambios recientes` keeps days older than ~60 days (report; condensing is not a
+    trivial fix); people with `github:` duplicated on two pages.
 
 ## Fix (only trivial, safe things)
 
@@ -112,6 +119,7 @@ language: es
 - **Tus pendientes vencidos:** … · 📅 date (link)
 - **Pendientes vencidos de otros:** … — owner · 📅 date (link)
 - **Correo sin procesar / línea de tiempo:** … (links)
+- **Repositorio:** rama `development` de acme/web ya no existe desde hace 40 días (link)
 
 ## Sugerencias
 - Sources or meetings that would fill gaps; questions worth asking; pages worth creating.

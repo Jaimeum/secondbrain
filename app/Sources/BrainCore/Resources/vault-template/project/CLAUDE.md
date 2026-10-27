@@ -2,6 +2,7 @@
 
 Proyecto `{{PROJECT_SLUG}}`, creado el {{DATE}}. Este archivo complementa el `CLAUDE.md` de la raíz
 del vault, que manda en todo lo demás. Claude lo lee antes de cada operación en este proyecto. El glosario vive en `wiki/overview.md`.
+Los repositorios de GitHub que sigue el proyecto llegan a `raw/github/<owner>-<repo>/` y se resumen en `wiki/repos/` (una página por repo y una por rama seguida).
 
 ## Objetivo
 *Escrito por el dueño (o propuesto por Claude cuando las fuentes lo dejan claro, marcado «(inferido)»).*

@@ -80,7 +80,7 @@ import Foundation
             all += page.messages
             token = page.next
         } while token != nil
-        t.eq(all.count, 12, "demo: 12 emails (paged)")
+        t.eq(all.count, 14, "demo: 14 emails (paged)")   // v0.7: + the owner's reply and Laura's in the contract thread
         t.check(all.allSatisfy { $0.date >= now.addingTimeInterval(-10 * 86_400) && $0.date <= now }, "demo: emails within the last 10 days")
         let senders = Set(all.compactMap(\.from.email)).subtracting(["ana@contoso.com"])
         t.eq(senders.count, 5, "demo: 5 other people")

@@ -72,7 +72,9 @@ Note its two dates (CLAUDE.md §9): the **event date** = `date:` (meeting start,
 document date) with its timezone offset, and the **added date** = `added:` (may be missing). Work
 out the weekday of the event date now: you need it to resolve "el viernes", "mañana", "next week".
 For a transcript, note the speaker labels. For an email: `from`, `to`, `cc`, subject, whether
-it is from the owner (CLAUDE.md §12), the body, and what in `## Historial citado` is already in
+it is from the owner (CLAUDE.md §12; also when its entry in `_thread.json` — `messages[]` with
+this file name — has `"isFromOwner": true`: a reply the owner SENT from a connected account, which
+the app adds to the thread by itself), the body, and what in `## Historial citado` is already in
 the thread page (ignore that) vs. not yet known.
 
 ## 3. Analyze before writing
@@ -96,6 +98,19 @@ Work out (internally, don't output it):
 - **Agreements** (CLAUDE.md §10): the owner's commitments, everyone else's (who, what, due date),
   and what was agreed by everyone. Resolve every relative date against the EVENT date
   (CLAUDE.md §9 rule 1) and keep the original words for the source page.
+- **The owner's own reply** (an email the owner sent, see §2) — the traceback of what they
+  answered:
+  - Everything the owner promises, accepts or agrees to in it ("te lo mando el viernes", "de
+    acuerdo, lo firmamos mañana", "yo me encargo", "sí, confirmo el 40") is a **Mis compromisos**
+    item, with its due date resolved against the SENT date and the citation to that sent message
+    (`([[<sent message key>]])`). A request "pedido por X; sin confirmar" that the reply accepts
+    loses "sin confirmar" and gains this citation; one the reply declines is closed (see below).
+  - When the reply fulfils or closes an open commitment — of the owner (it sends what was
+    promised, answers the question that was pending) or one the owner was waiting on — mark it
+    done: in `tasks.md` `[x]` + `✅` the sent date + this citation appended to the existing ones;
+    on the thread page the bullet gets "— ✅ respondido/enviado el AAAA-MM-DD ([[<sent message
+    key>]])". Only when the reply clearly does it; "lo reviso" is not done.
+  - Its new text only: never take commitments from the quoted history of the owner's reply.
 - **Decisions** (real ones only, dated by the event date), **open questions**, **risks**,
   important **numbers and dates**, **milestones** and project deadlines (for the timeline).
 - **Topics**: which existing topic pages this feeds; which new subjects deserve a page
@@ -152,7 +167,9 @@ editing it; edit surgically with Edit/MultiEdit.
    "Sin dueño") is a task in the exact checkbox format, under the right owner group (the
    owner's group first, CLAUDE.md §8.7); mark tasks done (`[x]` + `✅` event date) when this
    source says so; update changed deadlines keeping `(antes …)`. No duplicates. A late source
-   never reopens or re-dates a task a newer source already changed or closed.
+   never reopens or re-dates a task a newer source already changed or closed. An owner's sent
+   reply (§3): its promises go in the owner's group citing the sent message; what it fulfils is
+   marked done with that citation.
 6. **`wiki/timeline.md`** — always (CLAUDE.md §8.9): add this source's line (🎙️ meeting, ✉️
    email, 📄 document, 📝 note, 🔗 url) at its event date and time, with `· agregada …` if it
    was added more than a day later; add lines for new decisions (⚖️), milestones (🚩) and
@@ -203,7 +220,8 @@ directly with the first bullet — no status sentence before it. Output ONLY 3-6
 no heading, no preamble, no nested bullets, no bold, no file paths, no wikilink syntax, no jargon
 (vault, raw, frontmatter, wiki maintainer, template) — plain human sentences of at most ~25 words
 each. Dates as people say them ("3 de noviembre", "November 3"). Cover: the gist of the source
-(for an email: "Correo de Ana…"; for a late source say when it happened), what you have to do
+(for an email: "Correo de Ana…"; for the owner's own reply: "Tu respuesta a Sofía: te
+comprometiste a… · marqué como hecho…"; for a late source say when it happened), what you have to do
 (with dates) and what others committed to, the most important decisions, people identified (say
 who "Hablante N" turned out to be, or that a speaker couldn't be identified), conflicts or
 changes detected, and which pages were created or updated (by title). Example:

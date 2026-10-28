@@ -1100,7 +1100,7 @@
 "rules.default.label" = "Lo que no coincide con ninguna regla va a";
 "rules.unassigned" = "Sin asignar";
 "rules.autoImport" = "Revisar el correo cada 15 min";
-"rules.autoImport.on" = "Solo agrego los correos de las reglas marcadas «Agrega automáticamente».";
+"rules.autoImport.on" = "Agrego los correos de las reglas marcadas «Agrega automáticamente» y las respuestas nuevas (también las tuyas) en los hilos que ya guardaste.";
 "rules.autoImport.none" = "Todavía ninguna regla agrega correos automáticamente. Puedes activarlo al editar una regla.";
 "rules.editor.newTitle" = "Nueva regla";
 "rules.editor.editTitle" = "Editar regla";
@@ -1653,3 +1653,11 @@
 
 /* v0.7 links */
 "original.help" = "%@ (se abre en el navegador)";
+
+/* v0.7 replies */
+"replies.auto.title" = "Hilos al día";
+"replies.auto.own" = "Agregué tu respuesta a «%@».";
+"replies.auto.one" = "Agregué un correo nuevo a «%@».";
+"replies.auto.thread" = "Agregué %1$d correos a «%2$@».";
+"replies.auto.many" = "Agregué %d correos a hilos que sigues.";
+"replies.auto.noSubject" = "(sin asunto)";

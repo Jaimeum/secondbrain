@@ -1100,7 +1100,7 @@
 "rules.default.label" = "Anything no rule matches goes to";
 "rules.unassigned" = "Unassigned";
 "rules.autoImport" = "Check my email every 15 min";
-"rules.autoImport.on" = "I only add emails for rules marked “Adds automatically”.";
+"rules.autoImport.on" = "I add emails for rules marked “Adds automatically” and new replies (yours too) in the threads you already saved.";
 "rules.autoImport.none" = "No rule adds emails automatically yet. You can turn that on when you edit a rule.";
 "rules.editor.newTitle" = "New rule";
 "rules.editor.editTitle" = "Edit rule";
@@ -1653,3 +1653,11 @@
 
 /* v0.7 links */
 "original.help" = "%@ (opens in your browser)";
+
+/* v0.7 replies */
+"replies.auto.title" = "Threads up to date";
+"replies.auto.own" = "I added your reply to “%@”.";
+"replies.auto.one" = "I added a new email to “%@”.";
+"replies.auto.thread" = "I added %1$d emails to “%2$@”.";
+"replies.auto.many" = "I added %d emails to threads you follow.";
+"replies.auto.noSubject" = "(no subject)";

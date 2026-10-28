@@ -33,10 +33,12 @@ final class MailAutoImporter {
         if on { runNow(force: true) }
     }
 
-    /// There is something to do: the switch is on, a rule adds by itself and an account has mail.
+    /// There is something to do: the switch is on, an account has mail, and a rule adds by itself or a saved thread of a
+    /// connected account is followed (v0.7, §17.5).
     var hasWork: Bool {
         guard let engine = state?.engine else { return false }
-        return engine.routing.settings.autoImportEnabled && !engine.routing.autoAddRules.isEmpty && !engine.accounts.mailAccounts.isEmpty
+        return engine.routing.settings.autoImportEnabled && !engine.accounts.mailAccounts.isEmpty
+            && (!engine.routing.autoAddRules.isEmpty || engine.hasFollowableThreads)
     }
 
     // MARK: Lifecycle
@@ -84,11 +86,44 @@ final class MailAutoImporter {
             self.lastReport = report
             guard report.total > 0 else { return }
             state.bumpVault()
-            // §16.12: a click opens the project's Contenido ("automail-<time>-<slug>", see AppState.route).
-            let slug = report.added.max { $0.count < $1.count }?.projectSlug ?? ""
-            Notifier.post(title: L("rules.auto.title"), body: Self.message(report, state: state),
-                          id: "automail-\(Int(Date().timeIntervalSince1970))-\(slug)")
+            let time = Int(Date().timeIntervalSince1970)
+            if !report.sourceIds.isEmpty {
+                // §16.12: a click opens the project's Contenido ("automail-<time>-<slug>", see AppState.route).
+                let slug = report.added.max { $0.count < $1.count }?.projectSlug ?? ""
+                Notifier.post(title: L("rules.auto.title"), body: Self.message(report, state: state),
+                              id: "automail-\(time)-\(slug)")
+            }
+            // MARK: v0.7 replies — one notification per cycle for the saved threads that went on (§17.5). One thread: a
+            // click opens it ("done-<source>-…" → its ficha once ingested); several: the busiest project's Contenido.
+            if let text = Self.followMessage(report) {
+                let id: String
+                if report.followed.count == 1, let entry = report.followed.first {
+                    id = "done-\(entry.lastSourceId)-thread-\(time)"
+                } else {
+                    id = "automail-\(time)-\(report.followed.max { $0.count < $1.count }?.projectSlug ?? "")"
+                }
+                Notifier.post(title: L("replies.auto.title"), body: text, id: id)
+            }
         }
+    }
+
+    /// v0.7 (§17.5): "Agregué tu respuesta a «Contrato Acme»" · "Agregué un correo nuevo a «…»" · "Agregué 2 correos a
+    /// «…»" · "Agregué 3 correos a hilos que sigues" (+ "El resto, en un rato."). nil when no thread went on.
+    static func followMessage(_ report: MailAutoImportReport) -> String? {
+        guard let first = report.followed.first else { return nil }
+        var text: String
+        if report.followed.count == 1 {
+            let subject = first.subject.isEmpty ? L("replies.auto.noSubject") : first.subject
+            if first.count == 1 {
+                text = first.ownReplies == 1 ? L("replies.auto.own", subject) : L("replies.auto.one", subject)
+            } else {
+                text = L("replies.auto.thread", first.count, subject)
+            }
+        } else {
+            text = L("replies.auto.many", report.followedSourceIds.count)
+        }
+        if report.reachedCap { text += " " + L("rules.auto.more") }
+        return text
     }
 
     /// "Agregué 3 correos a 🚀 Acme" · "Agregué 5 correos: 3 a 🚀 Acme y 2 a 🤝 Alianza" (+ "El resto, en un rato.").
@@ -99,7 +134,7 @@ final class MailAutoImporter {
             text = entry.count == 1 ? L("rules.auto.one", name) : L("rules.auto.many", entry.count, name)
         } else {
             let parts = report.added.map { L("rules.auto.part", $0.count, state.projectName($0.projectSlug)) }
-            text = L("rules.auto.mixed", report.total, ListFormatter.localizedString(byJoining: parts))
+            text = L("rules.auto.mixed", report.sourceIds.count, ListFormatter.localizedString(byJoining: parts))
         }
         if report.reachedCap { text += " " + L("rules.auto.more") }
         return text

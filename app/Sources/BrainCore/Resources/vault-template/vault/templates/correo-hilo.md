@@ -17,7 +17,7 @@ builtin: true
 <!-- Un bullet por correo, en orden de envío: **AAAA-MM-DD HH:MM** · remitente → destinatarios: lo nuevo que dice ese correo en 1-2 frases (cita). Los correos que solo se conocen por el historial citado se marcan «(según el historial citado)». -->
 
 ## Acuerdos
-<!-- Compromisos y acuerdos del hilo hasta ahora, con dueño y fecha. Lo que te pidieron y aún no respondiste va en «Mis compromisos» como «pedido por …; sin confirmar». Si un correo posterior lo cumple o lo cambia, actualiza el bullet. -->
+<!-- Compromisos y acuerdos del hilo hasta ahora, con dueño y fecha. Lo que te pidieron y aún no respondiste va en «Mis compromisos» como «pedido por …; sin confirmar». Si un correo posterior lo cumple o lo cambia, actualiza el bullet. Tus propias respuestas (correos que enviaste): lo que prometes o aceptas en ellas va en «Mis compromisos» con fecha y la cita a tu correo enviado; lo que tu respuesta cumple o cierra se marca «— ✅ respondido/enviado el AAAA-MM-DD» con la cita a ese correo. -->
 ### Mis compromisos
 ### Compromisos de los demás
 ### Acordado entre todos

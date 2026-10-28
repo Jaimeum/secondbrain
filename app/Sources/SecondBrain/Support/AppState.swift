@@ -431,10 +431,10 @@ final class AppState {
         vaultRevision += 1
     }
 
-    /// Preguntar's conversations of a scope (saved under `data/chats/`, §16.3).
+    /// Preguntar's conversations of a scope (saved under `data/chats/<vault>/`, §16.3: per vault).
     func conversations(for scope: Scope) -> Conversations {
         if let existing = conversationsByScope[scope.key] { return existing }
-        let conversations = Conversations(scope: scope, store: ChatStore(dataRoot: config.dataURL))
+        let conversations = Conversations(scope: scope, store: ChatStore(dataRoot: config.dataURL, vaultRoot: config.vaultURL))
         conversationsByScope[scope.key] = conversations
         return conversations
     }

@@ -15,7 +15,8 @@ struct ChatCmd: AsyncParsableCommand {
         @Flag(help: "Only the whole brain's") var brain = false
 
         @MainActor func run() async throws {
-            let store = ChatStore(dataRoot: AppConfig.load().dataURL)
+            let config = AppConfig.load()
+            let store = ChatStore(dataRoot: config.dataURL, vaultRoot: config.vaultURL)
             var scopes: [Scope] = []
             if let project {
                 scopes = [.project(project)]
@@ -60,7 +61,23 @@ struct ChatSelfTestCmd: AsyncParsableCommand {
 }
 
 @MainActor func testChatStore(_ t: Tester, root: URL) {
-    let store = ChatStore(dataRoot: root)
+    let vaultA = root.deletingLastPathComponent().appendingPathComponent("vault-a")
+    let vaultB = root.deletingLastPathComponent().appendingPathComponent("vault-b")
+    // A conversation saved before chats were per vault (`chats/brain/`) is adopted by the first vault that opens them.
+    let fm0 = FileManager.default
+    let seed = ChatStore(dataRoot: root, vaultRoot: root.appendingPathComponent("seed"))
+    let old = ChatThread(id: "20200101-000000-aaaa", scope: .brain, title: "Vieja", createdAt: Date(timeIntervalSince1970: 1_577_836_800))
+    try? seed.save(old)
+    try? fm0.moveItem(at: seed.dir.appendingPathComponent("brain"), to: root.appendingPathComponent("chats/brain"))
+    try? fm0.removeItem(at: seed.dir)
+    let legacy = root.appendingPathComponent("chats/brain/\(old.id).json")
+    t.check(fm0.fileExists(atPath: legacy.path), "legacy layout prepared")
+    let store = ChatStore(dataRoot: root, vaultRoot: vaultA)
+    let key = ChatStore.vaultKey(vaultA)
+    t.check(key.hasPrefix("vault-a-") && key != ChatStore.vaultKey(vaultB), "vault key: folder name + path hash")
+    t.check(!FileManager.default.fileExists(atPath: legacy.path), "legacy chats moved into the vault's folder")
+    t.eq(store.list(scope: .brain).map(\.id), [old.id], "legacy conversation listed in the vault that adopted it")
+    try? store.delete(id: old.id, scope: .brain)
     let fm = FileManager.default
     let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -77,12 +94,18 @@ struct ChatSelfTestCmd: AsyncParsableCommand {
     } catch { t.check(false, "save threw \(error)") }
 
     // Files where §16.3 says.
-    t.check(fm.fileExists(atPath: root.appendingPathComponent("chats/brain/\(brain.id).json").path), "brain thread in data/chats/brain/")
-    t.check(fm.fileExists(atPath: root.appendingPathComponent("chats/projects/kickoff/\(project.id).json").path),
-            "project thread in data/chats/projects/<slug>/")
+    t.check(fm.fileExists(atPath: root.appendingPathComponent("chats/\(key)/brain/\(brain.id).json").path),
+            "brain thread in data/chats/<vault>/brain/")
+    t.check(fm.fileExists(atPath: root.appendingPathComponent("chats/\(key)/projects/kickoff/\(project.id).json").path),
+            "project thread in data/chats/<vault>/projects/<slug>/")
+
+    // Another vault never sees them (a vault switch reloads the new vault's conversations, §16.3).
+    let other = ChatStore(dataRoot: root, vaultRoot: vaultB)
+    t.eq(other.list(scope: .brain).count, 0, "other vault: no brain conversations")
+    t.eq(other.list(scope: .project("kickoff")).count, 0, "other vault: same slug, no project conversations")
 
     // Scopes never mix; a fresh store (a restart) reads the same.
-    let reopened = ChatStore(dataRoot: root)
+    let reopened = ChatStore(dataRoot: root, vaultRoot: vaultA)
     t.eq(reopened.list(scope: .brain).map(\.id), [brain.id], "brain list")
     t.eq(reopened.list(scope: .project("kickoff")).map(\.id), [project.id], "project list")
     t.eq(reopened.list(scope: .project("otro")).count, 0, "other project empty")
@@ -112,7 +135,7 @@ struct ChatSelfTestCmd: AsyncParsableCommand {
             "empty name ignored")
     try? store.delete(id: second.id, scope: .brain)
     t.eq(store.list(scope: .brain).map(\.id), [brain.id], "delete")
-    t.check(!fm.fileExists(atPath: root.appendingPathComponent("chats/brain/\(second.id).json").path), "deleted file gone")
+    t.check(!fm.fileExists(atPath: root.appendingPathComponent("chats/\(key)/brain/\(second.id).json").path), "deleted file gone")
 
     // Unsafe ids / slugs never reach the file system; a corrupt file is skipped.
     t.check(store.folder(for: .project("../x")) == nil, "slug with .. rejected")
@@ -120,7 +143,7 @@ struct ChatSelfTestCmd: AsyncParsableCommand {
     var evil = brain
     evil.id = "../evil"
     t.check((try? store.save(evil)) == nil, "saving an unsafe id throws")
-    try? "{not json".write(to: root.appendingPathComponent("chats/brain/broken.json"), atomically: true, encoding: .utf8)
+    try? "{not json".write(to: root.appendingPathComponent("chats/\(key)/brain/broken.json"), atomically: true, encoding: .utf8)
     t.eq(store.list(scope: .brain).map(\.id), [brain.id], "corrupt file skipped")
     t.check(ChatStore.newId() != ChatStore.newId(), "ids are unique")
 }

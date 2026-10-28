@@ -1,9 +1,11 @@
+import CryptoKit
 import Foundation
 import NaturalLanguage
 
 // MARK: v0.6 ask (CONTRACT §16.3): saved conversations of Preguntar and "Guardar como página".
 
-/// One saved conversation of Preguntar. `data/chats/brain/<id>.json` or `data/chats/projects/<slug>/<id>.json`.
+/// One saved conversation of Preguntar. `data/chats/<vault>/brain/<id>.json` or
+/// `data/chats/<vault>/projects/<slug>/<id>.json` (`<vault>` = `ChatStore.vaultKey`).
 public struct ChatThread: Codable, Identifiable, Sendable, Equatable {
     /// A question or an answer. Live progress (the "Leyendo «…»" steps, streaming) is never saved.
     public struct Message: Codable, Identifiable, Sendable, Equatable {
@@ -41,14 +43,39 @@ public struct ChatThread: Codable, Identifiable, Sendable, Equatable {
 }
 
 /// Saved conversations on disk, one JSON file per conversation (atomic writes; files never shared between scopes).
-/// Safe from any thread. The folder lives in the data folder, next to `sources/` and `history/`.
+/// Safe from any thread. The folder lives in the data folder, next to `sources/` and `history/`, one per vault: the
+/// conversations cite that vault's pages, so switching vault shows the new vault's conversations (§16.3).
 public final class ChatStore: @unchecked Sendable {
     public let dir: URL
     private let lock = NSLock()
 
-    /// `dataRoot` = `AppConfig.dataURL` (the store uses `<dataRoot>/chats/`).
-    public init(dataRoot: URL) {
-        dir = dataRoot.appendingPathComponent("chats")
+    /// `dataRoot` = `AppConfig.dataURL`, `vaultRoot` = `AppConfig.vaultURL`: the store uses
+    /// `<dataRoot>/chats/<vaultKey>/`. Conversations saved before they were per vault (`chats/brain`, `chats/projects`)
+    /// are moved into the first vault that opens them.
+    public init(dataRoot: URL, vaultRoot: URL) {
+        let chats = dataRoot.appendingPathComponent("chats")
+        dir = chats.appendingPathComponent(Self.vaultKey(vaultRoot))
+        Self.adoptUnscoped(in: chats, into: dir)
+    }
+
+    /// `<folder name>-<8 hex of the path>`: readable, and distinct for two vaults with the same folder name.
+    public static func vaultKey(_ vaultRoot: URL) -> String {
+        let path = vaultRoot.standardizedFileURL.resolvingSymlinksInPath().path
+        let hash = SHA256.hash(data: Data(path.utf8)).prefix(4).map { String(format: "%02x", $0) }.joined()
+        let name = String(vaultRoot.lastPathComponent.unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_" ? Character($0) : "-" }).prefix(40)
+        return (name.isEmpty || name.hasPrefix(".") ? "vault" : String(name)) + "-" + hash
+    }
+
+    private static func adoptUnscoped(in chats: URL, into dir: URL) {
+        let fm = FileManager.default
+        for name in ["brain", "projects"] {
+            let old = chats.appendingPathComponent(name)
+            let new = dir.appendingPathComponent(name)
+            guard fm.isDirectory(old), !fm.fileExists(atPath: new.path) else { continue }
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? fm.moveItem(at: old, to: new)
+        }
     }
 
     /// `20261027-153012-a1b2`: sorts by creation, safe as a file name.

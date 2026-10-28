@@ -1793,3 +1793,6 @@
 /* v0.7 integration */
 "attach.checklist.save" = "Guardar los marcados (%ld)";
 "attach.checklist.hint" = "Marqué lo que parece útil. Lo que no marques se queda en tu correo y puedes guardarlo después.";
+
+/* v0.7 fix */
+"graph.kinds.emailThread" = "Hilos de correo";

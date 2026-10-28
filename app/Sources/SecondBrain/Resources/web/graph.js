@@ -12,17 +12,19 @@
   // Project colors are computed in Swift (GraphPalette → Brand's stable hash of the slug) and arrive as `projects[].color`:
   // the hash lives in one place only. Kinds (inside a project) map onto the same six tones.
   const KIND_TONES = {
-    project: '--accent', meeting: '--tone-terracotta', email: '--tone-slate', document: '--tone-ochre', note: '--tone-ochre',
+    project: '--accent', meeting: '--tone-terracotta', emailThread: '--tone-slate', email: '--tone-slate', document: '--tone-ochre', note: '--tone-ochre',
     url: '--tone-slate', person: '--person-ring', topic: '--tone-moss', decision: '--tone-mauve', question: '--warning',
     task: '--accent', page: '--text3', repo: '--tone-sage', org: '--tone-slate',
   };
   const KIND_COLORS = {};
   const FONT = '"Inter", -apple-system, sans-serif';
-  const KIND_ORDER = ['meeting', 'email', 'document', 'note', 'url', 'topic', 'decision', 'question', 'task', 'repo', 'person', 'org', 'page', 'project'];
+  const KIND_ORDER = ['meeting', 'emailThread', 'document', 'note', 'url', 'topic', 'decision', 'question', 'task', 'repo', 'person', 'org', 'page', 'project'];
   // Same icons as the rest of the app (SF Symbols waveform, envelope, person, checkmark.seal, lightbulb,
   // questionmark.bubble, doc.text …), drawn as small inline SVGs.
   const GLYPH_PATHS = {
     meeting: 'M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4',
+    // v0.7 (§17.4): one node per email thread (`emailThread`); `email` stays for graphs cached by older versions.
+    emailThread: 'M3.5 6h17v12h-17zM3.5 7l8.5 6 8.5-6',
     email: 'M3.5 6h17v12h-17zM3.5 7l8.5 6 8.5-6',
     person: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c1.4-3.6 4.2-5.5 7.5-5.5s6.1 1.9 7.5 5.5',
     decision: 'M12 2.5l2.3 1.9 3-.2.8 2.9 2.6 1.5-1.1 2.8 1.1 2.8-2.6 1.5-.8 2.9-3-.2L12 21.5l-2.3-1.9-3 .2-.8-2.9-2.6-1.5 1.1-2.8-1.1-2.8 2.6-1.5.8-2.9 3 .2zM8.6 12.1l2.3 2.3 4.6-4.7',

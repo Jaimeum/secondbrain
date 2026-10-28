@@ -23,7 +23,7 @@
 "brain.subtitle" = "What I know across all your projects";
 "people.subtitle" = "The people who show up in your meetings";
 "people.emptyTitle" = "I don't know anyone yet";
-"people.emptyMessage" = "As I learn from your meetings, each person gets a page here: who they are, which projects they're in, and what they've said.";
+"people.emptyMessage" = "As I learn from your emails, notes, documents and meetings, each person gets a page here: who they are, which projects they're in, and what they've said.";
 "project.missing" = "I can't find this project";
 
 /* Tabs */
@@ -85,7 +85,7 @@
 "wiki.emptyPage" = "This page is empty for now.";
 "wiki.noPageSelected" = "Pick a page from the list.";
 "wiki.emptyTitle" = "Nothing here yet";
-"wiki.emptyMessage" = "Record a meeting or add a document and what I learn will show up here: summaries, decisions, tasks and people.";
+"wiki.emptyMessage" = "Add a note, a document, a link or an email (or record a meeting) and what I learn will show up here: summaries, decisions, tasks and people.";
 "wiki.showInFinder" = "Show in Finder";
 "wiki.back" = "Previous page";
 "wikiGroup.general" = "General";
@@ -138,7 +138,7 @@
 
 /* Sources */
 "sources.emptyTitle" = "Nothing here yet";
-"sources.emptyMessage" = "Record a meeting, drop files (PDF, Word, text, audio or video) or paste a link. Recordings are transcribed automatically. I’ll learn from all of it and organize it in your brain.";
+"sources.emptyMessage" = "Write a note, drop files (PDF, Word, text, audio or video), paste a link or an email, or record a meeting. I’ll learn from all of it and organize it in your brain.";
 "sources.dropHere" = "Drop to add to this project";
 "sources.linkPlaceholder" = "Paste a link for me to read…";
 "sources.addLink" = "Add link";
@@ -220,7 +220,7 @@
 "inbox.title" = "Unassigned";
 "inbox.subtitle" = "Things that don't have a project yet";
 "inbox.emptyTitle" = "All sorted";
-"inbox.emptyMessage" = "When you record without picking a project, the meeting lands here and I'll suggest where it belongs.";
+"inbox.emptyMessage" = "Whatever arrives without a project (a note, an email, a file or a recording) lands here and I'll suggest where it belongs.";
 "inbox.needsProject" = "Which project do these belong to?";
 "inbox.inProgress" = "In progress";
 "inbox.suggestion" = "Looks like %@";
@@ -302,10 +302,10 @@
 "onb.skip" = "Skip";
 "onb.finish" = "Get started";
 "onb.welcome.title" = "Hi, I'm your second brain";
-"onb.welcome.message" = "I listen to your meetings, transcribe them, and organize what I learn by project so you never forget what was said.";
-"onb.welcome.feature1" = "I record your computer's audio and your microphone: Zoom, Meet, Teams, anything.";
-"onb.welcome.feature2" = "Everything stays on your Mac. Transcription happens right here, your audio is never uploaded.";
-"onb.welcome.feature3" = "Claude, with your own account, turns each meeting into summaries, decisions, tasks and people pages.";
+"onb.welcome.message" = "I gather what happens in your day (emails, notes, documents, links, repositories and meetings) and organize it by project so you can find it when you need it.";
+"onb.welcome.feature1" = "Everything comes in: email from your accounts, notes, PDFs and documents, links, your GitHub repositories and, if you like, your recorded meetings.";
+"onb.welcome.feature2" = "Everything stays on your Mac, in a plain folder of text files. If you record, transcription happens right here too, your audio is never uploaded.";
+"onb.welcome.feature3" = "Claude, with your own account, turns all of it into pages for projects, people, decisions and tasks, and answers what you ask.";
 "onb.consent.title" = "Before recording, let people know";
 "onb.consent.message" = "Recording people without their knowledge may be illegal where you live and, above all, isn't fair to them. Say you're recording at the start of every meeting and respect anyone who doesn't want to be.";
 "onb.consent.accept" = "I'll tell people before recording";
@@ -326,7 +326,7 @@
 "onb.perm.granted" = "Done";
 "onb.perm.restartHint" = "Already turned it on in Settings but it doesn't show here? macOS needs secondbrain to reopen. You'll come back to this same step.";
 "onb.claude.title" = "Connect Claude";
-"onb.claude.message" = "I use your Claude account (Pro or Max) to understand your meetings. No technical knowledge needed.";
+"onb.claude.message" = "I use your Claude account (Pro or Max) to understand what you give me and answer your questions. No technical knowledge needed.";
 "onb.models.title" = "Getting transcription ready";
 "onb.models.message" = "I'm downloading the model that transcribes your meetings right here on your Mac (about 3 GB). This only happens once.";
 "onb.models.starting" = "Starting the download…";
@@ -335,7 +335,7 @@
 "onb.models.hint" = "You can continue: the download keeps going in the background.";
 "onb.models.continueBackground" = "Continue";
 "onb.project.title" = "Your first project";
-"onb.project.message" = "A project groups the meetings and documents about one thing: a client, a team, your thesis…";
+"onb.project.message" = "A project groups the emails, notes, documents and meetings about one thing: a client, a team, your thesis…";
 "onb.project.create" = "Create and continue";
 "onb.done.title" = "All set!";
 "onb.done.message" = "Here's how you'll use secondbrain day to day:";
@@ -465,7 +465,7 @@
 "tasks.emptyTheirs" = "Nobody else has tasks here";
 "tasks.emptyUnowned" = "No tasks without an owner";
 "tasks.emptyDone" = "Nothing done yet";
-"tasks.emptyMessage" = "Once I learn from a meeting or an email, commitments show up here: yours and everyone else's, with their dates.";
+"tasks.emptyMessage" = "Once I learn from an email, a note or a meeting, commitments show up here: yours and everyone else's, with their dates.";
 "mytasks.title" = "Tasks";
 "mytasks.subtitle" = "What's on you, across all your projects";
 "mytasks.overdue" = "Overdue";
@@ -477,7 +477,7 @@
 "mytasks.showDone" = "Show done";
 "mytasks.overdueHelp" = "%ld overdue";
 "mytasks.emptyTitle" = "You have no tasks";
-"mytasks.emptyMessage" = "When you commit to something in a meeting or an email, it shows up here with its date.";
+"mytasks.emptyMessage" = "When you commit to something in an email, a note or a meeting, it shows up here with its date.";
 "srctasks.title" = "Tasks and agreements";
 "srctasks.mine" = "Mine";
 "srctasks.theirs" = "Others'";
@@ -651,7 +651,7 @@
 
 /* v0.3 — Graph */
 "graph.empty.title" = "Your brain is still empty";
-"graph.empty.message" = "This is where you'll see how everything I learn connects. Record a meeting or add something to start.";
+"graph.empty.message" = "This is where you'll see how everything I learn connects. Add a note, an email or a document to start.";
 "graph.seeInGraph" = "See in graph";
 "graph.showAll" = "Show all";
 "graph.fit" = "Fit";
@@ -1185,7 +1185,7 @@
 "home.seeAllTasks" = "See all (%ld)";
 "home.tasksToday" = "Tasks for today";
 "home.nothingDue" = "Nothing due today";
-"home.recent" = "Recent";
+"home.recent" = "Latest I learned";
 "home.seeByDate" = "See all by date";
 "home.connections" = "Explore how everything connects";
 "home.history" = "History";
@@ -1287,7 +1287,7 @@
 "content.notePlaceholder" = "Write here…";
 "content.linkTitle" = "Paste a link";
 "content.linkHint" = "I'll read the page and add it to the project.";
-"content.listEmpty" = "Nothing here yet. Record, paste an email or drop a file here.";
+"content.listEmpty" = "Nothing here yet. Add a note, paste an email or a link, or drop a file here.";
 "content.showLess" = "Show less";
 "content.learningHint" = "I'm learning from this. You'll see it here as soon as I'm done.";
 "content.recordingHint" = "Recording. I'll learn from this meeting when it ends.";
@@ -1378,11 +1378,11 @@
 "export.tasks.none" = "_No tasks._";
 
 /* v0.5 — settings fixes */
-"onb.you.message" = "What to call you and where your first meetings go.";
+"onb.you.message" = "What to call you and where the first things I learn go.";
 "onb.finish.open" = "Open secondbrain";
 "onb.done.menuAfterMessage" = "Top right of your screen. Click it to record and pick the project; a red dot shows while you record. After each meeting I transcribe and learn on my own, and let you know when I'm done.";
 "onb.done.searchTitle" = "Find or ask anything";
-"onb.done.searchMessage" = "Press ⌘K anywhere: find a meeting, a note or a person, or ask me a question.";
+"onb.done.searchMessage" = "Press ⌘K anywhere: find a person, an email, a note or a document, or ask me a question.";
 "settings.whisper.notDownloaded" = "Not downloaded";
 "claude.waitingBrowser" = "Finish signing in in your browser…";
 "claude.waitingBrowserHint" = "I'll connect by myself as soon as you approve access.";
@@ -1433,3 +1433,25 @@
 "page.openHelp" = "Open where it lives";
 "entity.edit" = "Edit";
 "entity.editHelp" = "Fix this page by hand";
+
+/* v0.6 home — Inicio, onboarding, first recording */
+"home.agenda" = "Agenda";
+"home.toSortLine" = "%ld to sort";
+"home.toSortHelp" = "What arrived without a project: assign it in Unassigned";
+"home.repoChanges" = "Commits, PRs and releases";
+"home.empty.message" = "Notes, emails, documents, links, repositories and meetings: give me your day and I'll organize it for you.";
+"home.empty.note" = "Note";
+"home.empty.file" = "File";
+"home.empty.link" = "Link";
+"home.empty.mail" = "Email";
+"home.empty.record" = "Record";
+"home.empty.dropHint" = "You can also drop files anywhere on Home.";
+"onb.done.menuCaptureMessage" = "Top right of your screen: jot something down, paste a link or an email, or record a meeting (⌥⌘R), without opening the window.";
+"onb.done.captureTitle" = "Quick capture from anywhere";
+"onb.done.captureMessage" = "Press ⌃⌥Space (Control + Option + Space) and type: a note, a link or a pasted email. I file it in its project.";
+"record.intro.title" = "Before your first recording";
+"record.intro.message" = "I record your computer's audio and your microphone (Zoom, Meet, Teams, anything) and transcribe it right here on your Mac. For that I need two permissions and a one-time download of the transcription model (about 3 GB).";
+"record.intro.needsConsent" = "Check “I'll tell people before recording” to start.";
+"record.intro.needsPermission" = "The computer audio permission is still missing.";
+"record.intro.restartHint" = "Already turned it on in System Settings and it doesn't show here? macOS needs you to reopen secondbrain. If it was already on from before, use “Fix permission”.";
+"record.intro.modelsHint" = "You can record right away: the download keeps going in the background and I transcribe as soon as it finishes.";

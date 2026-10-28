@@ -55,11 +55,13 @@ enum RulesSnapshots {
             both("settings-\(tab.rawValue)", CGSize(width: 820, height: 600), view)
             shots.append(("settings-\(tab.rawValue)-min", CGSize(width: 760, height: 520), view()))
         }
-        for step in [OnboardingStep.welcome, .permissions, .project, .done] {
-            let name = "onboarding-\(step)"
+        // The five steps (§16.11); "onboarding-accounts" itself is DebugSnapshots' (with the Return press after it).
+        for step in OnboardingStep.allCases {
+            let name = step == .accounts ? "onboarding-accounts-full" : "onboarding-\(step)"
             both(name, CGSize(width: 920, height: 620)) { AnyView(OnboardingView(initialStep: step)) }
             shots.append((name + "-1100", CGSize(width: 1100, height: 720), AnyView(OnboardingView(initialStep: step))))
         }
+        both("record-intro", CGSize(width: 560, height: 520)) { AnyView(RecordingIntroSheet(request: nil)) }
         if let template = state.templates.first {
             both("templates-editor", CGSize(width: 780, height: 520)) { AnyView(TemplateEditor(original: template) { _ in }) }
             shots.append(("templates-editor-narrow", CGSize(width: 640, height: 520), AnyView(TemplateEditor(original: template) { _ in })))

@@ -1,19 +1,17 @@
 import AppKit
 import BrainCore
-import Recorder
 import SwiftUI
 
-/// Six steps (CONTRACT §15.2): Bienvenida (consent + where the brain is saved) → Permisos → Claude → Tú y tu primer
-/// proyecto → Cuentas (optional) → Listo. The transcription model downloads in the background from the moment the
-/// welcome is accepted; its status shows on Listo (and in the sidebar footer afterwards).
+/// Five steps (CONTRACT §16.11): Bienvenida (what a second brain of the whole day is + where it is saved) → Claude →
+/// Tú y tu primer proyecto → Cuentas (optional) → Listo. Recording permissions, the consent and the transcription
+/// model are not asked here: they wait for the first "Grabar" (`RecordingIntroSheet`).
 enum OnboardingStep: Int, CaseIterable {
-    case welcome, permissions, claude, project, accounts, done
+    case welcome, claude, project, accounts, done
 
-    /// The step survives a relaunch (macOS often needs one after granting Screen Recording), keyed by the
-    /// config file so an isolated `SB_CONFIG` doesn't resume someone else's setup. ("step5": the v0.5 numbering; an
-    /// older saved step restarts at the welcome.)
-    private static var key: String { "onboarding.step5|" + AppConfig.configURL.path }
-    private static var legacyKey: String { "onboarding.step|" + AppConfig.configURL.path }
+    /// The step survives a relaunch, keyed by the config file so an isolated `SB_CONFIG` doesn't resume someone
+    /// else's setup. ("step6": the v0.6 numbering; a step saved by an older version restarts at the welcome.)
+    private static var key: String { "onboarding.step6|" + AppConfig.configURL.path }
+    private static let legacyKeys = ["onboarding.step|", "onboarding.step5|"]
 
     static var saved: OnboardingStep {
         OnboardingStep(rawValue: UserDefaults.standard.integer(forKey: key)) ?? .welcome
@@ -23,15 +21,8 @@ enum OnboardingStep: Int, CaseIterable {
 
     static func clearSaved() {
         UserDefaults.standard.removeObject(forKey: key)
-        UserDefaults.standard.removeObject(forKey: legacyKey)
-        UserDefaults.standard.removeObject(forKey: askedScreenKey)
-    }
-
-    /// Whether the Screen Recording prompt was already shown (before a relaunch, too).
-    private static var askedScreenKey: String { "onboarding.askedScreen|" + AppConfig.configURL.path }
-    static var askedScreen: Bool {
-        get { UserDefaults.standard.bool(forKey: askedScreenKey) }
-        set { UserDefaults.standard.set(newValue, forKey: askedScreenKey) }
+        for legacy in legacyKeys { UserDefaults.standard.removeObject(forKey: legacy + AppConfig.configURL.path) }
+        UserDefaults.standard.removeObject(forKey: "onboarding.askedScreen|" + AppConfig.configURL.path)
     }
 }
 
@@ -39,17 +30,13 @@ struct OnboardingView: View {
     @Environment(AppState.self) private var state
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewState private var step: OnboardingStep = .saved
-    // Resuming past the welcome step means consent was already given before the relaunch.
-    @ViewState private var consent = OnboardingStep.saved != .welcome
     @ViewState private var form = ProjectForm()
     @ViewState private var projectError: String?
     @ViewState private var createdProject: Project?
 
     /// `initialStep`: development snapshots open a given step; normally the saved one (or the welcome).
     init(initialStep: OnboardingStep? = nil) {
-        let step = initialStep ?? .saved
-        _step = ViewState(initialValue: step)
-        _consent = ViewState(initialValue: step != .welcome)
+        _step = ViewState(initialValue: initialStep ?? .saved)
     }
 
     var body: some View {
@@ -73,7 +60,6 @@ struct OnboardingView: View {
         .onAppear {
             // Resumed after a relaunch on a step that needs the engine (projects, owner name).
             if step.rawValue >= OnboardingStep.project.rawValue { state.startEngine() }
-            if step != .welcome { Self.prepareModelsInBackground(state) }
         }
         .onChange(of: step) { step.save() }
     }
@@ -81,7 +67,6 @@ struct OnboardingView: View {
     @ViewBuilder private var content: some View {
         switch step {
         case .welcome: WelcomeStep()
-        case .permissions: PermissionsStep()
         case .claude:
             StepHeader(symbol: "sparkles", title: L("onb.claude.title"), message: L("onb.claude.message"))
             ClaudeConnectView().padding(.top, 24)
@@ -100,16 +85,10 @@ struct OnboardingView: View {
         }
     }
 
-    /// Pinned under the scroll view: on the welcome the consent card sits here, so it is never below the fold.
+    /// Pinned under the scroll view, so the primary button is never below the fold.
     private var footer: some View {
         VStack(spacing: 0) {
             Rectangle().fill(Brand.color.line).frame(height: 1)
-            if step == .welcome {
-                ConsentCard(consent: $consent)
-                    .frame(maxWidth: 600)
-                    .padding(.horizontal, 48)
-                    .padding(.top, 14)
-            }
             HStack(spacing: 8) {
                 if step != .welcome && step != .done {
                     Button(L("common.back")) { go(-1) }
@@ -127,7 +106,7 @@ struct OnboardingView: View {
                     .buttonStyle(.brandPrimary)
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(step == .welcome && !consent || step == .project && !form.isValid || state.isSwitchingVault)
+                    .disabled(step == .project && !form.isValid || state.isSwitchingVault)
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 16)
@@ -184,18 +163,11 @@ struct OnboardingView: View {
 
     private func go(_ delta: Int) {
         guard let next = OnboardingStep(rawValue: step.rawValue + delta) else { return }
-        // Leaving the welcome: the brain's folder is settled and the model download can start (in the background).
-        if step == .welcome && delta > 0 { Self.prepareModelsInBackground(state) }
         // Projects and the owner fields need a started engine.
         if next == .project { state.startEngine() }
         step = next
     }
 
-    /// The same engine call as before (`AppState.prepareModels`, idempotent); never in development snapshots.
-    static func prepareModelsInBackground(_ state: AppState) {
-        guard DebugSnapshots.directory == nil else { return }
-        state.prepareModels()
-    }
 }
 
 struct ProgressDots: View {
@@ -264,7 +236,7 @@ private struct WelcomeStep: View {
             if state.menuLanguageNeedsRestart { MenuLanguageNotice() }
 
             VStack(alignment: .leading, spacing: 12) {
-                Feature(symbol: "waveform", text: L("onb.welcome.feature1"))
+                Feature(symbol: "tray.full", text: L("onb.welcome.feature1"))
                 Feature(symbol: "lock.shield", text: L("onb.welcome.feature2"))
                 Feature(symbol: "book", text: L("onb.welcome.feature3"))
             }
@@ -298,33 +270,6 @@ private struct VaultLine: View {
             .help(L("onb.vault.hint"))
             if state.isSwitchingVault { VaultSwitchingNotice() }
         }
-    }
-}
-
-/// Recording consent: the checkbox enables "Empezar". Lives in the pinned footer of the welcome.
-private struct ConsentCard: View {
-    @Binding var consent: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "hand.raised")
-                .font(Brand.font(15, .medium))
-                .foregroundStyle(Brand.color.warning)
-                .frame(width: 20)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("onb.consent.title")).font(Brand.callout).foregroundStyle(Brand.color.text)
-                Text(L("onb.consent.message"))
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Toggle(L("onb.consent.accept"), isOn: $consent)
-                    .toggleStyle(.checkbox)
-                    .padding(.top, 2)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(Brand.color.warningSoft, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
     }
 }
 
@@ -380,101 +325,7 @@ enum VaultPicker {
     }
 }
 
-private struct PermissionsStep: View {
-    @ViewState private var permissions = RecorderPermissions(screenAudio: false, microphone: false)
-    @ViewState private var askedScreen = OnboardingStep.askedScreen
-    @ViewState private var askedMic = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            StepHeader(symbol: "lock.open", title: L("onb.perm.title"), message: L("onb.perm.message"))
-            PermissionCard(symbol: "speaker.wave.2", title: L("onb.perm.screenTitle"), message: L("onb.perm.screenMessage"),
-                           granted: permissions.screenAudio, asked: askedScreen,
-                           request: {
-                               askedScreen = true
-                               OnboardingStep.askedScreen = true
-                               Task { _ = await Recorder.requestScreenCapture(); await refresh() }
-                           },
-                           openSettings: { Recorder.openPrivacySettings(.screenRecording) })
-            PermissionCard(symbol: "mic", title: L("onb.perm.micTitle"), message: L("onb.perm.micMessage"),
-                           granted: permissions.microphone, asked: askedMic,
-                           request: {
-                               askedMic = true
-                               Task { _ = await Recorder.requestMicrophone(); await refresh() }
-                           },
-                           openSettings: { Recorder.openPrivacySettings(.microphone) })
-            if askedScreen && !permissions.screenAudio {
-                // macOS usually applies Screen Recording only to a fresh process. The step is saved, so the
-                // relaunched app comes back right here.
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "arrow.clockwise").font(Brand.font(17)).foregroundStyle(Brand.color.accent)
-                    Text(L("onb.perm.restartHint"))
-                        .foregroundStyle(Brand.color.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Button(L("onb.perm.reopen")) { AppState.shared.relaunch() }
-                        .buttonStyle(.brandPrimary)
-                }
-                .padding(14)
-                .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-            }
-        }
-        .task {
-            // Live re-check: the user grants access in System Settings while this screen is open.
-            while !Task.isCancelled {
-                await refresh()
-                try? await Task.sleep(for: .seconds(1.5))
-            }
-        }
-    }
-
-    private func refresh() async {
-        let now = await Recorder.permissions()
-        if now != permissions { permissions = now }
-    }
-}
-
-private struct PermissionCard: View {
-    let symbol: String
-    let title: String
-    let message: String
-    let granted: Bool
-    let asked: Bool
-    var request: () -> Void
-    var openSettings: () -> Void
-
-    var body: some View {
-        BrandCard(padding: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: symbol)
-                    .font(Brand.font(18, .medium))
-                    .foregroundStyle(granted ? Brand.color.onAccent : Brand.color.accent)
-                    .frame(width: 40, height: 40)
-                    .background(granted ? Brand.color.accent : Brand.color.accentSoft,
-                                in: RoundedRectangle(cornerRadius: Brand.radius.control + 2, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(Brand.callout).foregroundStyle(Brand.color.text)
-                    Text(message).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if granted {
-                    Label(L("onb.perm.granted"), systemImage: "checkmark.circle")
-                        .font(Brand.callout)
-                        .foregroundStyle(Brand.color.success)
-                } else if asked {
-                    Button(L("onb.perm.openSettings"), action: openSettings).buttonStyle(.brandSecondary)
-                } else {
-                    Button(L("onb.perm.allow"), action: request).buttonStyle(.brandPrimary)
-                }
-            }
-        }
-        .animation(Brand.motion.fast, value: granted)
-    }
-}
-
 private struct DoneStep: View {
-    @Environment(AppState.self) private var state
-
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 14) {
@@ -492,17 +343,16 @@ private struct DoneStep: View {
             }
             BrandCard(padding: 18) {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Menu bar (with what happens after each meeting) · ⌥⌘R · ⌘K, the "find without thinking" way in.
-                    tip(icon: AnyView(BrandMark(size: 22)), title: L("onb.done.menuTitle"), message: L("onb.done.menuAfterMessage"))
-                    tip(icon: AnyView(Text(verbatim: "⌥⌘R").font(Brand.font(12, .semibold)).foregroundStyle(Brand.color.accent)),
-                        title: L("onb.done.hotkeyTitle"), message: L("onb.done.hotkeyMessage"))
+                    // Menu bar (capture first, recording as one more option) · ⌃⌥Espacio quick capture · ⌘K, the
+                    // "find without thinking" way in (§16.10).
+                    tip(icon: AnyView(BrandMark(size: 22)), title: L("onb.done.menuTitle"), message: L("onb.done.menuCaptureMessage"))
+                    tip(icon: AnyView(Text(verbatim: "⌃⌥␣").font(Brand.font(12, .semibold)).foregroundStyle(Brand.color.accent)),
+                        title: L("onb.done.captureTitle"), message: L("onb.done.captureMessage"))
                     tip(icon: AnyView(Text(verbatim: "⌘K").font(Brand.font(13, .semibold)).foregroundStyle(Brand.color.accent)),
                         title: L("onb.done.searchTitle"), message: L("onb.done.searchMessage"))
                 }
             }
-            ModelsStatusLine()
         }
-        .onAppear { OnboardingView.prepareModelsInBackground(state) }
     }
 
     private func tip(icon: AnyView, title: String, message: String) -> some View {
@@ -514,37 +364,6 @@ private struct DoneStep: View {
                 Text(title).font(Brand.callout).foregroundStyle(Brand.color.text)
                 Text(message).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
             }
-        }
-    }
-}
-
-/// The background model download, as one status line: "Descargando… 42 %" · ready · error + Reintentar. Recording
-/// before it finishes still works: the engine waits for the model while the job says "Preparando el modelo…".
-private struct ModelsStatusLine: View {
-    @Environment(AppState.self) private var state
-
-    var body: some View {
-        HStack(spacing: 10) {
-            if state.modelsReady {
-                Label(L("onb.models.ready"), systemImage: "checkmark.circle")
-                    .foregroundStyle(Brand.color.success)
-            } else if let error = state.modelError {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(Brand.color.warning)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button(L("onb.models.retry")) { state.prepareModels() }.buttonStyle(.brandSecondary)
-            } else {
-                // The hint tells the user they don't have to wait: readable (text2) and wrapping, never cut.
-                VStack(alignment: .leading, spacing: 2) {
-                    BrandLoader(size: 18, text: L("onb.models.downloading", Fmt.percent(state.modelProgress?.fraction ?? 0)))
-                    Text(L("onb.models.hint"))
-                        .font(Brand.caption)
-                        .foregroundStyle(Brand.color.text2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.leading, 18 + Brand.spacing.s)
-                }
-            }
-            Spacer(minLength: 0)
         }
     }
 }

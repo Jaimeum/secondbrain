@@ -48,6 +48,10 @@ struct MainView: View {
                              set: { state.editingPage = $0?.path })) { item in
             PageEditorHost(path: item.path)
         }
+        // §16.11: the first "Grabar" (permissions, consent, transcription model).
+        .sheet(item: $state.recordingIntro) { request in
+            RecordingIntroSheet(request: request)
+        }
         .onAppear {
             SettingsLinkOpener.opener = { openSettings() }
         }

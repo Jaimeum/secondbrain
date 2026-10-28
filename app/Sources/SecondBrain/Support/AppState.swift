@@ -112,6 +112,8 @@ final class AppState {
     var homePopToken = 0
     /// "Editar" on a page or ficha (§16.6): MainView presents the editor over everything while set.
     var editingPage: String?
+    /// The first "Grabar" waiting for RecordingIntroSheet (§16.11; MainView presents it while set).
+    var recordingIntro: RecordingIntroRequest?
     /// "Historial" over any screen (MainView presents `ActivitySheet`).
     var historyRequest: HistoryRequest?
     /// "Enlace…" from the sidebar's "+ Agregar".
@@ -164,7 +166,9 @@ final class AppState {
         }
         if config.onboardingComplete {
             startEngine()
-            if !snapshot { prepareModels() }
+            // v0.6 (§16.11): the transcription model waits for the first "Grabar" (or Ajustes); once recording was
+            // set up it loads at launch as before.
+            if !snapshot, recordingIntroDone { prepareModels() }
         }
     }
 
@@ -191,7 +195,6 @@ final class AppState {
     func completeOnboarding() {
         update { $0.onboardingComplete = true }
         startEngine()
-        prepareModels()
     }
 
     /// Quits and opens SecondBrain again. The new instance starts only after this process has exited, so two
@@ -574,6 +577,10 @@ final class AppState {
             recordingError = L("record.finishSetupFirst")
             return
         }
+        // v0.6: the first recording goes through RecordingIntroSheet (permissions, consent, model), then runs.
+        if await needsRecordingIntro(then: { [weak self] in
+            await self?.startRecording(calendarEventId: calendarEventId, attendees: attendees)
+        }) { return }
         recordingError = nil
         do {
             let manifest = try await recorder.start(title: recordingTitleOrNil, projectSlug: recordingProjectSlug,

@@ -20,6 +20,9 @@ struct EntityView: View {
 
     @ViewState private var snapshot: EntityIndex.Snapshot = .empty
     @ViewState private var loaded = false
+    /// The page's own `##` headings: an automatic section Claude's page already has (its "Proyectos", "En
+    /// reuniones"…) isn't repeated under it.
+    @ViewState private var pageHeadings: [String] = []
 
     private var entity: Entity? { snapshot.entity(path) }
 
@@ -38,17 +41,22 @@ struct EntityView: View {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
             WikiWebView(vault: state.engine.vault, path: path, hideType: true, showsChrome: false,
-                        appendix: loaded ? EntityMarkdown.sections(snapshot.sections(for: path, projectSlug: filterSlug),
-                                                                   snapshot: snapshot) : nil) { next in
+                        appendix: loaded ? EntityMarkdown.sections(
+                            EntityMarkdown.withoutDuplicates(snapshot.sections(for: path, projectSlug: filterSlug),
+                                                             pageHeadings: pageHeadings),
+                            snapshot: snapshot) : nil) { next in
                 follow(next)
             }
         }
         .background(Brand.color.surface)
         .navigationTitle(shownTitle)
         .task(id: "\(path)-\(state.vaultRevision)-\(state.tasksRevision)-\(state.projects.hashValue)") {
-            let snap = await EntityIndex.snapshot(vaultRoot: state.engine.vault.root)
+            let vault = state.engine.vault, page = path
+            let snap = await EntityIndex.snapshot(vaultRoot: vault.root)
+            let headings = await Task.detached { EntityMarkdown.headings(in: (try? vault.read(page)) ?? "") }.value
             guard !Task.isCancelled else { return }
             snapshot = snap
+            pageHeadings = headings
             loaded = true
         }
     }
@@ -263,6 +271,42 @@ enum EntityMarkdown {
         if raw.hasPrefix("@project/") { return .project(String(raw.dropFirst("@project/".count))) }
         if raw.hasPrefix("@task/") { return .task(String(raw.dropFirst("@task/".count))) }
         return .page(raw)
+    }
+
+    /// The `## ` headings of a page (front matter and code blocks skipped).
+    static func headings(in text: String) -> [String] {
+        var inFence = false
+        return text.components(separatedBy: "\n").compactMap { line in
+            if line.hasPrefix("```") { inFence.toggle(); return nil }
+            guard !inFence, line.hasPrefix("## ") else { return nil }
+            return String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+        }
+    }
+
+    /// Heading names (es/en, lowercased, no accents) that mean the same as an automatic section. Pendientes is
+    /// never dropped (its rows are the live checklist, not the page's plain bullets), nor Relacionados (it adds the
+    /// backlinks, which a page's own "Relacionado" never lists).
+    static let synonyms: [EntitySectionKind: Set<String>] = [
+        .projects: ["proyectos", "projects", "en proyectos", "in projects"],
+        .meetings: ["reuniones", "en reuniones", "meetings", "in meetings"],
+        .emails: ["correos", "hilos de correo", "emails", "email threads", "mail"],
+        .documents: ["documentos y notas", "documentos", "documents and notes", "documents"],
+        .decisions: ["decisiones", "decisiones relacionadas", "decisions", "related decisions"],
+    ]
+
+    static func normalized(_ heading: String) -> String {
+        heading.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .trimmingCharacters(in: CharacterSet.alphanumerics.inverted.subtracting(.whitespaces).union(.whitespaces))
+    }
+
+    /// `sections` without the ones the page already has under a heading of the same meaning.
+    static func withoutDuplicates(_ sections: [EntitySection], pageHeadings: [String]) -> [EntitySection] {
+        let have = Set(pageHeadings.map(normalized))
+        guard !have.isEmpty else { return sections }
+        return sections.filter { section in
+            guard let names = synonyms[section.kind] else { return true }
+            return have.isDisjoint(with: names)
+        }
     }
 
     static func sections(_ sections: [EntitySection], snapshot: EntityIndex.Snapshot) -> String {

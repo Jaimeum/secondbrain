@@ -15,6 +15,10 @@ extension AppState {
     /// event (`calendarEventId`, event date = start). Without a project it goes to Inbox as usual.
     func startRecording(for event: CalendarEvent, projectSlug: String?) async {
         guard !isRecording, !isRecorderBusy else { return }
+        // v0.6: the first recording waits for RecordingIntroSheet, then comes back here with the event.
+        if await needsRecordingIntro(then: { [weak self] in await self?.startRecording(for: event, projectSlug: projectSlug) }) {
+            return
+        }
         let previous = (title: recordingTitle, projectSlug: recordingProjectSlug)
         recordingTitle = event.title
         recordingProjectSlug = projectSlug

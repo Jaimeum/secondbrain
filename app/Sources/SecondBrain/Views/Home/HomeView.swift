@@ -2,10 +2,11 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// Inicio (CONTRACT §15.2): one centered column (max 880 pt) with, in order and only when they have content: today's
-/// date and the ⌘K field · Ahora / Siguiente (+ the rest of today) · Por ordenar · Pendientes para hoy · Recientes ·
-/// Conexiones. Its own NavigationStack pushes a global page, the timeline, the graph, Sin asignar or a question.
-/// The whole screen accepts dropped files (→ Sin asignar).
+/// Inicio (CONTRACT §16.9, layout §15.2): one centered column (max 880 pt) with, in order and only when they have
+/// content: today's date and the ⌘K field · Lo último que aprendí (any kind of source, GitHub folded per repo) ·
+/// Pendientes para hoy · Agenda (compact, only with a calendar) · "n por ordenar → Sin asignar". A new vault shows five
+/// equal ways in (Nota · Archivo · Enlace · Correo · Grabar): the brain is fed by the whole day, not only meetings.
+/// Its own NavigationStack pushes a global ficha or the timeline. The whole screen accepts dropped files (→ Sin asignar).
 struct HomeView: View {
     @Environment(AppState.self) private var state
     /// Snapshot "home-empty": the new-vault state, whatever the vault holds.
@@ -17,9 +18,8 @@ struct HomeView: View {
     @ViewState private var tasks = TaskListModel()
     @ViewState private var dropTargeted = false
     @ViewState private var importing = 0
-    @ViewState private var ruleOffer = RuleOffer()
     @ViewState private var error: String?
-    /// The latest timeline entries with a page (Recientes when few sources are learned on this Mac).
+    /// The latest timeline entries with a page (Lo último que aprendí when few sources are learned on this Mac).
     @ViewState private var timelineRecents: [TimelineEntry] = []
     @ViewState private var timelineLoaded = false
     /// A task's meeting or email, read over Inicio (Pendientes para hoy never leaves Inicio).
@@ -32,8 +32,9 @@ struct HomeView: View {
     static let undoSeconds = 6
 
     static let maxWidth: CGFloat = 880
-    /// Below this content width the grids collapse to one column.
-    static let oneColumnBelow: CGFloat = 700
+    /// Below this content width the grids collapse to one column. `width` is the column inside the padding, so a
+    /// 700 pt detail (the minimum window, §15.3) still gets two columns and Pendientes/Agenda stay near the top.
+    static let oneColumnBelow: CGFloat = 520
 
     var body: some View {
         NavigationStack(path: $routes) {
@@ -54,12 +55,12 @@ struct HomeView: View {
     }
     private var oneColumn: Bool { width < Self.oneColumnBelow }
 
-    /// Sin asignar and the failed sources without a project, newest first; one row per email thread. The same items
-    /// as Sin asignar ("Ver todo"), so the counts match: a failed source of a project shows in its "Procesando".
-    private var toSort: [SourceRecord] {
+    /// Sin asignar and the failed sources without a project, one per email thread: the same items as Sin asignar, so
+    /// "n por ordenar" matches its list (a failed source of a project shows in its "Procesando").
+    private var toSortCount: Int {
         InboxView.onePerThread(state.engine.sources
             .filter { $0.status == .needsProject || ($0.projectSlug == nil && $0.status == .failed) })
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .count
     }
 
     /// My open tasks (the count of "Ver todos").
@@ -75,13 +76,19 @@ struct HomeView: View {
             .sorted(by: TaskSort.byDue)
     }
 
-    /// In progress first, then the last learned, then (when this Mac learned fewer than 6) the latest pages of the
-    /// vault's timelines, so a vault with content never shows an empty Recientes. 6 in all.
+    /// In progress first, then the last learned of any kind, each followed GitHub repo as one card (its newest sync),
+    /// then (when this Mac learned fewer than 6) the latest pages of the vault's timelines, so a vault with content
+    /// never shows an empty "Lo último que aprendí". 6 in all.
     private var recents: [HomeRecentItem] {
-        let sources = state.engine.sources.filter { $0.kind != .github }
-        let busy = sources.filter { $0.status.isInProgress }.sorted { $0.updatedAt > $1.updatedAt }
-        let done = sources.filter { $0.status == .done }.sorted { $0.updatedAt > $1.updatedAt }
-        var items = (busy + done).prefix(6).map(HomeRecentItem.init(source:))
+        let all = state.engine.sources.filter { $0.status.isInProgress || $0.status == .done }
+        let busy = all.filter { $0.kind != .github && $0.status.isInProgress }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .map(HomeRecentItem.init(source:))
+        let done = all.filter { $0.kind != .github && $0.status == .done }.map(HomeRecentItem.init(source:))
+        let repos = Dictionary(grouping: all.filter { $0.kind == .github }, by: HomeRecentItem.repoName(of:))
+            .map { repo, syncs in HomeRecentItem(repo: repo, syncs: syncs.sorted { $0.timelineDate > $1.timelineDate }) }
+        let learned = (done + repos).sorted { $0.sortDate > $1.sortDate }
+        var items = Array((busy + learned).prefix(6))
         guard items.count < 6 else { return items }
         var seen = Set(items.compactMap(\.sourceId))
         var seenPaths = Set<String>()
@@ -114,14 +121,14 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 header
-                HomeNowSection()
                 if isEmptyVault {
                     emptyState
+                    HomeAgendaSection()
                 } else {
-                    if !toSort.isEmpty { toSortSection.transition(.opacity) }
-                    if tasks.loaded, !myListed.isEmpty { tasksSection.transition(.opacity) }
                     if !recents.isEmpty { recentSection.transition(.opacity) }
-                    connectionsSection
+                    if tasks.loaded, !myListed.isEmpty { tasksSection.transition(.opacity) }
+                    HomeAgendaSection()
+                    if toSortCount > 0 { toSortLine.transition(.opacity) }
                 }
             }
             .frame(maxWidth: Self.maxWidth, alignment: .leading)
@@ -129,7 +136,7 @@ struct HomeView: View {
             .padding(.vertical, Brand.spacing.contentWide)
             .frame(maxWidth: .infinity)
             .animation(Brand.motion.animation(), value: tasks.loaded)
-            .animation(Brand.motion.animation(), value: toSort.count)
+            .animation(Brand.motion.animation(), value: toSortCount)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width - 2 * Brand.spacing.contentWide } action: { width = $0 }
         .scrollContentBackground(.hidden)
@@ -153,18 +160,8 @@ struct HomeView: View {
         } isTargeted: { dropTargeted = $0 }
         .overlay { if dropTargeted { dropOverlay } }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 8) {
-                if let task = undoTask { undoLine(task).transition(.opacity) }
-                if ruleOffer.current != nil {
-                    RuleOfferBar(offer: ruleOffer)
-                        .frame(maxWidth: Self.maxWidth)
-                        .padding(.horizontal, 16)
-                        .transition(.opacity)
-                }
-            }
-            .padding(.bottom, undoTask != nil || ruleOffer.current != nil ? 12 : 0)
+            if let task = undoTask { undoLine(task).transition(.opacity).padding(.bottom, 12) }
         }
-        .animation(Brand.motion.animation(fast: true), value: ruleOffer.current)
         .animation(Brand.motion.animation(fast: true), value: undoTask?.id)
         .sheet(item: $taskPreview) { PageSheet(path: $0.path) }
         .task(id: undoGeneration) {
@@ -222,26 +219,31 @@ struct HomeView: View {
 
     // MARK: Por ordenar
 
-    private var toSortSection: some View {
-        let items = toSort
-        return VStack(alignment: .leading, spacing: 10) {
-            BrandSectionHeader(title: L("home.toSort"), count: items.count) {
-                HomeLink(title: L("home.seeAll")) { state.navigate(to: .sidebar(.unassigned)) }
-            }
-            BrandCard(padding: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(items.prefix(3).enumerated()), id: \.element.id) { offset, source in
-                        if offset > 0 { HomeDivider() }
-                        // The same row as Sin asignar (suggestion · Asignar · Otro ▾, or Reintentar · Eliminar).
-                        InboxRow(source: source, onError: { error = $0 }, onAssigned: { subject, slug in
-                            ruleOffer.propose(subject, projectSlug: slug, state: state)
-                        }, showsCard: false)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 2)
+    /// One line, "3 por ordenar → Sin asignar": sorting happens in Sin asignar, not on Inicio.
+    private var toSortLine: some View {
+        Button {
+            state.navigate(to: .sidebar(.unassigned))
+        } label: {
+            BrandCard(padding: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "tray").foregroundStyle(Brand.color.text2)
+                    Text(L("home.toSortLine", toSortCount))
+                        .font(Brand.callout)
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    HStack(spacing: 4) {
+                        Text(L("inbox.title")).lineLimit(1)
+                        Image(systemName: "arrow.right").imageScale(.small)
                     }
+                    .font(Brand.callout)
+                    .foregroundStyle(Brand.color.accent)
                 }
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .help(L("home.toSortHelp"))
     }
 
     // MARK: Pendientes para hoy
@@ -299,7 +301,7 @@ struct HomeView: View {
         .accessibilityElement(children: .combine)
     }
 
-    // MARK: Recientes
+    // MARK: Lo último que aprendí
 
     private var recentSection: some View {
         let columns = oneColumn
@@ -317,64 +319,50 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Conexiones
-
-    private var connectionsSection: some View {
-        Button {
-            state.navigate(to: .sidebar(.graph))
-        } label: {
-            BrandCard(padding: 14) {
-                HStack(spacing: 10) {
-                    Image(systemName: "point.3.connected.trianglepath.dotted")
-                        .foregroundStyle(Brand.color.accent)
-                    Text(L("home.connections"))
-                        .font(Brand.callout)
-                        .foregroundStyle(Brand.color.text)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Image(systemName: "arrow.right").foregroundStyle(Brand.color.text3)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: Empty vault
 
-    /// The big "Grabar" only when Ahora doesn't already show one (the hero's or the recording's): one "Grabar" on
-    /// screen besides the sidebar's.
-    private var showsRecordTile: Bool {
-        !state.isRecording && HomeNowSection.heroEvent(now: MeetingsModel.shared.now) == nil
-    }
-
+    /// A new vault: the five ways to feed the brain, with the same weight (none of them first because it records).
     private var emptyState: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             BrandMark(size: 56)
-            Text(L("home.emptyTitle"))
-                .font(Brand.title)
-                .foregroundStyle(Brand.color.text)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            let showsRecord = showsRecordTile
-            let columns = oneColumn
-                ? [GridItem(.flexible())]
-                : Array(repeating: GridItem(.flexible(), spacing: 12), count: showsRecord ? 3 : 2)
-            LazyVGrid(columns: columns, spacing: 12) {
-                if showsRecord {
-                    HomeBigAction(symbol: "record.circle", title: L("home.emptyRecord"), shortcut: nil, tint: Brand.color.record) {
-                        state.recordNow(placement: .sidebar)
-                    }
+            VStack(spacing: 6) {
+                Text(L("home.emptyTitle"))
+                    .font(Brand.title)
+                    .foregroundStyle(Brand.color.text)
+                Text(L("home.empty.message"))
+                    .font(Brand.body)
+                    .foregroundStyle(Brand.color.text2)
+                    .frame(maxWidth: 520)
+            }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            // 5 across, else 3 + 2, else one column: the tiles never squeeze their titles.
+            let count = width >= 600 ? 5 : (width >= 360 ? 3 : 1)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: count), spacing: 12) {
+                HomeBigAction(symbol: "square.and.pencil", title: L("home.empty.note"), shortcut: nil, tint: Brand.color.accent) {
+                    state.noteRequest = NoteRequest(projectSlug: nil)
                 }
-                HomeBigAction(symbol: "envelope", title: L("home.emptyPaste"), shortcut: "⌘⇧V", tint: Brand.color.accent) {
+                HomeBigAction(symbol: "doc.badge.plus", title: L("home.empty.file"), shortcut: nil, tint: Brand.color.accent,
+                              action: chooseFiles)
+                HomeBigAction(symbol: "link", title: L("home.empty.link"), shortcut: nil, tint: Brand.color.accent) {
+                    state.linkRequest = LinkRequest(projectSlug: nil)
+                }
+                HomeBigAction(symbol: "envelope", title: L("home.empty.mail"), shortcut: "⌘⇧V", tint: Brand.color.accent) {
                     state.requestEmail()
                 }
-                HomeBigAction(symbol: "arrow.down.doc", title: L("home.emptyDrop"), shortcut: nil, tint: Brand.color.accent,
-                              dashed: true, action: chooseFiles)
+                HomeBigAction(symbol: "record.circle", title: state.isRecording ? L("add.stopRecording") : L("home.empty.record"),
+                              shortcut: nil, tint: Brand.color.accent) {
+                    state.recordNow(placement: .sidebar)
+                }
+                .disabled(state.isRecorderBusy)
             }
+            Text(L("home.empty.dropHint"))
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text3)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.vertical, 16)
     }
 
     private var dropOverlay: some View {
@@ -481,35 +469,18 @@ struct HomeView: View {
         await tasks.load { await engine.tasks(projectSlug: nil) }
     }
 
+    /// "Archivo": the same panel and import as "+ Agregar", with no project (→ Sin asignar).
     private func chooseFiles() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.prompt = L("sources.addFiles")
-        panel.message = L("sources.panelMessage")
-        if panel.runModal() == .OK { importURLs(panel.urls) }
+        guard let batch = SourceImport.chooseFiles() else { return }
+        importURLs(batch.urls)
     }
 
-    /// Same engine calls as SourcesView's drop, with no project: everything lands in Sin asignar.
     private func importURLs(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
         importing += 1
         Task {
             defer { importing -= 1 }
-            var failed: [String] = []
-            for url in urls {
-                do {
-                    if url.isFileURL {
-                        try await state.engine.importFileAsync(url, projectSlug: nil)
-                    } else {
-                        try await state.engine.importURL(url, projectSlug: nil)
-                    }
-                } catch let engineError as EngineError {
-                    failed.append(engineError.errorDescription ?? L("sources.importFailed", url.lastPathComponent))
-                } catch {
-                    failed.append(url.isFileURL ? L("sources.importFailed", url.lastPathComponent) : L("sources.linkFailed"))
-                }
-            }
+            let failed = await SourceImport.importURLs(urls, projectSlug: nil, state: state)
             if !failed.isEmpty { self.error = failed.joined(separator: "\n") }
         }
     }

@@ -367,5 +367,22 @@
 			<string>%ld projects</string>
 		</dict>
 	</dict>
+	<!-- v0.6 home -->
+	<key>home.repoUpdates</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld update this week</string>
+			<key>other</key>
+			<string>%ld updates this week</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

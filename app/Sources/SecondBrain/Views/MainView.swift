@@ -49,6 +49,10 @@ struct MainView: View {
             PageEditorHost(path: item.path)
         }
         .correctionsReview()   // v0.6 facts: "Revisar cambios en el cerebro" after a save (§16.6)
+        // §16.11: the first "Grabar" (permissions, consent, transcription model).
+        .sheet(item: $state.recordingIntro) { request in
+            RecordingIntroSheet(request: request)
+        }
         .onAppear {
             SettingsLinkOpener.opener = { openSettings() }
         }

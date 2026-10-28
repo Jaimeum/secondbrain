@@ -2,198 +2,92 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-// Pieces of Inicio (CONTRACT §15.2). Rows have fixed heights so sections don't jump while they load.
+// Pieces of Inicio (CONTRACT §16.9, layout §15.2). Rows have fixed heights so sections don't jump while they load.
 
-/// "Ahora / Siguiente": the recording in progress, else the hero meeting (today or tomorrow) with its one action, then
-/// the rest of today in compact rows. Without accounts, one line to connect a calendar.
-struct HomeNowSection: View {
+/// Agenda (§16.9): one compact card with the meeting on now or next (today or tomorrow) and the rest of today, 3
+/// rows at most, plus "Ver agenda →". Hidden without a connected calendar and on a day with nothing left: no
+/// permanent "connect your calendar" line (that lives in Reuniones and Ajustes).
+struct HomeAgendaSection: View {
     @Environment(AppState.self) private var state
-    @ViewState private var connectError: String?
-    @ViewState private var connecting = false
+
+    static let maxRows = 3
 
     private var model: MeetingsModel { MeetingsModel.shared }
 
     var body: some View {
-        let now = model.now
-        let hero = Self.heroEvent(now: now)
-        let today = model.events(in: .today, now: now)
-            .filter { $0.end > now && !$0.matches(hero?.event.id) }
-            .prefix(4)
-        let noAccounts = state.engine.accounts.accounts.isEmpty
-        if state.isRecording || hero != nil || !today.isEmpty || noAccounts {
-            VStack(alignment: .leading, spacing: 12) {
-                if state.isRecording {
-                    HomeRecordingCard()
-                } else if let hero {
-                    // The same hero as Reuniones (§15.2): countdown, project chip with its offer, place / Unirme, and
-                    // the meeting's one action.
-                    MeetingHeroCard(event: hero.event, isNow: hero.isNow,
-                                    onSelect: { openInMeetings(hero.event, prepare: false) },
-                                    onPrepare: { openInMeetings(hero.event, prepare: true) },
-                                    onShowPage: { state.open(path: $0) })
+        let rows = Self.rows(now: model.now)
+        if !state.engine.accounts.accounts.isEmpty, !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                BrandSectionHeader(title: L("home.agenda")) {
+                    HomeLink(title: L("home.seeAgenda")) { state.navigate(to: .sidebar(.meetings)) }
                 }
-                if !today.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        BrandSectionHeader(title: L("home.today")) {
-                            HomeLink(title: L("home.seeAgenda")) { state.navigate(to: .sidebar(.meetings)) }
-                        }
-                        BrandCard(padding: 0) {
-                            VStack(spacing: 0) {
-                                ForEach(Array(today.enumerated()), id: \.element.id) { offset, event in
-                                    if offset > 0 { HomeDivider() }
-                                    HomeEventRow(event: event)
-                                }
-                            }
+                BrandCard(padding: 0) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(rows.enumerated()), id: \.element.event.id) { offset, row in
+                            if offset > 0 { HomeDivider() }
+                            HomeEventRow(event: row.event, tag: row.tag)
                         }
                     }
                 }
-                if noAccounts { connectLine }
             }
         }
     }
 
-    /// "Ahora" in its record window, else "Siguiente" when it is today or tomorrow.
+    /// The hero ("Ahora" in its record window, else "Siguiente" when it is today or tomorrow) first, then what is
+    /// left of today.
+    @MainActor static func rows(now: Date) -> [(event: CalendarEvent, tag: String?)] {
+        let model = MeetingsModel.shared
+        var rows: [(event: CalendarEvent, tag: String?)] = []
+        if let hero = heroEvent(now: now) {
+            rows.append((hero.event, hero.isNow ? L("home.now") : L("home.next")))
+        }
+        let heroId = rows.first?.event.id
+        for event in model.events(in: .today, now: now) where event.end > now && !event.matches(heroId) {
+            guard rows.count < maxRows else { break }
+            rows.append((event, nil))
+        }
+        return rows
+    }
+
     @MainActor static func heroEvent(now: Date) -> (event: CalendarEvent, isNow: Bool)? {
         guard let hero = MeetingsModel.shared.hero(now: now) else { return nil }
         if hero.isNow { return hero }
-        let days = Fmt.daysFromToday(hero.event.start)
-        return days <= 1 ? hero : nil
-    }
-
-    /// The event in Reuniones; "Prepararme" lands on its preparation, not on the plain detail.
-    private func openInMeetings(_ event: CalendarEvent, prepare: Bool) {
-        state.navigate(to: .event(event.id, prepare: prepare))
-    }
-
-    private var connectLine: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                connectText
-                Spacer(minLength: 8)
-                connectButtons
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                connectText
-                connectButtons
-            }
-        }
-        .padding(12)
-        .background(Brand.color.cardAlt.opacity(0.5), in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-    }
-
-    private var connectText: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Label(L("home.connectCalendar"), systemImage: "calendar")
-                .font(Brand.body)
-                .foregroundStyle(Brand.color.text2)
-                .lineLimit(2)
-            if let connectError {
-                Text(connectError)
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.danger)
-                    .lineLimit(2)
-            }
-        }
-    }
-
-    private var connectButtons: some View {
-        HStack(spacing: 8) {
-            Button(L("accounts.macCalendar")) {
-                connecting = true
-                connectError = nil
-                Task {
-                    defer { connecting = false }
-                    do { try await state.connectAccount(.local) } catch { connectError = FriendlyError.message(error) }
-                }
-            }
-            .buttonStyle(.brandSecondary)
-            .disabled(connecting)
-            Button(L("home.connectAccounts")) { SettingsLink.open(tab: "accounts") }
-                .buttonStyle(.brandSecondary)
-        }
+        return Fmt.daysFromToday(hero.event.start) <= 1 ? hero : nil
     }
 }
 
-/// While recording: what is being recorded, where it goes, and "Detener mm:ss".
-struct HomeRecordingCard: View {
-    @Environment(AppState.self) private var state
-
-    var body: some View {
-        BrandCard(padding: 16) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 16) {
-                    info
-                    Spacer(minLength: 12)
-                    stop
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    info
-                    stop
-                }
-            }
-        }
-    }
-
-    private var info: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                BrandRecordingDot(size: 7)
-                Text(L("home.now"))
-                    .textCase(.uppercase)
-                    .font(Brand.font(11, .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(Brand.color.record)
-            }
-            Text(title)
-                .font(Brand.section)
-                .foregroundStyle(Brand.color.text)
-                .lineLimit(2)
-            HomeProjectChip(slug: state.recordingProjectSlug)
-        }
-    }
-
-    private var title: String {
-        let t = state.recordingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? L("status.recording") : t
-    }
-
-    private var stop: some View {
-        Button {
-            Task { await state.stopRecording() }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "stop.fill")
-                if let since = state.recordingSince {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(L("record.stopWithTime", Fmt.duration(context.date.timeIntervalSince(since)))).monospacedDigit()
-                    }
-                } else {
-                    Text(L("record.stop"))
-                }
-            }
-        }
-        .buttonStyle(.brandRecord)
-        .controlSize(.large)
-        .disabled(state.isRecorderBusy)
-    }
-}
-
-/// "10:30 · Revisión semanal · 🚀 Atlas" (opens it in Reuniones).
+/// "AHORA · 10:30 · Revisión semanal · 🚀 Atlas" (opens it in Reuniones). A tomorrow event says "mañana 10:30".
 struct HomeEventRow: View {
     @Environment(AppState.self) private var state
     let event: CalendarEvent
+    var tag: String?
+
+    private var when: String {
+        if event.isAllDay { return L("home.allDay") }
+        return Fmt.daysFromToday(event.start) == 0 ? Fmt.time(event.start) : Fmt.dayTime(event.start)
+    }
 
     var body: some View {
         Button {
             state.navigate(to: .event(event.id, prepare: false))
         } label: {
             HStack(spacing: 12) {
-                Text(event.isAllDay ? L("home.allDay") : Fmt.time(event.start))
+                Text(when)
                     .font(Brand.caption)
                     .foregroundStyle(Brand.color.text2)
                     .monospacedDigit()
                     .lineLimit(1)
-                    .frame(width: 64, alignment: .leading)
+                    .frame(width: 84, alignment: .leading)
+                if state.isRecording, event.matches(state.recordingEventId) {
+                    BrandRecordingDot(size: 7)
+                } else if let tag {
+                    Text(tag)
+                        .textCase(.uppercase)
+                        .font(Brand.font(10, .semibold))
+                        .tracking(0.6)
+                        .foregroundStyle(Brand.color.accent)
+                        .lineLimit(1)
+                }
                 Text(event.title)
                     .font(Brand.body)
                     .foregroundStyle(Brand.color.text)
@@ -210,14 +104,19 @@ struct HomeEventRow: View {
     }
 }
 
-/// What a Recientes card shows: a source of this Mac (in progress or learned), or a page from a project's timeline.
+/// What a "Lo último que aprendí" card shows: a source of this Mac (in progress or learned), a followed GitHub repo
+/// (its syncs folded into one card), or a page from a project's timeline.
 struct HomeRecentItem: Identifiable {
     let id: String
     let symbol: String
     let kindLabel: String
     let title: String
+    /// One caption line under the title ("3 actualizaciones esta semana" on a repo).
+    var detail: String?
     let projectSlug: String?
     let date: Date
+    /// Newest change, for the order of the grid.
+    var sortDate: Date
     var source: SourceRecord?
     var pagePath: String?
     var sourceId: String? { source?.id }
@@ -229,7 +128,24 @@ struct HomeRecentItem: Identifiable {
         title = source.title
         projectSlug = source.projectSlug
         date = source.timelineDate
+        sortDate = source.updatedAt
         self.source = source
+    }
+
+    /// One repo: every sync of it is a source (one raw per sync, §13.3), so its commits and PRs read as one card
+    /// that opens the repo's living page (through the newest sync). `syncs` is newest first, never empty.
+    init(repo: String, syncs: [SourceRecord], now: Date = Date()) {
+        let latest = syncs[0]
+        id = "repo:" + repo
+        symbol = latest.kind.symbol
+        kindLabel = latest.kind.label
+        title = repo
+        let week = syncs.filter { now.timeIntervalSince($0.timelineDate) < 7 * 86_400 }.count
+        detail = week > 0 ? L("home.repoUpdates", week) : L("home.repoChanges")
+        projectSlug = latest.projectSlug
+        date = latest.timelineDate
+        sortDate = latest.updatedAt
+        source = latest
     }
 
     @MainActor init(entry: TimelineEntry) {
@@ -239,12 +155,22 @@ struct HomeRecentItem: Identifiable {
         title = entry.title
         projectSlug = entry.projectSlug
         date = entry.date
+        sortDate = entry.date
         pagePath = entry.pagePath
         if let sourceId = entry.sourceId { source = AppState.shared.engine.source(sourceId) }
     }
+
+    /// "owner/name" of a GitHub sync: from `externalId` ("github:owner/name@sha,…"), else the title before " — ".
+    static func repoName(of source: SourceRecord) -> String {
+        if let ext = source.externalId, ext.hasPrefix("github:") {
+            let rest = ext.dropFirst("github:".count)
+            return String(rest.split(separator: "@", maxSplits: 1).first ?? rest)
+        }
+        return source.title.components(separatedBy: " — ").first ?? source.title
+    }
 }
 
-/// A Recientes card (mockup page-10): kind, date (or progress), title, project. Fixed height.
+/// A "Lo último que aprendí" card (mockup page-10): kind, date (or progress), title, project. Fixed height.
 struct HomeRecentCard: View {
     @Environment(AppState.self) private var state
     let item: HomeRecentItem
@@ -281,9 +207,16 @@ struct HomeRecentCard: View {
                     Text(item.title)
                         .font(Brand.callout)
                         .foregroundStyle(Brand.color.text)
-                        .lineLimit(2)
+                        .lineLimit(item.detail == nil ? 2 : 1)
+                        .truncationMode(item.detail == nil ? .tail : .middle)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let detail = item.detail {
+                        Text(detail)
+                            .font(Brand.caption)
+                            .foregroundStyle(Brand.color.text2)
+                            .lineLimit(1)
+                    }
                     Spacer(minLength: 0)
                     HomeProjectChip(slug: item.projectSlug)
                 }
@@ -337,7 +270,7 @@ struct HomeDivider: View {
     }
 }
 
-/// One of the three big actions of an empty Inicio.
+/// One of the five equal actions of an empty Inicio (Nota · Archivo · Enlace · Correo · Grabar).
 struct HomeBigAction: View {
     let symbol: String
     let title: String

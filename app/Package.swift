@@ -44,7 +44,7 @@ let package = Package(
         .executableTarget(
             name: "sb",
             dependencies: [
-                "BrainCore", "Transcription",
+                "BrainCore", "Recorder", "Transcription",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),

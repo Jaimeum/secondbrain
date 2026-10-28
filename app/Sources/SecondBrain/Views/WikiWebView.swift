@@ -16,6 +16,8 @@ struct WikiWebView: NSViewRepresentable {
     /// v0.6 entity: markdown rendered after the page (a ficha's automatic sections); links in it use
     /// `sbwiki://page/<percent-encoded target>` like wikilinks.
     var appendix: String? = nil
+    /// v0.6 graph side panel: no H1 and no backlinks, tighter type (wiki.js `compact`).
+    var compact = false
     var onNavigate: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -112,6 +114,7 @@ struct WikiWebView: NSViewRepresentable {
                 "theme": theme(of: webView),
                 "path": shownPath ?? "",
                 "hideType": parent.hideType,
+                "compact": parent.compact,
             ]
             renderGeneration += 1
             let generation = renderGeneration

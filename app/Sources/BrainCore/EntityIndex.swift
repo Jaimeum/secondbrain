@@ -449,6 +449,7 @@ public final class EntityIndex: @unchecked Sendable {
         case .decision: kind = .decision
         case .question: kind = .question
         case .repo: kind = .repo
+        case .org: kind = .org
         case .project, .task, .page: kind = .page
         }
         let type = Frontmatter.field("type", in: text)?.lowercased()

@@ -142,3 +142,9 @@ input[type=checkbox] { margin-right: 0.45em; accent-color: var(--accent); }
   #page { padding: 20px 16px 48px; }
   h1 { font-size: 1.6em; }
 }
+
+/* v0.6 graph — the side panel shows the page compact (WikiWebView compact: true) */
+.compact body { font-size: 13px; line-height: 1.55; }
+.compact #page { padding: 12px 16px 28px; }
+.compact h2 { font-size: 1.12em; margin-top: 1.2em; }
+.compact h3 { font-size: 1.02em; }

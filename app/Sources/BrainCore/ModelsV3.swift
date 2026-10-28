@@ -8,6 +8,7 @@ import Foundation
 public enum GraphNodeKind: String, Codable, Sendable {
     case project, meeting, email, document, note, url, person, topic, decision, question, task, page
     case repo   // MARK: v0.4 github — wiki/repos/
+    case org    // v0.6 (§16.4): global companies, orgs/<slug>.md
 }
 
 public struct GraphNode: Codable, Identifiable, Hashable, Sendable {

@@ -177,8 +177,11 @@
       const content = document.getElementById("content");
       content.innerHTML = body.trim() ? md.render(body) : '<p class="empty">' + escapeHTML(payload.emptyText || "") + "</p>";
       decorate(content);
+      // v0.6 graph side panel (§16.5): no H1 (the panel's header names the page), tighter type, no backlinks.
+      document.documentElement.classList.toggle("compact", !!payload.compact);
+      if (payload.compact) { const h1 = content.querySelector("h1"); if (h1) h1.remove(); }
 
-      const backlinks = payload.backlinks || [];
+      const backlinks = payload.compact ? [] : payload.backlinks || [];
       document.getElementById("backlinks").innerHTML = backlinks.length
         ? "<h5>" + escapeHTML(payload.backlinksTitle || "") + "</h5><ul>" +
           backlinks.map(b => '<li><a href="' + PAGE_PREFIX + encodeURIComponent(b.path) + '">' + escapeHTML(b.title) + "</a></li>").join("") +

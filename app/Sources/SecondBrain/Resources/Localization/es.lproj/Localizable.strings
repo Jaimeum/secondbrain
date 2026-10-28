@@ -1521,3 +1521,13 @@
 "ask.saveFailed" = "No pude guardar la respuesta como página.";
 "ask.savedHistoryTitle" = "Guardé una respuesta: «%@»";
 "ask.closeInspector" = "Cerrar el panel";
+/* v0.6 graph */
+"graph.kind.org" = "Empresa";
+"graph.kinds.org" = "Empresas";
+"graph.hint.panel" = "Clic: ver su ficha aquí al lado · Doble clic: abrirla";
+"graph.emptyAny.message" = "Aquí verás cómo se conecta todo lo que aprendo: correos, notas, documentos, enlaces, repos y reuniones. Agrega algo para empezar.";
+"graph.panel.open" = "Abrir";
+"graph.panel.openHelp" = "Abrir la ficha completa (doble clic en el nodo)";
+"graph.panel.openProjectHelp" = "Abrir el proyecto (doble clic en el nodo)";
+"graph.panel.close" = "Cerrar la ficha";
+"graph.panel.selectHelp" = "Ver su ficha en el grafo";

@@ -1,6 +1,8 @@
 // Knowledge graph view (CONTRACT §12.2 + §12.7). Canvas + d3-force so it stays smooth with thousands of nodes.
 // Swift calls SB.render(payload), SB.focus(id), SB.setTheme("light"|"dark"), SB.toggleSearch().
-// Swift is told things through navigations it cancels: sbgraph://open/<path>, sbgraph://hint-dismissed.
+// Swift is told things through navigations it cancels: sbgraph://open/<path>, sbgraph://hint-dismissed and, v0.6
+// (§16.5), sbgraph://select/<id> (empty id = nothing selected) whenever the user selects a node here.
+// With `payload.panel` the ficha lives in Swift's side panel: the in-page peek card stays hidden.
 (function () {
   'use strict';
 
@@ -12,11 +14,11 @@
   const KIND_TONES = {
     project: '--accent', meeting: '--tone-terracotta', email: '--tone-slate', document: '--tone-ochre', note: '--tone-ochre',
     url: '--tone-slate', person: '--person-ring', topic: '--tone-moss', decision: '--tone-mauve', question: '--warning',
-    task: '--accent', page: '--text3', repo: '--tone-sage',
+    task: '--accent', page: '--text3', repo: '--tone-sage', org: '--tone-slate',
   };
   const KIND_COLORS = {};
   const FONT = '"Inter", -apple-system, sans-serif';
-  const KIND_ORDER = ['meeting', 'email', 'document', 'note', 'url', 'topic', 'decision', 'question', 'task', 'repo', 'person', 'page', 'project'];
+  const KIND_ORDER = ['meeting', 'email', 'document', 'note', 'url', 'topic', 'decision', 'question', 'task', 'repo', 'person', 'org', 'page', 'project'];
   // Same icons as the rest of the app (SF Symbols waveform, envelope, person, checkmark.seal, lightbulb,
   // questionmark.bubble, doc.text …), drawn as small inline SVGs.
   const GLYPH_PATHS = {
@@ -33,6 +35,7 @@
     page: 'M6 3h8l4 4v14H6zM14 3v4h4',
     repo: 'M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16',
     project: 'M3 6.5h6l2 2h10V19H3z',
+    org: 'M4 20.5V4.5h10v16M14 9.5h6v11M7 8h4M7 12h4M7 16h4M16.5 13h1M16.5 16.5h1M2.5 20.5h19',
     search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.5 15.5L20 20',
     fit: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',
     calendar: 'M4 6h16v14H4zM4 10h16M8 3.5v4M16 3.5v4',
@@ -107,6 +110,7 @@
 
   function colorOf(n) {
     if (n.kind === 'person') return S.theme.person;
+    if (n.kind === 'org') return KIND_COLORS.org;
     if (S.colorBy === 'project') {
       const p = n.project && S.projects.get(n.project);
       if (p) return p.color;
@@ -300,7 +304,7 @@
     return set;
   }
 
-  function isHub(n) { return n.kind === 'project' || n.kind === 'person' || n.kind === 'page'; }
+  function isHub(n) { return n.kind === 'project' || n.kind === 'person' || n.kind === 'org' || n.kind === 'page'; }
 
   function setFocus(id, animate = true) {
     const n = S.byId.get(id);
@@ -321,6 +325,17 @@
     $('peek').hidden = true;
     if (had) fit(null, animate);
     requestDraw();
+  }
+
+  // The user picked a node (or nothing) in the page: Swift's side panel follows (§16.5).
+  function userFocus(id) {
+    setFocus(id);
+    navigate('sbgraph://select/' + encodeURIComponent(id));
+  }
+  function userClear() {
+    const had = !!S.focus;
+    clearFocus();
+    if (had) navigate('sbgraph://select/');
   }
 
   function applySearch() {
@@ -345,6 +360,7 @@
   // ---------- Peek card ----------
 
   function showPeek(n) {
+    if (S.payload && S.payload.panel) { $('peek').hidden = true; return; }   // the ficha is Swift's side panel
     const color = n.kind === 'person' ? S.theme.personRing : n.color;
     const badge = $('peekBadge');
     badge.style.setProperty('--c', color);
@@ -371,7 +387,7 @@
       const li = document.createElement('li');
       li.style.setProperty('--c', m.kind === 'person' ? S.theme.personRing : m.color);
       li.innerHTML = (m.kind === 'project' ? glyph('project') : glyph(m.kind)) + `<span>${esc(m.kind === 'project' ? projectName(m) : m.title)}</span>`;
-      li.onclick = () => setFocus(m.id);
+      li.onclick = () => userFocus(m.id);
       ul.appendChild(li);
     }
     $('peek').hidden = false;
@@ -382,9 +398,8 @@
   function projectName(n) { const p = S.projects.get(n.project); return p ? p.name : n.title; }
 
   function openNode(n) {
-    // A project hub opens the project's overview.
-    const path = n.kind === 'project' ? `projects/${n.project}/wiki/overview.md` : n.id;
-    navigate('sbgraph://open/' + encodeURIComponent(path));
+    // A project hub is sent as `project:<slug>`: Swift opens the project's ficha (Resumen) or its overview.
+    navigate('sbgraph://open/' + encodeURIComponent(n.id));
   }
 
   // ---------- Chips (inside a project: one per kind, click filters) ----------
@@ -1005,16 +1020,26 @@
       $('tooltip').hidden = true;
       requestDraw();
     });
+    let lastClick = { id: null, at: 0 };
     canvas.addEventListener('click', (e) => {
       const n = nodeAt(e.offsetX, e.offsetY);
-      if (n) setFocus(n.id);
-      else clearFocus();
+      if (e.detail > 1) return;   // the second click of a double click: the dblclick handler decides
+      lastClick = { id: n ? n.id : null, at: performance.now() };
+      if (n) { if (n.id !== S.focus) userFocus(n.id); }
+      else userClear();
+    });
+    // Double click = "Abrir" (§16.5): the full ficha, where it lives. The first click already started moving the view
+    // towards the node, so the node under the pointer may have shifted: trust what the first click hit.
+    canvas.addEventListener('dblclick', (e) => {
+      const recent = performance.now() - lastClick.at < 700 && lastClick.id && S.byId.get(lastClick.id);
+      const n = recent || nodeAt(e.offsetX, e.offsetY);
+      if (n) openNode(n);
     });
   }
 
   function setupControls() {
     $('showAll').textContent = L('showAll');
-    $('showAll').onclick = () => clearFocus();
+    $('showAll').onclick = () => userClear();
     $('fitBtn').innerHTML = glyph('fit');
     $('fitBtn').onclick = () => fit(S.focus ? [...S.focusSet].map((i) => S.byId.get(i)) : null, true);
     $('searchBtn').innerHTML = glyph('search');
@@ -1024,11 +1049,11 @@
     $('searchInput').addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && S.matches && S.matches.size) {
         const best = [...S.matches].map((id) => S.byId.get(id)).sort((a, b) => b.links - a.links)[0];
-        setFocus(best.id);
+        userFocus(best.id);
       }
       if (e.key === 'Escape') { e.stopPropagation(); toggleSearch(false); }
     });
-    $('peekClose').onclick = () => clearFocus();
+    $('peekClose').onclick = () => userClear();
     $('hintClose').onclick = () => { $('hint').hidden = true; measureChrome(); navigate('sbgraph://hint-dismissed'); };
     $('playBtn').onclick = () => (S.playing ? stopPlay() : startPlay());
 
@@ -1049,7 +1074,7 @@
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); toggleSearch(); return; }
       if (e.key === 'Escape') {
         if (S.searchOpen) toggleSearch(false);
-        else if (S.focus) clearFocus();
+        else if (S.focus) userClear();
       }
     });
   }
@@ -1065,8 +1090,10 @@
     $('hintClose').setAttribute('aria-label', L('close'));
   }
 
+  let refitTimer = null;
   function resize() {
     const r = $('stage').getBoundingClientRect();
+    const changed = S.width && Math.abs(r.width - S.width) > 1;
     S.width = r.width;
     S.height = r.height;
     S.dpr = window.devicePixelRatio || 1;
@@ -1074,6 +1101,11 @@
     canvas.height = Math.round(r.height * S.dpr);
     measureChrome();
     requestDraw();
+    // Swift's side panel opening or closing narrows the page: keep the focused neighbourhood in view.
+    if (changed && S.focus && S.focusSet) {
+      clearTimeout(refitTimer);
+      refitTimer = setTimeout(() => { if (S.focus) fit([...S.focusSet].map((i) => S.byId.get(i)), true); }, 90);
+    }
   }
 
   // ---------- Boot ----------
@@ -1121,7 +1153,7 @@
       const someNode = S.nodes.find((n) => n.kind === 'topic') || S.nodes[0];
       tryIt('focus', () => { setFocus(someNode.id, false); if (!S.focusSet || !S.focusSet.has(someNode.id)) throw new Error('no focus set'); });
       tryIt('focusSize', () => { if (S.focusSet.size >= S.nodes.length && S.nodes.length > 30) throw new Error('2 hops = everything'); });
-      tryIt('peek', () => { if ($('peek').hidden || !$('peekTitle').textContent) throw new Error('peek hidden'); });
+      tryIt('peek', () => { if (!S.payload.panel && ($('peek').hidden || !$('peekTitle').textContent)) throw new Error('peek hidden'); });
       tryIt('clear', () => { clearFocus(false); if (S.focus || !$('peek').hidden) throw new Error('still focused'); });
       tryIt('search', () => { toggleSearch(true); S.query = someNode.title.slice(0, 4); applySearch(); if (!S.matches || !S.matches.size) throw new Error('no matches'); toggleSearch(false); });
       tryIt('time', () => {

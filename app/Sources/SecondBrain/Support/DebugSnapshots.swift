@@ -134,6 +134,13 @@ enum DebugSnapshots {
             // MARK: v0.3 graph — focused graph + web views need a run loop and WKWebView.takeSnapshot.
             if let topic = await state.engine.graph(projectSlug: nil).nodes.filter({ $0.kind == .topic }).max(by: { $0.links < $1.links }) {
                 shots.append(("graph-focus", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .brain, focus: topic.id, onOpen: { _ in }))))
+                // v0.6 graph (§16.5): a project's graph with a global person selected and its ficha panel, at the
+                // 700 pt minimum detail width.
+                if let slug = topic.projectSlug,
+                   let person = await state.engine.graph(projectSlug: slug).nodes.filter({ $0.kind == .person }).max(by: { $0.links < $1.links }) {
+                    shots.append(("graph-project-focus", CGSize(width: 700, height: 600),
+                                  AnyView(GraphView(scope: .project(slug), focus: person.id, onOpen: { _ in }))))
+                }
                 if let slug = topic.projectSlug {   // the wiki page header with "Ver en el grafo"
                     shots.append(("graph-wiki", CGSize(width: 1000, height: 400),
                                   AnyView(WikiBrowser(scope: .project(slug), selection: .constant(topic.id)))))

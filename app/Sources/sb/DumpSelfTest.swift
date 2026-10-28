@@ -68,6 +68,13 @@ struct DumpSelfTestCmd: AsyncParsableCommand {
     t.check(md.items.isEmpty && !md.isMeeting, "markdown: no items")
     let noSummary = FileDumpResult.parse(#"{"items":[{"as":"document","page":"projects/a/wiki/sources/k.md","title":"Contrato"}]}"#)
     t.eq(noSummary.summary, "- [[k|Contrato]]", "summary falls back to the pages")
+
+    // Shape seen from the real Claude (sonnet, 2026-10-28): several items for one raw, null raw/time.
+    let live = FileDumpResult.parse(#"{"summary":"Lo archivé así:\n- Tu nota de hoy como reunión presencial: [[2026-10-28-presencial-visita-nubia|Visita a las oficinas de Nubia]].","items":[{"raw":"projects/p/raw/notes/2026-10-28-dump-visita-nubia.md","as":"in-person","page":"projects/p/wiki/meetings/2026-10-28-presencial-visita-nubia.md","title":"Visita a las oficinas de Nubia"},{"raw":"projects/p/raw/notes/2026-10-28-dump-visita-nubia.md","as":"decision","page":"projects/p/wiki/decisions/2026-10-28-api-de-pagos-v2.md","title":"Usar la API de pagos v2 de Nubia"},{"raw":null,"as":"person","page":"people/andres-silva.md","title":"Andrés Silva"}],"meeting":{"date":"2026-10-28","time":null,"title":"Visita a las oficinas de Nubia"}}"#)
+    t.eq(live.items.count, 3, "live answer: all items")
+    t.check(live.isMeeting, "live answer: in-person meeting detected")
+    t.eq(live.meetingTitle, "Visita a las oficinas de Nubia", "live answer: meeting title")
+    t.eq(live.meetingDate.map { String(SBDate.iso($0).prefix(10)) }, "2026-10-28", "live answer: null time keeps the date")
 }
 
 @MainActor private func makeDumpEngine(_ root: URL) throws -> (BrainEngine, Project) {

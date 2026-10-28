@@ -82,9 +82,10 @@ trap 'rm -f "$NOTES"' EXIT
 cat > "$NOTES" <<EOF
 ## SecondBrain $VERSION
 
-Graba tus reuniones (audio de la computadora + tu micrófono), las transcribe **en tu Mac** y Claude
-mantiene un wiki por proyecto con todo lo que se habló. El audio nunca sale de tu computadora; lo
-único que se envía es el texto que Claude lee con tu propia cuenta.
+Tu segundo cerebro de todo lo que pasa en el día: correos, notas, documentos, enlaces, repos y
+reuniones (que transcribe **en tu Mac**). Claude mantiene un wiki por proyecto con fichas de cada
+persona, empresa y tema. El audio nunca sale de tu computadora; lo único que se envía es el texto
+que Claude lee con tu propia cuenta.
 
 ### Novedades
 - **El lugar fija el ámbito.** Dentro de un proyecto, Preguntar, Grafo y Pendientes son solo de ese proyecto; los globales tienen su lugar en la barra lateral (Inicio · Preguntar · Grafo · Pendientes · Personas · Correo · Reuniones · Sin asignar). Se acabó el interruptor "Este proyecto | Todo el cerebro".
@@ -117,8 +118,9 @@ suscripción de Claude (Pro o Max).
 
 ## English
 
-Records your meetings (computer audio + your mic), transcribes them **on your Mac**, and Claude keeps a
-per-project wiki of everything discussed. Audio never leaves your computer.
+Your second brain for everything that happens in your day: mail, notes, documents, links, repos and
+meetings (transcribed **on your Mac**). Claude keeps a per-project wiki with a page for every person,
+company and topic. Audio never leaves your computer.
 
 ### What's new
 - **Place sets the scope.** Inside a project, Ask, Graph and Tasks are about that project only; the global ones live in the sidebar (Home · Ask · Graph · Tasks · People · Mail · Meetings · Unassigned). The "This project | Whole brain" switch is gone.

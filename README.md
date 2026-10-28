@@ -1,6 +1,6 @@
 # secondbrain
 
-Tu segundo cerebro por proyecto, 100% en tu Mac. Graba tus reuniones (audio de la computadora + tu micrófono, aunque uses audífonos), las transcribe localmente y Claude —con **tu propia cuenta**, sin API key— mantiene un wiki ordenado de cada proyecto: resúmenes, decisiones, pendientes, personas y temas. Basado en la idea *LLM Wiki* de Andrej Karpathy.
+Tu segundo cerebro por proyecto, 100% en tu Mac. Junta lo que pasa en tu día —correos, notas, documentos, enlaces, repos de GitHub y reuniones (graba el audio de la computadora + tu micrófono y lo transcribe localmente)— y Claude —con **tu propia cuenta**, sin API key— mantiene un wiki ordenado de cada proyecto: resúmenes, decisiones, pendientes, personas y temas. Basado en la idea *LLM Wiki* de Andrej Karpathy.
 
 ![Inicio de secondbrain: la reunión de ahora, lo que falta por ordenar y tus pendientes de hoy](docs/screenshots/home.png)
 

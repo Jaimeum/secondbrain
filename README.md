@@ -2,7 +2,7 @@
 
 Tu segundo cerebro por proyecto, 100% en tu Mac. Junta lo que pasa en tu día —correos, notas, documentos, enlaces, repos de GitHub y reuniones (graba el audio de la computadora + tu micrófono y lo transcribe localmente)— y Claude —con **tu propia cuenta**, sin API key— mantiene un wiki ordenado de cada proyecto: resúmenes, decisiones, pendientes, personas y temas. Basado en la idea *LLM Wiki* de Andrej Karpathy.
 
-![Inicio de secondbrain: la reunión de ahora, lo que falta por ordenar y tus pendientes de hoy](docs/screenshots/home.png)
+![Inicio de secondbrain: lo último que aprendí, tus pendientes de hoy y la agenda](docs/screenshots/home.png)
 
 ## Novedades 0.6.0
 
@@ -74,6 +74,9 @@ El lugar fija el ámbito: fuera de un proyecto todo es de tu cerebro completo; d
   - **Personas:** quién aparece en el proyecto; **+ Agregar persona** o *Quitar del proyecto* (clic derecho).
   - En la barra de herramientas: **+ Agregar** (Nota · Archivo… · Enlace… · Pegar correo ⇧⌘V · Grabar aquí), **Historial** y **⋯** (formato por defecto, **Repositorios…**, Mostrar en Finder). También puedes arrastrar PDFs, textos o enlaces al proyecto. Clic derecho en un proyecto de la barra lateral → *Editar proyecto…*.
 - **Fichas:** haz clic en cualquier nombre, enlace, cita o punto del grafo y se abre su ficha: la página que escribió Claude más lo que sabemos de esa persona, empresa, tema o decisión (reuniones, correos, documentos, decisiones, pendientes y relacionados). Dentro de un proyecto la ficha se filtra a ese proyecto ("En 🚀 Kickoff · Ver todo →"). **⌘[** vuelve atrás.
+
+  ![La ficha de una persona: rol, empresa, proyectos, compromisos y reuniones](docs/screenshots/entity.png)
+
 - **Corregir el cerebro:** **Editar** en cualquier página o ficha (⌘S guarda, esc cancela). Al guardar, Claude propone cambios en las demás páginas que decían lo mismo; los revisas en **Revisar cambios en el cerebro**, aplicas los que quieras y todo es deshacible desde el Historial. Lo corregido queda en **Hechos confirmados** (`facts.md`): Claude lo lee antes de cada tarea y no lo contradice; si una fuente nueva lo contradice, lo avisa en lugar de sobrescribirlo.
 - **Captura rápida:** **⌥⌘N** desde cualquier app abre un cuadro flotante: escribe o pega una nota, un enlace o un correo, o suelta un archivo; elige proyecto (o deja el sugerido), **⌘↩** guarda y esc cierra. Se puede cambiar o desactivar en Ajustes → General. La barra de menús abre primero el mismo cuadro, con Grabar debajo. **+ Agregar** (barra lateral) hace lo mismo con el mouse. Los correos que caen en una regla se guardan solos.
 - **Grabar:** una reunión en curso del calendario o una grabación activa toman el pie de la barra lateral ("Grabar «Kickoff…»", "Detener 12:04"); si no, **Grabar** está en **+ Agregar** y en la barra de menús. Al detener se transcribe y Claude aprende de la reunión solo. Desde cualquier app: **⌥⌘R** (Ajustes → General). La primera vez macOS pide los permisos de micrófono y grabación y se descarga el modelo de transcripción.

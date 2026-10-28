@@ -4,7 +4,8 @@ import Carbon.HIToolbox
 import SwiftUI
 import UniformTypeIdentifiers
 
-// v0.6 "Captura del día a día" (CONTRACT §16.10): one field for anything that happens during the day. ⌃⌥Space opens
+// v0.6 "Captura del día a día" (CONTRACT §16.10): one field for anything that happens during the day. ⌥⌘N (or the
+// shortcut recorded in Ajustes › General) opens
 // it in a floating panel over whatever app is in front (SecondBrain is not brought forward); the menu bar shows the
 // same field first. What was typed is detected by `CaptureDetector` (a link, a pasted email or a note), files can be
 // dropped on it, and it is saved through the same engine paths as "+ Agregar" into the project the rules suggest.
@@ -14,7 +15,12 @@ import UniformTypeIdentifiers
 @MainActor @Observable
 final class QuickCaptureModel {
     var text = "" {
-        didSet { if text != oldValue { scheduleSuggestion() } }
+        didSet {
+            guard text != oldValue else { return }
+            // Typing the next thing during "Guardado en …" brings the footer (and Guardar) back.
+            if !text.isEmpty { savedMessage = nil }
+            scheduleSuggestion()
+        }
     }
     var files: [URL] = []
     /// Where it goes; nil = Sin asignar.
@@ -27,6 +33,8 @@ final class QuickCaptureModel {
     var error: String?
     /// "Guardado en 🚀 Kickoff" after saving.
     private(set) var savedMessage: String?
+    /// Bumped by each successful save (a confirmation's timer only ends its own confirmation).
+    private(set) var saveCount = 0
 
     @ObservationIgnored private let state: AppState
     @ObservationIgnored private var suggestion: Task<Void, Never>?
@@ -65,6 +73,16 @@ final class QuickCaptureModel {
         projectPicked = false
         error = nil
         savedMessage = nil
+        scheduleSuggestion(delay: false)
+    }
+
+    /// The confirmation's end (menu bar): only the label goes; whatever was typed or dropped since stays.
+    func dismissSavedMessage() { savedMessage = nil }
+
+    /// The rules' destination again (the menu bar keeps one model: the default project may have changed in Ajustes ›
+    /// Reglas, or the engine started after it was made). A destination the user picked is kept.
+    func refreshDestination() {
+        guard !projectPicked else { return }
         scheduleSuggestion(delay: false)
     }
 
@@ -116,32 +134,49 @@ final class QuickCaptureModel {
     // MARK: Save
 
     /// Files first (like a drop), then the text as what it is. Returns true when everything was saved.
+    /// What was saved leaves the field at once (a second ⌘↩ during the confirmation finds nothing to save again); on
+    /// a partial failure only what failed stays, so Guardar again retries just that.
     @discardableResult
     func save() async -> Bool {
         guard canSave else { return false }
         saving = true
         error = nil
+        savedMessage = nil
         defer { saving = false }
-        await suggestion?.value   // a just-pasted email: its thread and its project are known before saving
+        // The rules' destination as of now (a files-only capture never re-asked; the default may have changed), and a
+        // just-pasted email's thread and project, are known before saving.
+        if !projectPicked { scheduleSuggestion(delay: false) }
+        await suggestion?.value
         let slug = projectSlug
         let engine = state.engine
+        let savingFiles = files
+        let savingText = text
         var failures: [String] = []
-        if !files.isEmpty {
-            failures += await SourceImport.importURLs(files, projectSlug: slug, state: state)
+        var failedFiles: [URL] = []
+        for url in savingFiles {
+            let failed = await SourceImport.importURLs([url], projectSlug: slug, state: state)
+            if !failed.isEmpty {
+                failures += failed
+                failedFiles.append(url)
+            }
         }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var textSaved = true
+        let trimmed = savingText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             switch CaptureDetector.detect(trimmed) {
             case .link(let url):
-                do { try await engine.importURL(url, projectSlug: slug) } catch { failures.append(L("sources.linkFailed")) }
+                do { try await engine.importURL(url, projectSlug: slug) } catch { failures.append(L("sources.linkFailed")); textSaved = false }
             case .email:
-                do { try saveEmail(trimmed, projectSlug: slug) } catch { failures.append(FriendlyError.message(error)) }
+                do { try saveEmail(trimmed, projectSlug: slug) } catch { failures.append(FriendlyError.message(error)); textSaved = false }
             case .note:
                 let title = CaptureDetector.noteTitle(trimmed) ?? L("note.defaultTitle", Fmt.date(Date()))
-                do { try engine.addNote(title: title, body: trimmed, projectSlug: slug) } catch { failures.append(L("note.failed")) }
+                do { try engine.addNote(title: title, body: trimmed, projectSlug: slug) } catch { failures.append(L("note.failed")); textSaved = false }
             }
         }
         state.bumpVault()
+        // Drop what was saved (anything added while saving stays).
+        files.removeAll { savingFiles.contains($0) && !failedFiles.contains($0) }
+        if textSaved, text == savingText { text = "" }
         guard failures.isEmpty else {
             error = failures.joined(separator: "\n")
             return false
@@ -149,6 +184,11 @@ final class QuickCaptureModel {
         // A joined thread keeps its own project: say where it really went.
         let destination = thread.flatMap { t in projectPicked && t.projectSlug != slug ? nil : t.projectSlug } ?? slug
         savedMessage = L("capture.saved", state.projectName(destination))
+        saveCount += 1
+        // The next capture starts from the rules' destination again.
+        thread = nil
+        projectPicked = false
+        scheduleSuggestion(delay: false)
         return true
     }
 
@@ -374,12 +414,21 @@ struct QuickCaptureView: View {
         }
     }
 
+    /// ⌘↩ / Guardar. The saved content has already left the field, so pressing again during the confirmation saves
+    /// nothing twice. The panel closes after the confirmation (unless something new was typed meanwhile); the menu bar
+    /// only drops the label, keeping whatever was typed or dropped since.
     private func submit() {
         guard model.canSave else { return }
         Task {
             guard await model.save() else { return }
+            let count = model.saveCount
             try? await Task.sleep(for: .seconds(embedded ? 2.5 : 1.1))
-            if embedded { model.reset() } else { onClose() }
+            guard model.saveCount == count, model.savedMessage != nil else { return }
+            if embedded || model.hasText || !model.files.isEmpty {
+                model.dismissSavedMessage()
+            } else {
+                onClose()
+            }
         }
     }
 }
@@ -515,15 +564,18 @@ final class CaptureNSTextView: NSTextView {
 
 // MARK: - Floating panel
 
-/// A panel that takes the keyboard without bringing SecondBrain's main window forward.
+/// A panel that takes the keyboard without bringing SecondBrain's main window forward. ⌘W and esc go through the
+/// controller (`onCancel`), so it always knows the panel is gone.
 final class QuickCaptureNSPanel: NSPanel {
     var onCancel: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func cancelOperation(_ sender: Any?) { onCancel?() }
+    override func performClose(_ sender: Any?) { onCancel?() }
 }
 
-/// Owns the ⌃⌥Space hot key and the floating "Captura rápida" panel (one at a time; the hot key toggles it).
+/// Owns the capture hot key (⌥⌘N by default, `AppConfig.captureHotkey`) and the floating "Captura rápida" panel (one
+/// at a time; the hot key toggles it).
 @MainActor
 final class QuickCapturePanel {
     static let shared = QuickCapturePanel()
@@ -532,15 +584,28 @@ final class QuickCapturePanel {
 
     private var panel: QuickCaptureNSPanel?
     private var hotKey: GlobalHotKey?
+    /// Bumped whenever a panel opens or closes: a confirmation timer of an older panel never closes a newer one.
+    private var generation = 0
 
-    /// Registers or drops ⌃⌥Space after `config.captureHotkeyEnabled` (launch and Ajustes › General).
-    func applyHotKey(state: AppState) {
+    /// Registers or drops the shortcut after `config.captureHotkeyEnabled` / `captureHotkey` (launch and Ajustes ›
+    /// General). Returns false when it is on but could not be registered (another app holds the combination).
+    @discardableResult
+    func applyHotKey(state: AppState) -> Bool {
         hotKey?.unregister()
         hotKey = nil
-        guard state.config.captureHotkeyEnabled else { return }
-        hotKey = GlobalHotKey(keyCode: kVK_Space, modifiers: controlKey | optionKey) { [weak self] in
+        guard state.config.captureHotkeyEnabled else { return true }
+        let combo = state.config.captureHotkey
+        let key = GlobalHotKey(keyCode: combo.keyCode, modifiers: combo.modifiers) { [weak self] in
             self?.toggle(state: state)
         }
+        hotKey = key
+        return key.isRegistered
+    }
+
+    /// While Ajustes records a new shortcut: the current one must not fire (it would open the panel).
+    func suspendHotKey() {
+        hotKey?.unregister()
+        hotKey = nil
     }
 
     var isVisible: Bool { panel?.isVisible == true }
@@ -559,8 +624,13 @@ final class QuickCapturePanel {
             panel.makeKeyAndOrderFront(nil)
             return
         }
+        generation += 1
+        let mine = generation
         let model = QuickCaptureModel(state: state)
-        let root = QuickCaptureView(model: model, onClose: { [weak self] in self?.close() })
+        let root = QuickCaptureView(model: model, onClose: { [weak self] in
+            guard let self, self.generation == mine else { return }
+            self.close()
+        })
             .frame(width: Self.width)
             .fixedSize(horizontal: false, vertical: true)
             .background(Brand.color.surface)
@@ -599,6 +669,7 @@ final class QuickCapturePanel {
 
     func close() {
         guard let panel else { return }
+        generation += 1
         self.panel = nil
         panel.orderOut(nil)
         panel.contentView = nil

@@ -2,7 +2,7 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// The menu bar panel (CONTRACT §16.10): brand header, the capture field first (the same one ⌃⌥Space opens), then
+/// The menu bar panel (CONTRACT §16.10): brand header, the capture field first (the same one the capture shortcut opens), then
 /// recording as one more option (the sidebar's `RecordControl`), "Detalles ▸" (project, format, title; opened by
 /// itself while recording), Abrir · Salir.
 struct MenuBarView: View {
@@ -19,6 +19,11 @@ struct MenuBarView: View {
 
             if state.config.onboardingComplete {
                 QuickCaptureView(model: capture, embedded: true)
+                    // One model for the app's life: the rules' destination is asked again whenever the panel shows,
+                    // the engine starts or the projects change (Ajustes › Reglas may name another default).
+                    .onAppear { capture.refreshDestination() }
+                    .onChange(of: state.engineStarted) { capture.refreshDestination() }
+                    .onChange(of: state.projects.map(\.slug)) { capture.refreshDestination() }
 
                 Rectangle().fill(Brand.color.line).frame(height: 1)
 

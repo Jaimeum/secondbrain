@@ -92,9 +92,9 @@ que Claude lee con tu propia cuenta.
 - **Proyectos con pestañas** Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas; en Personas agregas o quitas gente a mano.
 - **Fichas:** cualquier persona, empresa, tema, decisión o reunión tiene una ficha con lo que sabemos, sus reuniones, correos, decisiones, pendientes y relacionados, filtrada al proyecto cuando la abres dentro de uno. **⌘K** ahora busca en el texto completo.
 - **Preguntar guarda tus conversaciones;** las citas se abren al lado sin perder el hilo, y cada respuesta se puede **Guardar como página**.
-- **Corrige el cerebro a mano:** edita una página, revisa los cambios que propongo en las demás páginas que decían lo mismo, y queda como hecho confirmado (`facts.md`) que no vuelvo a contradecir.
+- **Corrige el cerebro a mano:** edita una página, revisa los cambios que propongo en las demás páginas que decían lo mismo, y queda como hecho confirmado (\`facts.md\`) que no vuelvo a contradecir.
 - **Captura del día a día:** **⌥⌘N** abre la captura rápida (nota, enlace, correo o archivo) desde cualquier app (puedes cambiar el atajo en Ajustes); la barra de menús abre primero la captura; los correos que caen en una regla se guardan solos; y **+ Agregar** vive en la barra lateral. Los permisos de grabación se piden la primera vez que grabas.
-- **Empresas** como fichas globales (`orgs/`), y el **Grafo** abre la ficha en un panel al lado.
+- **Empresas** como fichas globales (\`orgs/\`), y el **Grafo** abre la ficha en un panel al lado.
 - Ten en cuenta: las conversaciones guardadas son por cerebro, y **⌥⌘N** reemplaza "Nueva carpeta inteligente" del Finder mientras secondbrain está abierta.
 - Incluye todo lo de 0.5.x, con el arreglo de permisos de 0.5.3 (grabar sigue funcionando al actualizar; si no, **Reparar permiso** bajo *Grabar*).
 
@@ -127,9 +127,9 @@ company and topic. Audio never leaves your computer.
 - **Projects with tabs:** Summary · Content · Ask · Graph · Tasks · People; add or remove people by hand under People.
 - **Entity pages:** any person, company, topic, decision or meeting has a page with what we know, its meetings, mail, decisions, tasks and related items, filtered to the project when opened inside one. **⌘K** now searches full text.
 - **Ask keeps your conversations;** citations open alongside without losing your place, and any answer can be **Saved as a page**.
-- **Correct the brain by hand:** edit a page, review the changes I propose on other pages that said the same thing, and it becomes a confirmed fact (`facts.md`) I won't contradict again.
+- **Correct the brain by hand:** edit a page, review the changes I propose on other pages that said the same thing, and it becomes a confirmed fact (\`facts.md\`) I won't contradict again.
 - **Everyday capture:** **⌥⌘N** opens quick capture (note, link, email or file) from any app (rebind it in Settings); the menu bar opens capture first; mail matching a rule is saved automatically; and **+ Add** lives in the sidebar. Recording permissions are asked the first time you record.
-- **Companies** as global pages (`orgs/`), and the **Graph** opens the entity page in a side panel.
+- **Companies** as global pages (\`orgs/\`), and the **Graph** opens the entity page in a side panel.
 - Good to know: saved conversations are per brain, and **⌥⌘N** replaces Finder's "New Smart Folder" while secondbrain is running.
 - Includes everything from 0.5.x, with the 0.5.3 permission fix (recording keeps working across updates; if not, **Fix permission** under *Record*).
 

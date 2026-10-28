@@ -18,6 +18,9 @@ struct OpenOriginalButton: View {
     var kind: OriginalKind = .mail
     var iconOnly = false
     var style: Style = .button
+    /// `.link` + `iconOnly`: the side of the icon and its hit area (28 next to header icon buttons; a caption-sized
+    /// icon inside a list row passes its own, so clicks around it still select the row).
+    var iconSide: CGFloat = 28
     /// Gmail without a link from the API: the conversation, `https://mail.google.com/mail/u/<email>/#all/<threadId>`.
     var gmailThreadId: String? = nil
     var accountEmail: String? = nil
@@ -37,7 +40,7 @@ struct OpenOriginalButton: View {
                     if iconOnly {   // sized like the icon buttons it sits with (page headers)
                         Image(systemName: "arrow.up.right.square")
                             .foregroundStyle(Brand.color.accent)
-                            .frame(width: 28, height: 28)
+                            .frame(width: iconSide, height: iconSide)
                             .contentShape(Rectangle())
                     } else {
                         HStack(spacing: 3) {

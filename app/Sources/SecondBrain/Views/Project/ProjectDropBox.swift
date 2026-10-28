@@ -8,10 +8,21 @@ import SwiftUI
 struct ProjectDropBox: View {
     @Environment(AppState.self) private var state
     let project: Project
+    /// The most the box may take (Resumen passes 45 % of its height): past drops scroll inside it, so the brief and
+    /// the side column below keep their room at the minimum window size (§15.3).
+    var maxHeight: CGFloat = .infinity
 
     @ViewState private var model = DropBoxModel()
     @ViewState private var drops: [DumpRecord] = []
     @ViewState private var showAll = false
+    @ViewState private var formHeight: CGFloat = 0
+    @ViewState private var listHeight: CGFloat = 0
+
+    /// Room left for the drops under the form (at least two lines of one).
+    private var listCap: CGFloat {
+        guard maxHeight.isFinite else { return showAll ? 320 : 240 }
+        return max(64, maxHeight - formHeight - Brand.spacing.m * 2 - Brand.spacing.s)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Brand.spacing.s) {
@@ -30,14 +41,18 @@ struct ProjectDropBox: View {
                     .fixedSize()
                 }
             })
-            ForEach(recent) { DumpRow(record: $0, summaryLines: 3) }
-            if showAll, !earlier.isEmpty {
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { formHeight = $0 }
+            if !recent.isEmpty || (showAll && !earlier.isEmpty) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Brand.spacing.s) {
-                        ForEach(earlier) { DumpRow(record: $0, summaryLines: 3) }
+                        ForEach(recent) { DumpRow(record: $0, summaryLines: 3) }
+                        if showAll {
+                            ForEach(earlier) { DumpRow(record: $0, summaryLines: 3) }
+                        }
                     }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
                 }
-                .frame(maxHeight: 220)
+                .frame(height: min(max(listHeight, 1), listCap))
             }
         }
         .padding(.horizontal, Brand.spacing.l)
@@ -82,10 +97,47 @@ final class DropBoxModel {
     var hasText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var canSubmit: Bool { !saving && (hasText || !files.isEmpty) }
 
+    /// Files, and the files inside a dropped folder (subfolders included, hidden files and packages' insides left out,
+    /// at most `folderLimit` per folder). A folder with nothing to add says so.
     func add(_ urls: [URL]) {
-        let fresh = urls.filter { $0.isFileURL && !files.contains($0) && !$0.hasDirectoryPath }
+        var expanded: [URL] = []
+        var emptyFolders: [String] = []
+        for url in urls where url.isFileURL {
+            if Self.isFolder(url) {
+                let inside = Self.files(in: url)
+                if inside.isEmpty { emptyFolders.append(url.lastPathComponent) }
+                expanded += inside
+            } else {
+                expanded.append(url)
+            }
+        }
+        let fresh = expanded.filter { !files.contains($0) }
         files += fresh
-        if !fresh.isEmpty { error = nil }
+        if !emptyFolders.isEmpty {
+            error = L("dump.folderEmpty", emptyFolders.joined(separator: ", "))
+        } else if !fresh.isEmpty {
+            error = nil
+        }
+    }
+
+    static let folderLimit = 50
+
+    private static func isFolder(_ url: URL) -> Bool {
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+        return values?.isDirectory == true && values?.isPackage != true
+    }
+
+    private static func files(in folder: URL) -> [URL] {
+        guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey, .isPackageKey],
+                                                          options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+        var out: [URL] = []
+        for case let url as URL in walker {
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isPackageKey])
+            guard values?.isRegularFile == true || values?.isPackage == true else { continue }
+            out.append(url)
+            if out.count >= folderLimit { break }
+        }
+        return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
     /// Imports and queues `/file-dump`; what was added leaves the form. Returns true on success.
@@ -133,6 +185,7 @@ struct DropBoxForm: View {
     }
 
     @ViewState private var dropTargeted = false
+    @ViewState private var chipsHeight: CGFloat = 0
 
     private var fieldHeight: CGFloat {
         if !compact { return 150 }
@@ -192,10 +245,16 @@ struct DropBoxForm: View {
             .accessibilityLabel(L("dump.title"))
     }
 
+    /// Many files wrap onto many lines: past a few lines they scroll, so the form (and its sheet) keeps its size.
     private var fileChips: some View {
-        FlowChips(items: model.files.map { url in
-            (id: url.path, title: url.lastPathComponent, symbol: Self.symbol(for: url))
-        }) { id in model.files.removeAll { $0.path == id } }
+        ScrollView {
+            FlowChips(items: model.files.map { url in
+                (id: url.path, title: url.lastPathComponent, symbol: Self.symbol(for: url))
+            }) { id in model.files.removeAll { $0.path == id } }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chipsHeight = $0 }
+        }
+        .frame(height: min(max(chipsHeight, 1), compact ? 52 : 84))
     }
 
     static func symbol(for url: URL) -> String {
@@ -510,7 +569,7 @@ struct ProjectDropSheet: View {
             }
         }
         .padding(Brand.spacing.xxl)
-        .frame(minWidth: 520, idealWidth: 600, minHeight: 380)
+        .frame(minWidth: 520, idealWidth: 600, minHeight: 380, idealHeight: 460)
         .background(Brand.color.surface)
         .onAppear {
             if slug == nil { slug = request.projectSlug.flatMap { state.project($0)?.slug } }

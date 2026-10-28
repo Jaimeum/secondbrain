@@ -127,32 +127,21 @@ struct FilesView: View {
                 .help(L("files.discarded.help"))
             }
             if !showDiscarded {
-                HStack(spacing: Brand.spacing.xs) {
-                    filterMenu(title: L("files.filter.type"), all: L("files.filter.anyType"), value: $type,
-                               options: FileType.allCases.filter { t in scoped.contains { $0.type == t } }.map { ($0, Self.label($0)) })
-                    filterMenu(title: L("files.filter.origin"), all: L("files.filter.anyOrigin"), value: $origin,
-                               options: FileOrigin.allCases.filter { o in scoped.contains { $0.origin == o } }.map { ($0, Self.label($0)) })
-                    filterMenu(title: L("files.filter.person"), all: L("files.filter.anyPerson"), value: $person,
-                               options: FileIndex.people(in: scoped).prefix(40).map { ($0.key, $0.name) })
-                    if scope.isBrain {
-                        filterMenu(title: L("files.filter.project"), all: L("files.filter.anyProject"), value: $project,
-                                   options: state.projects.filter { p in scoped.contains { $0.projectSlug == p.slug } }
-                                       .map { ($0.slug, $0.emoji + " " + $0.name) })
+                // The chips when they fit; at narrow widths (long values chosen, global view at 920 pt) they fold into
+                // one "Filtros ▾" menu (§15.3: no clipped toolbar).
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Brand.spacing.xs) {
+                        filterChips
+                        clearButton
+                        Spacer(minLength: Brand.spacing.s)
+                        countLabel
                     }
-                    if type != nil || origin != nil || person != nil || project != nil || !query.isEmpty {
-                        Button(L("files.clear")) {
-                            query = ""; type = nil; origin = nil; person = nil; project = nil
-                        }
-                        .buttonStyle(.borderless)
-                        .font(Brand.font(11, .medium))
-                        .foregroundStyle(Brand.color.accent)
+                    HStack(spacing: Brand.spacing.xs) {
+                        foldedFilters
+                        clearButton
+                        Spacer(minLength: Brand.spacing.s)
+                        countLabel
                     }
-                    Spacer(minLength: Brand.spacing.s)
-                    Text(L("files.count", shown.count))
-                        .font(Brand.caption)
-                        .foregroundStyle(Brand.color.text2)
-                        .monospacedDigit()
-                        .lineLimit(1)
                 }
             }
         }
@@ -160,20 +149,95 @@ struct FilesView: View {
         .padding(.vertical, Brand.spacing.s)
     }
 
-    private func filterMenu<T: Hashable>(title: String, all: String, value: Binding<T?>, options: [(T, String)]) -> some View {
-        let current = options.first { $0.0 == value.wrappedValue }?.1
-        return Menu {
-            Button { value.wrappedValue = nil } label: {
-                if value.wrappedValue == nil { Label(all, systemImage: "checkmark") } else { Text(all) }
-            }
-            if !options.isEmpty { Divider() }
-            ForEach(options, id: \.0) { option in
-                Button { value.wrappedValue = option.0 } label: {
-                    if value.wrappedValue == option.0 { Label(option.1, systemImage: "checkmark") } else { Text(option.1) }
-                }
+    private var typeOptions: [(FileType, String)] {
+        FileType.allCases.filter { t in scoped.contains { $0.type == t } }.map { ($0, Self.label($0)) }
+    }
+    private var originOptions: [(FileOrigin, String)] {
+        FileOrigin.allCases.filter { o in scoped.contains { $0.origin == o } }.map { ($0, Self.label($0)) }
+    }
+    private var personOptions: [(String, String)] { FileIndex.people(in: scoped).prefix(40).map { ($0.key, $0.name) } }
+    private var projectOptions: [(String, String)] {
+        state.projects.filter { p in scoped.contains { $0.projectSlug == p.slug } }.map { ($0.slug, $0.emoji + " " + $0.name) }
+    }
+    private var activeFilters: Int { [type != nil, origin != nil, person != nil, project != nil].filter { $0 }.count }
+
+    @ViewBuilder private var filterChips: some View {
+        filterMenu(title: L("files.filter.type"), all: L("files.filter.anyType"), value: $type, options: typeOptions)
+        filterMenu(title: L("files.filter.origin"), all: L("files.filter.anyOrigin"), value: $origin, options: originOptions)
+        filterMenu(title: L("files.filter.person"), all: L("files.filter.anyPerson"), value: $person, options: personOptions)
+        if scope.isBrain {
+            filterMenu(title: L("files.filter.project"), all: L("files.filter.anyProject"), value: $project, options: projectOptions)
+        }
+    }
+
+    /// The four filters as submenus of one chip.
+    private var foldedFilters: some View {
+        Menu {
+            filterOptions(title: L("files.filter.type"), all: L("files.filter.anyType"), value: $type, options: typeOptions)
+            filterOptions(title: L("files.filter.origin"), all: L("files.filter.anyOrigin"), value: $origin, options: originOptions)
+            filterOptions(title: L("files.filter.person"), all: L("files.filter.anyPerson"), value: $person, options: personOptions)
+            if scope.isBrain {
+                filterOptions(title: L("files.filter.project"), all: L("files.filter.anyProject"), value: $project, options: projectOptions)
             }
         } label: {
-            BrandChip(text: current ?? title, symbol: "chevron.down", active: current != nil)
+            BrandChip(text: activeFilters > 0 ? L("files.filtersActive", activeFilters) : L("files.filters"),
+                      symbol: "line.3.horizontal.decrease", active: activeFilters > 0)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(L("files.filters"))
+    }
+
+    private func filterOptions<T: Hashable>(title: String, all: String, value: Binding<T?>, options: [(T, String)]) -> some View {
+        Menu(options.first { $0.0 == value.wrappedValue }.map { "\(title): \($0.1)" } ?? title) {
+            filterItems(all: all, value: value, options: options)
+        }
+    }
+
+    @ViewBuilder private func filterItems<T: Hashable>(all: String, value: Binding<T?>, options: [(T, String)]) -> some View {
+        Button { value.wrappedValue = nil } label: {
+            if value.wrappedValue == nil { Label(all, systemImage: "checkmark") } else { Text(all) }
+        }
+        if !options.isEmpty { Divider() }
+        ForEach(options, id: \.0) { option in
+            Button { value.wrappedValue = option.0 } label: {
+                if value.wrappedValue == option.0 { Label(option.1, systemImage: "checkmark") } else { Text(option.1) }
+            }
+        }
+    }
+
+    @ViewBuilder private var clearButton: some View {
+        if type != nil || origin != nil || person != nil || project != nil || !query.isEmpty {
+            Button(L("files.clear")) {
+                query = ""; type = nil; origin = nil; person = nil; project = nil
+            }
+            .buttonStyle(.borderless)
+            .font(Brand.font(11, .medium))
+            .foregroundStyle(Brand.color.accent)
+            .fixedSize()
+        }
+    }
+
+    private var countLabel: some View {
+        Text(L("files.count", shown.count))
+            .font(Brand.caption)
+            .foregroundStyle(Brand.color.text2)
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    /// A chosen value longer than this is cut ("Agregar al proyecto" fits; a long name or project doesn't stretch the row).
+    static let chipTextLimit = 22
+
+    private func filterMenu<T: Hashable>(title: String, all: String, value: Binding<T?>, options: [(T, String)]) -> some View {
+        let current = options.first { $0.0 == value.wrappedValue }?.1
+        let shown = current.map { $0.count > Self.chipTextLimit ? String($0.prefix(Self.chipTextLimit - 1)) + "…" : $0 }
+        return Menu {
+            filterItems(all: all, value: value, options: options)
+        } label: {
+            BrandChip(text: shown ?? title, symbol: "chevron.down", active: current != nil)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -376,6 +440,9 @@ private struct FileRow: View {
 
     @ViewState private var hovering = false
 
+    /// On the selected fill (accentSoft) text2 falls under 4.5:1 at 11 pt in dark mode: full text color there.
+    private var secondary: Color { isSelected ? Brand.color.text : Brand.color.text2 }
+
     var body: some View {
         HStack(spacing: Brand.spacing.s) {
             FileThumbnail(url: url, type: entry.type, side: 34)
@@ -388,15 +455,14 @@ private struct FileRow: View {
                 HStack(spacing: 4) {
                     Text(FilesView.originLine(entry))
                         .font(Brand.caption)
-                        .foregroundStyle(Brand.color.text2)
+                        .foregroundStyle(secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     if entry.origin == .email {
                         // §17.7: the email it came with, in Outlook/Gmail (nothing for pasted mail).
                         OpenOriginalButton(link: entry.webLink, provider: FilesView.provider(of: entry), iconOnly: true,
-                                           style: .link)
+                                           style: .link, iconSide: 14)   // its hit area stays on the caption line
                             .font(Brand.caption)
-                            .frame(width: 18, height: 14)   // inline with the caption: the row keeps its height
                     }
                 }
             }
@@ -412,10 +478,10 @@ private struct FileRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(Fmt.day(entry.date))
                     .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
+                    .foregroundStyle(secondary)
                 Text(FilesView.size(entry.size))
                     .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text3)
+                    .foregroundStyle(isSelected ? Brand.color.text : Brand.color.text3)
             }
             .lineLimit(1)
             .monospacedDigit()

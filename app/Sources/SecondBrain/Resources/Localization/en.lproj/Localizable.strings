@@ -1796,3 +1796,6 @@
 
 /* v0.7 fix */
 "graph.kinds.emailThread" = "Email threads";
+"dump.folderEmpty" = "There are no files in the folder “%@”.";
+"files.filters" = "Filters";
+"files.filtersActive" = "Filters (%ld)";

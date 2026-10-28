@@ -105,7 +105,7 @@ func testGraph(_ t: Tester, root: URL) async {
     // One project: its pages + hub + its people, nothing else.
     let p = KnowledgeGraphBuilder.build(vaultRoot: vaultURL, projectSlug: "lanzamiento-atlas")
     let pIds = Set(p.nodes.map(\.id))
-    t.check(p.nodes.allSatisfy { $0.kind == .person || $0.projectSlug == "lanzamiento-atlas" }, "project graph has only its pages")
+    t.check(p.nodes.allSatisfy { $0.kind == .person || $0.kind == .org || $0.projectSlug == "lanzamiento-atlas" }, "project graph has only its pages")
     t.check(pIds.contains("project:lanzamiento-atlas"), "project graph has its hub")
     t.check(!pIds.contains("project:migracion-a-la-nube"), "project graph has no other hub")
     t.check(pIds.contains("people/ana-garcia.md"), "Ana in Atlas")
@@ -134,6 +134,51 @@ func testGraph(_ t: Tester, root: URL) async {
     }
     let s1 = KnowledgeGraphBuilder.vaultSignature(vaultURL)
     t.eq(KnowledgeGraphBuilder.vaultSignature(vaultURL), s1, "signature is stable")
+
+    // v0.6 (§16.4, §16.5): companies in orgs/ are global nodes; a project's graph holds the people and companies
+    // linked to it (Ana's `organization: "Acme"` → orgs/acme.md), and project.json `people` include/exclude decides.
+    let acme = "orgs/acme.md", nubia = "orgs/banco-nubia.md"
+    try? fm.createDirectory(at: vaultURL.appendingPathComponent("orgs"), withIntermediateDirectories: true)
+    try? "---\ntype: org\ntitle: \"Acme\"\n---\n\n# Acme\n\nCliente de Atlas.\n"
+        .write(to: vaultURL.appendingPathComponent(acme), atomically: true, encoding: .utf8)
+    try? "---\ntype: org\ntitle: \"Banco Nubia\"\nprojects: [\"alianza-banco-nubia\"]\n---\n\n# Banco Nubia\n"
+        .write(to: vaultURL.appendingPathComponent(nubia), atomically: true, encoding: .utf8)
+    try? "# Empresas\n".write(to: vaultURL.appendingPathComponent("orgs/README.md"), atomically: true, encoding: .utf8)
+    let question = "questions/quien-es-acme.md"
+    try? fm.createDirectory(at: vaultURL.appendingPathComponent("questions"), withIntermediateDirectories: true)
+    try? "---\ntype: question\ntitle: \"¿Quién es Acme?\"\n---\n\n# ¿Quién es Acme?\n\nEl cliente de [[ana-garcia]].\n"
+        .write(to: vaultURL.appendingPathComponent(question), atomically: true, encoding: .utf8)
+    let og = KnowledgeGraphBuilder.build(vaultRoot: vaultURL, projectSlug: nil)
+    let orgNodes = og.nodes.filter { $0.kind == .org }
+    t.eq(Set(orgNodes.map(\.id)), [acme, nubia], "org nodes (no README)")
+    t.check(orgNodes.allSatisfy { $0.projectSlug == nil }, "orgs are global")
+    t.check(og.edges.contains { Set([$0.source, $0.target]) == Set(["people/ana-garcia.md", acme]) }, "Ana ↔ Acme (organization:)")
+    let atlasGraph = KnowledgeGraphBuilder.build(vaultRoot: vaultURL, projectSlug: "lanzamiento-atlas")
+    let atlasIds = Set(atlasGraph.nodes.map(\.id))
+    t.check(atlasIds.contains(acme), "Acme in Atlas (through Ana)")
+    t.check(!atlasIds.contains(nubia), "Banco Nubia not in Atlas")
+    t.check(atlasGraph.nodes.allSatisfy { $0.kind == .person || $0.kind == .org || $0.projectSlug == "lanzamiento-atlas" },
+            "project graph: its pages + linked people/orgs")
+    let nubiaGraph = KnowledgeGraphBuilder.build(vaultRoot: vaultURL, projectSlug: "alianza-banco-nubia")
+    t.check(nubiaGraph.nodes.contains { $0.id == nubia }, "Banco Nubia in its project (projects:)")
+    t.check(!atlasIds.contains { $0.hasPrefix("questions/") }, "global questions stay out of a project")
+    // project.json people: include adds a person, exclude removes one.
+    let pjURL = vaultURL.appendingPathComponent("projects/lanzamiento-atlas/project.json")
+    if let original = try? Data(contentsOf: pjURL),
+       var json = (try? JSONSerialization.jsonObject(with: original)) as? [String: Any] {
+        json["people"] = ["include": ["marta-rios"], "exclude": ["ana-garcia"]]
+        try? JSONSerialization.data(withJSONObject: json).write(to: pjURL)
+        let edited = Set(KnowledgeGraphBuilder.build(vaultRoot: vaultURL, projectSlug: "lanzamiento-atlas").nodes.map(\.id))
+        t.check(edited.contains("people/marta-rios.md"), "project.json include adds Marta")
+        t.check(!edited.contains("people/ana-garcia.md"), "project.json exclude removes Ana")
+        t.check(!edited.contains(acme), "Acme leaves Atlas with Ana")
+        try? original.write(to: pjURL)
+    } else {
+        t.check(false, "project.json readable")
+    }
+    t.eq(og.nodes.first { $0.id == question }?.kind, .question, "global question in the brain graph")
+    try? fm.removeItem(at: vaultURL.appendingPathComponent("orgs"))
+    try? fm.removeItem(at: vaultURL.appendingPathComponent(question))
 
     // Stress: ~1,000 pages build in reasonable time (debug build).
     let big = root.appendingPathComponent("big")

@@ -309,5 +309,24 @@
 			<string>Guardar el resto del hilo (%ld)</string>
 		</dict>
 	</dict>
+	<!-- v0.6 graph -->
+	<key>graph.panel.links</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld conexión</string>
+			<key>many</key>
+			<string>%ld conexiones</string>
+			<key>other</key>
+			<string>%ld conexiones</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

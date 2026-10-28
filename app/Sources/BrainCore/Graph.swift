@@ -3,12 +3,14 @@ import Foundation
 // Knowledge graph of the vault (CONTRACT §12.2).
 //
 // Nodes: every wiki page of every project (`projects/<slug>/wiki/**`, minus the navigation pages index/log/health),
-// people (`people/*.md` minus README), global saved answers (`questions/**`) and the global `index.md`. Never `raw/`.
+// people (`people/*.md` minus README), companies (`orgs/*.md` minus README, v0.6 §16.4), global saved answers
+// (`questions/**`) and the global `index.md`. Never `raw/`.
 // Edges: wikilinks resolved with `VaultStore.resolveWikilinks` (one vault walk per project, since resolution only
 // depends on the project of the linking page), undirected, deduped, weight = repetitions. A link to a raw email
 // message counts as a link to its thread page; a link to a project's `index.md` counts as a link to the project.
 // Each project gets a synthetic hub node `project:<slug>` tied to its overview and to its loose pages, so every
 // project forms its own cluster and people sit between the projects they take part in.
+// v0.6 (§16.5): a project's graph also holds the global people and companies linked to it (`linkedGlobals`).
 
 public extension BrainEngine {
     /// Nodes and edges of the whole brain (`projectSlug == nil`) or of one project. Runs off the main thread and is
@@ -80,8 +82,12 @@ public enum KnowledgeGraphBuilder {
         let projectSlug: String?
         let date: Date?
         let targets: [String]
+        /// `projects:` of a person or company page (global pages only).
         let personProjects: [String]
     }
+
+    /// Person or company: global pages that a project's graph includes when they are linked to it.
+    static func isGlobalEntity(_ path: String) -> Bool { path.hasPrefix("people/") || path.hasPrefix("orgs/") }
 
     /// Builds the graph from disk (no cache). Blocking: call it off the main thread.
     public static func build(vaultRoot: URL, projectSlug: String?) -> KnowledgeGraph {
@@ -94,8 +100,10 @@ public enum KnowledgeGraphBuilder {
         for slug in allSlugs where projectSlug == nil || projectSlug == slug {
             paths += vault.markdownFiles(under: "projects/\(slug)/wiki").filter { isGraphPage($0) }
         }
-        let peoplePaths = vault.markdownFiles(under: "people").filter { !$0.hasSuffix("/README.md") && isGraphPage($0) }
-        paths += peoplePaths
+        let globalPaths = ["people", "orgs"].flatMap { folder in
+            vault.markdownFiles(under: folder).filter { !$0.hasSuffix("/README.md") && isGraphPage($0) }
+        }
+        paths += globalPaths
         if projectSlug == nil {
             paths += vault.markdownFiles(under: "questions").filter { isGraphPage($0) }
             if FileManager.default.fileExists(atPath: vault.url(for: "index.md").path) { paths.append("index.md") }
@@ -117,20 +125,12 @@ public enum KnowledgeGraphBuilder {
             resolvedByProject[slug] = vault.resolveWikilinks(targets, from: representative)
         }
 
-        // 3. People in a project's graph: those linked from/to its pages or listing it in `projects:`.
+        // 3. People and companies in a project's graph (`linkedGlobals`); the others leave it.
         var nodeIds = Set(pages.keys)
         if let projectSlug {
-            var keep = Set<String>()
-            for page in pages.values where page.kind == .person && page.personProjects.contains(projectSlug) { keep.insert(page.path) }
-            let resolved = resolvedByProject[projectSlug] ?? [:]
-            for page in pages.values where page.projectSlug == projectSlug {
-                for t in page.targets { if let p = resolved[t], p.hasPrefix("people/") { keep.insert(p) } }
-            }
-            let resolvedPeople = resolvedByProject[""] ?? [:]
-            for page in pages.values where page.projectSlug == nil {
-                if page.targets.contains(where: { (resolvedPeople[$0] ?? "").hasPrefix("projects/\(projectSlug)/") }) { keep.insert(page.path) }
-            }
-            for path in peoplePaths where !keep.contains(path) { nodeIds.remove(path); pages[path] = nil }
+            let keep = linkedGlobals(projectSlug: projectSlug, pages: pages, resolvedByProject: resolvedByProject,
+                                     vaultRoot: vaultRoot)
+            for path in globalPaths where !keep.contains(path) { nodeIds.remove(path); pages[path] = nil }
         }
 
         // 4. Edges (undirected, deduped, weight = repetitions).
@@ -193,6 +193,43 @@ public enum KnowledgeGraphBuilder {
         return KnowledgeGraph(nodes: nodes, edges: edges)
     }
 
+    /// The people and companies (`people/`, `orgs/`) a project's graph shows: listing the project in `projects:`,
+    /// linked from one of its pages, or linking to one; `project.json` `people: {include, exclude}` (slugs of
+    /// `people/`, §16.2) has the last word on people; then the companies those people link to (Ana → Acme).
+    static func linkedGlobals(projectSlug: String, pages: [String: Page], resolvedByProject: [String: [String: String]],
+                              vaultRoot: URL) -> Set<String> {
+        var keep = Set<String>()
+        let globals = pages.values.filter { isGlobalEntity($0.path) }
+        for page in globals where page.personProjects.contains(projectSlug) { keep.insert(page.path) }
+        let resolved = resolvedByProject[projectSlug] ?? [:]
+        for page in pages.values where page.projectSlug == projectSlug {
+            for t in page.targets { if let p = resolved[t], isGlobalEntity(p) { keep.insert(p) } }
+        }
+        let resolvedGlobal = resolvedByProject[""] ?? [:]
+        for page in globals where page.targets.contains(where: { (resolvedGlobal[$0] ?? "").hasPrefix("projects/\(projectSlug)/") }) {
+            keep.insert(page.path)
+        }
+        let people = projectPeople(vaultRoot: vaultRoot, slug: projectSlug)
+        for slug in people.include where pages["people/\(slug).md"] != nil { keep.insert("people/\(slug).md") }
+        for slug in people.exclude { keep.remove("people/\(slug).md") }
+        for path in keep where path.hasPrefix("people/") {
+            for t in pages[path]?.targets ?? [] {
+                if let p = resolvedGlobal[t], p.hasPrefix("orgs/"), pages[p] != nil { keep.insert(p) }
+            }
+        }
+        return keep
+    }
+
+    /// `project.json` → `people: {include: [slug], exclude: [slug]}` (§16.2). Read loosely: the field is optional and
+    /// the rest of the file belongs to `ProjectManager`.
+    static func projectPeople(vaultRoot: URL, slug: String) -> (include: [String], exclude: [String]) {
+        let url = vaultRoot.appendingPathComponent("projects/\(slug)/project.json")
+        guard let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let people = json["people"] as? [String: Any] else { return ([], []) }
+        return (people["include"] as? [String] ?? [], people["exclude"] as? [String] ?? [])
+    }
+
     /// Navigation and maintenance pages are not knowledge: they would tie everything to everything.
     static func isGraphPage(_ path: String) -> Bool {
         guard path.hasSuffix(".md"), !path.contains("/raw/"), !path.hasPrefix("_inbox/") else { return false }
@@ -248,12 +285,20 @@ public enum KnowledgeGraphBuilder {
             date = SBDate.parseISO(raw)?.date
         }
         var personProjects: [String] = []
-        if kind == .person, let yaml = parts.yaml {
+        var targets = wikilinkTargets(in: text)
+        if isGlobalEntity(path), let yaml = parts.yaml {
             personProjects = listField("projects", in: yaml)
+            // A person's company written as a plain name (`org: Acme`, `organization: "Acme"`): its `orgs/` page.
+            for key in ["org", "organization"] {
+                for value in listField(key, in: yaml) where !value.contains("[[") {
+                    let slug = slugify(value)
+                    if !slug.isEmpty { targets.append("orgs/\(slug)") }
+                }
+            }
         }
         // Links in the frontmatter (people:, topics:, decided_by:) count too: they are the page's explicit relations.
         return Page(path: path, title: title ?? Frontmatter.field("title", in: text) ?? fallback, kind: kind,
-                    projectSlug: VaultStore.projectSlug(of: path), date: date, targets: wikilinkTargets(in: text),
+                    projectSlug: VaultStore.projectSlug(of: path), date: date, targets: targets,
                     personProjects: personProjects)
     }
 
@@ -284,6 +329,8 @@ public enum KnowledgeGraphBuilder {
         let parts = path.split(separator: "/").map(String.init)
         if parts.first == "people" {
             kind = .person
+        } else if parts.first == "orgs" {
+            kind = .org
         } else if parts.first == "questions" {
             kind = .question
         } else if parts.count >= 5, parts[0] == "projects", parts[2] == "wiki" {
@@ -306,6 +353,7 @@ public enum KnowledgeGraphBuilder {
         case "note": return .note
         case "url": return .url
         case "person": return .person
+        case "org", "organization", "company": return .org
         case "topic": return .topic
         case "decision": return .decision
         case "question": return .question

@@ -79,6 +79,12 @@ page that says otherwise is wrong. Never edit `facts.md`.
     confirmed fact contradicts (e.g. a person page that still puts Javier on Angela's team after
     the owner confirmed he is not); global scope: also `people/` and `orgs/` pages. Keep the
     `## Contradicen hechos confirmados` bullets of the previous report while the source still says it.
+18. **Organizations** (`orgs/`, CLAUDE.md §8.11): topic pages in the scope that describe a company
+    or organization (a client, vendor or partner: `topics/acme.md`, "Acme es el cliente…") with no
+    page in `orgs/` or no link to it; people whose `organization:` names a company that has (or
+    should have) an org page but who lack `org: "[[<org>]]"`; org pages missing from the global
+    `index.md` under `## Empresas`. Vaults from before v0.6 have project topics about clients and
+    an empty `orgs/`: this check is how they gain global companies.
 
 ## Fix (only trivial, safe things)
 
@@ -101,6 +107,9 @@ page that says otherwise is wrong. Never edit `facts.md`.
 - Template comments left in a page → remove them.
 - Orphan topic/decision → link it from the most relevant topic or the overview if the connection
   is clear from content.
+- Organizations (check 18), only when the org page already exists: link the topic to it (one line
+  under its "En breve" or in `## Relacionado`: `Empresa: [[acme|Acme]]`); add `org: "[[acme]]"` to
+  people whose `organization:` is that company; add the missing `## Empresas` index line.
 - Do NOT: resolve contradictions, merge different-looking people/topic pages, rewrite summaries,
   delete pages, or create content pages. Report those instead.
 - Set `updated:` to today on pages you change.
@@ -137,6 +146,9 @@ language: es
 
 ## Sugerencias
 - Sources or meetings that would fill gaps; questions worth asking; pages worth creating.
+- **Empresa sin página:** [[acme-cliente|Acme]] describe a la empresa cliente; conviene una página global
+  `orgs/acme.md` enlazada desde ese tema y desde sus personas (el próximo ingest que la mencione la crea). One line
+  per company (check 18).
 
 ## Números
 Páginas: N · Reuniones: N · Hilos de correo: N · Fuentes: N · Decisiones: N · Pendientes abiertos: N (tuyos: N; vencidos: tuyos N, de otros N) · Conflictos abiertos: N

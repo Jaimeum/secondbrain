@@ -52,14 +52,9 @@ struct InboxView: View {
                                 // Same words as Inicio's "Por ordenar · Ver todo →" that leads here.
                                 BrandSectionHeader(title: L("home.toSort"), count: toSort.count)
                                 ForEach(toSort) { source in
+                                    // Arriving from Inicio: the soft focus halo, never a heavy accent ring (§15.1).
                                     InboxRow(source: source, onError: { error = $0 }, onAssigned: offerRule)
-                                        .overlay {
-                                            if highlighted == source.id {
-                                                RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
-                                                    .strokeBorder(Brand.color.accent, lineWidth: 2)
-                                                    .allowsHitTesting(false)
-                                            }
-                                        }
+                                        .brandFocusHalo(highlighted == source.id, cornerRadius: Brand.radius.card)
                                 }
                             }
                         }
@@ -69,7 +64,10 @@ struct InboxView: View {
                                 BrandCard(padding: 0) {
                                     VStack(spacing: 0) {
                                         ForEach(Array(inProgress.enumerated()), id: \.element.id) { index, source in
-                                            if index > 0 { Rectangle().fill(Brand.color.line).frame(height: 1) }
+                                            if index > 0 {
+                                                Rectangle().fill(Brand.color.lineSoft).frame(height: 1)
+                                                    .padding(.horizontal, Brand.spacing.l)
+                                            }
                                             InProgressRow(source: source)
                                         }
                                     }
@@ -301,15 +299,18 @@ struct InboxRow: View {
     }
 
     private func projectMenu(_ title: String) -> some View {
-        Menu(title) {
+        Menu {
             ForEach(state.projects) { project in
                 Button("\(project.emoji) \(project.name)") { assign(project.slug) }
             }
             Divider()
             Button(L("sidebar.newProject")) { showNewProject = true }
+        } label: {
+            BrandInlineMenuLabel(title: title)
         }
-        .menuStyle(.borderlessButton)
-        .foregroundStyle(Brand.color.accent)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
     }
 

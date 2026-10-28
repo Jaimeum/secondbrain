@@ -146,12 +146,12 @@ struct ActivitySheet: View {
                 .disabled(reviewing || !state.engineStarted)
                 .help(reviewing ? L("chat.lintQueued") : L("chat.lintHelp"))
                 Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, Brand.spacing.content)
-            .padding(.vertical, Brand.spacing.l)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.top, Brand.spacing.l)
+            .padding(.bottom, Brand.spacing.s)
             ActivityView(projectSlug: projectSlug, onOpenPage: onOpenPage)
         }
         .frame(minWidth: 560, idealWidth: 680, minHeight: 420, idealHeight: 520)
@@ -208,11 +208,11 @@ private struct HistoryRow: View {
                         Menu {
                             Button(L("activity.undo"), role: .destructive, action: onUndo)
                         } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .foregroundStyle(Brand.color.text2)
+                            BrandMoreLabel()
                         }
-                        .menuStyle(.borderlessButton)
+                        .menuStyle(.button)
                         .menuIndicator(.hidden)
+                        .buttonStyle(.plain)
                         .fixedSize()
                         .help(L("project.more"))
                         .accessibilityLabel(Text(L("project.more")))
@@ -376,12 +376,11 @@ struct DiffSheet: View {
                         .frame(width: 240)
                 }
                 Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, Brand.spacing.content)
             .padding(.vertical, Brand.spacing.m)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             ScrollView([.vertical]) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if showsSideBySide {

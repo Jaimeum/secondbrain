@@ -409,8 +409,9 @@ struct MeetingCard: View {
             .frame(width: 56, alignment: .trailing)
             .foregroundStyle(past ? Brand.color.text2 : Brand.color.text)
 
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(live ? Brand.color.record : (past ? Brand.color.line : Brand.color.sage))
+            // A softened sage for past events, so the rail never reads as a stray divider.
+            Capsule(style: .continuous)
+                .fill(live ? Brand.color.record : (past ? Brand.color.sage.opacity(0.35) : Brand.color.sage))
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 6) {

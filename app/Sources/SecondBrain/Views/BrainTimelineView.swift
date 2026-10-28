@@ -283,8 +283,9 @@ struct TimelineKindMenu: View {
         } label: {
             BrandChip(text: label, symbol: "line.3.horizontal.decrease", active: !selected.isEmpty)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
         .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
         .help(L("timeline.filterHelp"))
     }

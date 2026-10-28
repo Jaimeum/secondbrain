@@ -29,7 +29,6 @@ struct ProjectPeopleView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if !loaded {
                 BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if people.isEmpty {

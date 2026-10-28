@@ -55,6 +55,7 @@ struct MailView: View {
             }
             // §14.4 + §15.2: "Reglas…" lives in the ⋯ menu (same place in Correo and Reuniones), not as a bar button.
             ToolbarItem { ToolbarMoreMenu(mail: model.messages) }
+                .brandOwnBackground()
         }
         .task(id: hasMailAccounts) {
             guard hasMailAccounts else { return }
@@ -88,7 +89,7 @@ struct MailView: View {
         return HStack(spacing: 0) {
             listPane()
                 .frame(width: list)
-            Rectangle().fill(Brand.color.line).frame(width: 1)
+            BrandColumnDivider()
             MailDetailView(model: model)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -120,7 +121,6 @@ struct MailView: View {
                 }
                 .padding(.horizontal, Brand.spacing.l)
                 .padding(.vertical, Brand.spacing.s)
-                Rectangle().fill(Brand.color.line).frame(height: 1)
                 MailDetailView(model: model)
             }
             .transition(.opacity)
@@ -146,9 +146,13 @@ struct ToolbarMoreMenu: View {
             }
             .help(L("rules.buttonHelp"))
         } label: {
-            Label(L("project.more"), systemImage: "ellipsis.circle")
+            BrandMoreLabel()
         }
+        .menuStyle(.button)
         .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(L("project.more"))
         .help(L("project.more"))
         .sheet(isPresented: $showsRules) { RulesSheet(mail: mail) }
     }
@@ -168,11 +172,11 @@ private struct MailListPane: View {
     @ViewState private var connector = AccountConnector()
     @ViewState private var help: OrgHelpRequest?
     @FocusState private var listFocused: Bool
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             content
             if selection.isActive {
                 MailSelectionBar(selection: selection, model: model, picked: $picked, onSave: onSaveSelection)
@@ -190,11 +194,9 @@ private struct MailListPane: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Brand.spacing.s) {
             if model.accounts.count > 1 {
-                Picker(L("mail.account"), selection: Binding(get: { model.account?.id ?? "" }, set: { model.selectAccount($0) })) {
-                    ForEach(model.accounts) { account in Text(account.email).tag(account.id) }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
+                BrandPicker(selection: Binding(get: { model.account?.id ?? "" }, set: { model.selectAccount($0) }),
+                            options: model.accounts.map { ($0.id, $0.email) })
+                    .accessibilityLabel(L("mail.account"))
             }
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Brand.color.text3)
@@ -202,6 +204,8 @@ private struct MailListPane: View {
                     .textFieldStyle(.plain)
                     .font(Brand.body)
                     .foregroundStyle(Brand.color.text)
+                    .focused($searchFocused)
+                    .focusEffectDisabled()
                 if !model.query.isEmpty {
                     Button { model.query = "" } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(Brand.color.text3)
@@ -210,11 +214,12 @@ private struct MailListPane: View {
                     .help(L("mail.clearSearch"))
                 }
             }
-            .padding(.horizontal, 8)
-            .frame(height: 28)
-            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-                .strokeBorder(Brand.color.line, lineWidth: 1))
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
+                .strokeBorder(searchFocused ? Brand.color.focusBorder : Brand.color.lineSoft, lineWidth: 1))
+            .brandFocusHalo(searchFocused)
         }
         .padding(Brand.spacing.m)
     }
@@ -295,8 +300,8 @@ private struct MailListPane: View {
             .help(L("common.close"))
         }
         .padding(Brand.spacing.m)
-        .background(Brand.color.card)
-        .overlay(alignment: .top) { Rectangle().fill(Brand.color.line).frame(height: 1) }
+        .background(Brand.color.surface)
+        .overlay(alignment: .top) { BrandEdgeFade().offset(y: -16) }
     }
 
     private func open(_ id: String) {
@@ -337,7 +342,7 @@ private struct MailListPane: View {
                     BrandLoader(size: 18)
                 } else {
                     Button(L("mail.loadMore")) { model.loadMore() }
-                        .buttonStyle(.brandSecondary)
+                        .buttonStyle(.brandGhost)
                 }
                 Spacer()
             }
@@ -468,11 +473,13 @@ private struct MailRow: View {
         .padding(.horizontal, Brand.spacing.s)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? Brand.color.accentSoft : (isChecked ? Brand.color.cardAlt : Color.clear),
-                    in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+        // One selection color (accentSoft); a checked row only gets the faint `hover` tone (its checkbox carries
+        // the state). The inset separator hides on a filled row, so it never touches a rounded fill.
+        .background(isSelected ? Brand.color.accentSoft : (isChecked ? Brand.color.hover : Color.clear),
+                    in: RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous))
         .overlay(alignment: .bottom) {
-            if !isSelected {
-                Rectangle().fill(Brand.color.line).frame(height: 1).padding(.leading, 32).padding(.trailing, 8)
+            if !isSelected && !isChecked {
+                Rectangle().fill(Brand.color.lineSoft).frame(height: 1).padding(.leading, 32).padding(.trailing, 8)
             }
         }
         .onHover { hovering = $0 }
@@ -522,7 +529,7 @@ struct MailToastView: View {
         // It takes space now (it no longer floats over the message): no overlay shadow. Clipped to its shape: without
         // it, hairline marks showed just outside the capsule's ends.
         .background(Brand.color.card, in: Capsule())
-        .overlay(Capsule().strokeBorder(Brand.color.line, lineWidth: 1))
+        .overlay(Capsule().strokeBorder(Brand.color.lineSoft, lineWidth: 1))
         .clipShape(Capsule())
     }
 }

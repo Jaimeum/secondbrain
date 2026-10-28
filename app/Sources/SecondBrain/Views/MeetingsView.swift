@@ -67,6 +67,7 @@ struct MeetingsView: View {
             }
             // §14.4 + §15.2: "Reglas…" in the ⋯ menu, the same place as in Correo (also in Ajustes › Reglas and ⌘K).
             ToolbarItem(placement: .primaryAction) { ToolbarMoreMenu() }
+                .brandOwnBackground()
         }
         .task(id: state.accountsRevision) {
             // Fresh on every visit; the loop keeps it fresh every 15 minutes after that.
@@ -99,7 +100,7 @@ struct MeetingsView: View {
             HStack(spacing: 0) {
                 agenda
                     .frame(width: min(520, max(320, (width * 0.46).rounded())))
-                Rectangle().fill(Brand.color.line).frame(width: 1)
+                BrandColumnDivider()
                 detailPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -121,12 +122,9 @@ struct MeetingsView: View {
     private var agenda: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Picker("", selection: $segment) {
-                    ForEach(MeetingSegment.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 340)
+                BrandSegmentedControl(options: MeetingSegment.allCases.map { ($0, $0.title) }, selection: $segment,
+                                      height: 26)
+                    .frame(maxWidth: 340)
                 Spacer(minLength: 8)
                 if showsLoader && segment != .past {
                     BrandLoader(size: 16)
@@ -150,7 +148,6 @@ struct MeetingsView: View {
                     .padding(.bottom, 8)
                 }
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if segment == .past {
                 pastList
             } else if !hasAccounts {
@@ -537,7 +534,9 @@ struct MeetingHeroCard: View {
         }
         .padding(16)
         .background(shape.fill(isNow ? Brand.color.recordSoft : Brand.color.card))
-        .overlay(shape.strokeBorder(isSelected ? Brand.color.accent : Brand.color.line, lineWidth: isSelected ? 1.5 : 1))
+        // Selected: a `focusBorder` edge and the soft focus halo, never a dark 1.5 pt stroke (§15.1).
+        .overlay(shape.strokeBorder(isSelected ? Brand.color.focusBorder : Brand.color.lineSoft, lineWidth: 1))
+        .brandFocusHalo(isSelected, cornerRadius: Brand.radius.card)
         .contentShape(shape)
         .onTapGesture(perform: onSelect)
         .accessibilityAddTraits(.isButton)

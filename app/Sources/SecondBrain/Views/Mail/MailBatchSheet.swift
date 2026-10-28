@@ -16,11 +16,10 @@ struct MailBatchSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             footer
+                .overlay(alignment: .top) { BrandEdgeFade().offset(y: -16) }
         }
         .frame(minWidth: 520, idealWidth: 620, minHeight: 380, idealHeight: 520)
         .background(Brand.color.surface)
@@ -119,7 +118,8 @@ struct MailBatchSheet: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(model.conversations) { conversation in
                     ConversationRow(model: model, conversation: conversation)
-                    Rectangle().fill(Brand.color.line).frame(height: 1)
+                    // Inset past the checkbox, in the quiet tone (§15.1).
+                    Rectangle().fill(Brand.color.lineSoft).frame(height: 1).padding(.leading, 28)
                 }
                 if model.phase == .loading {
                     BrandLoader(size: 18)
@@ -141,7 +141,7 @@ struct MailBatchSheet: View {
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(L("common.cancel")) { dismiss() }
-                .buttonStyle(.brandSecondary)
+                .buttonStyle(.brandGhost)
                 .keyboardShortcut(.cancelAction)
             Button(model.messagesToSave > 0 ? L("batch.save", model.messagesToSave) : L("batch.saveNothing")) {
                 model.save()
@@ -151,7 +151,8 @@ struct MailBatchSheet: View {
             .keyboardShortcut(.defaultAction)
             .disabled(model.messagesToSave == 0 || model.isBusy)
         }
-        .padding(12)
+        .padding(.horizontal, Brand.spacing.l)
+        .padding(.vertical, Brand.spacing.m)
     }
 
     /// "2 adjuntos · 1 hilo ya guardado" — or the read-only promise when there is nothing else to say.
@@ -180,7 +181,7 @@ private struct ConversationRow: View {
         HStack(alignment: .top, spacing: 10) {
             Toggle("", isOn: Binding(get: { included && !conversation.isFullySaved },
                                      set: { _ in model.toggle(conversation: conversation.id) }))
-                .toggleStyle(.checkbox)
+                .toggleStyle(.brand)
                 .labelsHidden()
                 .disabled(conversation.isFullySaved)
                 .accessibilityLabel(conversation.subject)
@@ -286,8 +287,8 @@ private struct ConversationRow: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous).strokeBorder(Brand.color.lineSoft))
     }
 }
 
@@ -301,7 +302,7 @@ private struct AttachmentCheckRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Toggle("", isOn: Binding(get: { checked }, set: { _ in toggle() }))
-                .toggleStyle(.checkbox)
+                .toggleStyle(.brand)
                 .labelsHidden()
                 .disabled(!enabled)
                 .accessibilityLabel(item.info.name)

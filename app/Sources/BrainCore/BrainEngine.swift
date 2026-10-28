@@ -140,6 +140,7 @@ private final class ConfigBox: @unchecked Sendable {
         started = true
         stopping = false
         do { try paths.ensureExist() } catch { Log.error("could not create data folders: \(error)") }
+        Self.sweepAttachmentStaging(dataRoot: paths.root)   // v0.7: files left for Claude by a quit mid-triage
         migrateVault()
         // Crash repairs (stale `running` jobs, half-done sources) belong to whoever owns the queue: another
         // live process may be running those jobs right now.
@@ -286,7 +287,15 @@ private final class ConfigBox: @unchecked Sendable {
         try await importFileAsync(url, projectSlug: projectSlug, eventDate: nil, templateId: nil)
     }
 
-    public func importFileAsync(_ url: URL, projectSlug: String?, eventDate: Date?, templateId: String? = nil) async throws {
+    /// v0.7 (§17.2): `origin` is written to the raw wrapper (`origin: capture` from the quick capture) so Archivos
+    /// shows where the file came from. Media files keep their own path (a meeting).
+    public func importFileAsync(_ url: URL, projectSlug: String?, origin: String?) async throws {
+        try await importFileAsync(url, projectSlug: projectSlug, eventDate: nil, templateId: nil,
+                                  extra: origin.map { [("origin", $0)] } ?? [])
+    }
+
+    public func importFileAsync(_ url: URL, projectSlug: String?, eventDate: Date?, templateId: String? = nil,
+                                extra: [(String, String)] = []) async throws {
         let project = validProject(projectSlug)
         if await Task.detached(operation: { AudioPrep.isMedia(url) }).value {
             try importMedia(url, project: project, eventDate: eventDate, templateId: templateId)
@@ -294,9 +303,9 @@ private final class ConfigBox: @unchecked Sendable {
         }
         let dir = rawDir(.document, project)
         let imported = Importer.mainThreadText.contains(url.pathExtension.lowercased())
-            ? try Importer.importFile(url, into: dir, project: project, eventDate: eventDate)
+            ? try Importer.importFile(url, into: dir, project: project, eventDate: eventDate, extra: extra)
             : try await Task.detached(priority: .userInitiated) {
-                try Importer.importFile(url, into: dir, project: project, eventDate: eventDate)
+                try Importer.importFile(url, into: dir, project: project, eventDate: eventDate, extra: extra)
             }.value
         addImported(kind: .document, imported, project: project, templateId: templateId)
     }
@@ -372,7 +381,7 @@ private final class ConfigBox: @unchecked Sendable {
     public func assign(sourceId: String, to projectSlug: String) throws {
         guard var src = source(sourceId) else { throw EngineError.sourceNotFound(sourceId) }
         guard projects.get(projectSlug) != nil else { throw ProjectError.notFound(projectSlug) }
-        if src.kind == .email, let key = src.threadKey {
+        if src.kind == .email || src.parentSourceId != nil, let key = src.threadKey {   // v0.7: an attachment goes with its thread
             try assignThread(key, to: projectSlug)   // the whole thread moves
             return
         }
@@ -433,6 +442,11 @@ private final class ConfigBox: @unchecked Sendable {
             }
             try? fm.removeItem(at: url)
             if src.kind == .email { forgetEmail(rawPath: raw) }
+            if src.parentSourceId != nil { forgetAttachment(rawPath: raw) }   // v0.7 (§17.1)
+        }
+        // v0.7 (§17.1): an email's attachments not learned yet go with it ("Deshacer" in Correo).
+        if src.kind == .email {
+            for child in sources where child.parentSourceId == sourceId && child.historyId == nil { try? delete(sourceId: child.id) }
         }
         writeGeneration += 1
         sourceStore.delete(id: sourceId)
@@ -494,11 +508,13 @@ private final class ConfigBox: @unchecked Sendable {
     /// Undoing an ingest also detaches it from its source, so the source can be learned from again
     /// (`retry`) or moved to another project.
     public func undo(historyId: String, force: Bool = false) throws {
-        guard !runningAnywhere({ [.ingest, .lint, .saveAnswer, .reformat, .makeTemplate].contains($0.kind) }) else { throw EngineError.busy }
+        guard !runningAnywhere({ [.ingest, .lint, .saveAnswer, .reformat, .makeTemplate, .fileDump].contains($0.kind) }) else { throw EngineError.busy }
         try history.undo(entryId: historyId, force: force)
-        guard var src = sources.first(where: { $0.historyId == historyId }) else { return }
-        src.historyId = nil
-        upsert(&src)
+        // v0.7: a /file-dump entry belongs to every source of the drop.
+        for var src in sources where src.historyId == historyId {
+            src.historyId = nil
+            upsert(&src)
+        }
     }
 
     // MARK: Queue
@@ -745,6 +761,7 @@ private final class ConfigBox: @unchecked Sendable {
             case .reformat: try await runReformat(job)
             case .makeTemplate: try await runMakeTemplate(job)
             case .manualEdit: break   // recorded directly by the app (e.g. `setTask`), never queued
+            case .fileDump: try await runFileDump(job)   // v0.7 (§17.3)
             }
             return .success
         } catch let error as ClaudeError {
@@ -799,6 +816,7 @@ private final class ConfigBox: @unchecked Sendable {
                 }
                 upsert(&src)
             }
+            if job.kind == .fileDump { job.status == .failed ? fileDumpFailed(job) : fileDumpWillRetry(job) }   // v0.7
             if job.status == .failed { onEvent?(.jobFailed(job)) }
         }
     }
@@ -1061,8 +1079,10 @@ private final class ConfigBox: @unchecked Sendable {
         for src in sources where src.status == .recording && src.kind == .meeting {
             if let m = try? SessionManifest.load(from: sessionDir(src.id)), m.endedAt != nil { recordingFinished(m) }
         }
+        let dumping = dumpPendingSourceIds()   // v0.7: sources a queued /file-dump will file
         for var src in sources where [.queued, .transcribing, .ingesting].contains(src.status) {
-            let pending = queue.jobs.contains { $0.sourceId == src.id && ($0.status == .queued || $0.status == .running) }
+            let pending = dumping.contains(src.id)
+                || queue.jobs.contains { $0.sourceId == src.id && ($0.status == .queued || $0.status == .running) }
             if pending {
                 if src.status != .queued {
                     src.status = .queued
@@ -1102,8 +1122,9 @@ private final class ConfigBox: @unchecked Sendable {
         let sub: String
         switch kind {
         case .meeting: sub = "meetings"
-        case .note: sub = "notes"
+        case .note, .inPerson: sub = "notes"   // v0.7 (§17.3): dump text lands in raw/notes
         case .document, .url: sub = "docs"
+        case .image: sub = "assets"            // v0.7 (§17.1/§17.3)
         case .email: sub = "emails"
         case .github: sub = "github"   // MARK: v0.4 github (GitHubSync writes its own <owner>-<repo>/ subfolder)
         }
@@ -1153,6 +1174,7 @@ private final class ConfigBox: @unchecked Sendable {
         case .makeTemplate:
             return lang.t("Creando el formato «\(job.payload["name"] ?? "")»…", "Creating the “\(job.payload["name"] ?? "")” format…")
         case .manualEdit: return lang.t("Guardando tu cambio…", "Saving your change…")
+        case .fileDump: return lang.t("Archivando lo que agregaste…", "Filing what you added…")
         }
     }
 
@@ -1177,6 +1199,13 @@ private final class ConfigBox: @unchecked Sendable {
         queue.upsert(job)
         jobs = queue.jobs
         onJobUpdate?(job)
+    }
+
+    /// v0.7: drops one job (a drop's /file-dump cancelled before it ran).
+    func removeJob(id: String) {
+        writeGeneration += 1
+        queue.remove(id: id)
+        jobs = queue.jobs
     }
 
     func removeJobs(for sourceId: String, where predicate: (Job) -> Bool) {

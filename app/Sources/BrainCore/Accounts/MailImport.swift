@@ -18,9 +18,11 @@ public enum MailImport {
         var owners = Set(ownerEmails.map { $0.lowercased().trimmingCharacters(in: .whitespaces) })
         if let account, account.provider.hasMail { owners.insert(account.email.lowercased()) }
         let subject = s.subject.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ParsedEmail(subject: subject.isEmpty ? nil : subject, from: s.from, to: s.to, cc: message.cc, date: s.date,
-                           body: split.body, quotedHistory: split.quoted, raw: render(message, language: language),
-                           isFromOwner: s.from.email.map { owners.contains($0.lowercased()) } ?? false)
+        var email = ParsedEmail(subject: subject.isEmpty ? nil : subject, from: s.from, to: s.to, cc: message.cc, date: s.date,
+                                body: split.body, quotedHistory: split.quoted, raw: render(message, language: language),
+                                isFromOwner: s.from.email.map { owners.contains($0.lowercased()) } ?? false)
+        email.webLink = s.webLink.flatMap { OriginalLinks.isOpenable($0) ? $0 : nil }   // v0.7 (§17.7)
+        return email
     }
 
     /// New text vs. quoted/forwarded history ("El … escribió:", "On … wrote:", "-----Original Message-----", "> …").
@@ -125,18 +127,28 @@ public extension BrainEngine {
                          projectSlug: String?) throws -> [SourceRecord] {
         let owners = vault.ownerEmails()
         let ordered = messages.sorted { $0.summary.date < $1.summary.date }
-        var key = threadKey ?? ordered.lazy
+        // v0.7 (§17.4): the provider's conversation id decides first — mail of a conversation already saved always
+        // joins that thread (over the subject heuristic); then a message of this batch already stored.
+        let folders = Set(vault.threadFolders().map { ($0 as NSString).lastPathComponent })
+        var key = threadKey
+            ?? ordered.lazy.compactMap { self.vault.threadKey(accountId: account.id, providerThreadId: $0.summary.threadId) }.first
+            ?? ordered.lazy
             .compactMap { self.emailSource(externalId: MailImport.externalId(account: account, messageId: $0.summary.id))?.threadKey }
-            .first { k in self.vault.threadFolders().contains { ($0 as NSString).lastPathComponent == k } }
+            .first { folders.contains($0) }
         var added: [SourceRecord] = []
         var firstError: Error?
         for message in ordered {
             let externalId = MailImport.externalId(account: account, messageId: message.summary.id)
             guard emailSource(externalId: externalId) == nil else { continue }
             let email = MailImport.parsedEmail(message, account: account, ownerEmails: owners, language: config.uiLanguage)
+            // A batch mixing conversations: a message of another saved conversation goes to its own thread.
+            let own = threadKey == nil ? vault.threadKey(accountId: account.id, providerThreadId: message.summary.threadId) : nil
+            let origin = MailOrigin(accountId: account.id, providerThreadId: message.summary.threadId,
+                                    webLink: email.webLink)
             do {
-                let src = try addEmail(email, threadKey: key, projectSlug: projectSlug, externalId: externalId)
-                key = src.threadKey
+                let src = try addEmail(email, threadKey: own ?? key, projectSlug: projectSlug, externalId: externalId,
+                                       origin: origin)
+                if own == nil || own == key { key = src.threadKey }
                 added.append(src)
             } catch EngineError.duplicateEmail {
                 continue

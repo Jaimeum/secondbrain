@@ -80,6 +80,8 @@ final class MailModel {
     @ObservationIgnored private var ownerEmails: [String] = []
     private(set) var isSaving = false
     private(set) var toast: Toast?
+    /// v0.7 (§17.1 backwards): the emails just saved by hand that have attachments — the sheet that asks which to keep.
+    var attachmentReview: AttachmentReview?
     var actionError: String?
     var undoConflict: UndoConflict?
     @ObservationIgnored private var projectPicked = false
@@ -304,10 +306,16 @@ final class MailModel {
                     found.existingThreadKey = stored.threadKey
                     found.existingThreadProject = stored.projectSlug
                     found.continuesStoredThread = true
+                } else if let key = engine.vault.threadKey(accountId: account.id, providerThreadId: summary.threadId),
+                          let info = engine.vault.threadInfo(key: key) {
+                    // v0.7 (§17.4): the provider's conversation id is saved with a thread: that is its thread, always.
+                    found.existingThreadKey = key
+                    found.existingThreadProject = info.projectSlug
+                    found.continuesStoredThread = true
                 }
                 // On screen now; the fuzzy thread match (reads every stored email) patches it afterwards.
                 show(found)
-                guard stored == nil else { finishLoading(); return }
+                guard stored == nil, !found.continuesStoredThread else { finishLoading(); return }
                 matchPending = true
                 let match = await engine.matchThreadsAsync(for: parsed).first(where: { $0.score >= 0.8 })
                 guard !Task.isCancelled, selectedId == id, self.detail?.message.summary.id == id else { return }
@@ -455,6 +463,12 @@ final class MailModel {
                 showToast(Toast(text: L("mail.alreadyInBrain"), sourceIds: []))
                 return
             }
+            // §17.1 backwards: the saved emails' attachments are confirmed in a sheet (ticks preselected by the triage).
+            let addedIds = Set(added.compactMap(\.externalId))
+            let withFiles = list.filter {
+                $0.summary.hasAttachments && addedIds.contains(MailImport.externalId(account: account, messageId: $0.summary.id))
+            }
+            if !withFiles.isEmpty { attachmentReview = AttachmentReview(messages: withFiles, account: account) }
             // The rest of this conversation (e.g. after "Solo este mensaje") now joins that thread.
             if self.detail?.message.summary.id == detail.message.summary.id, let key = first.threadKey {
                 self.detail?.existingThreadKey = key
@@ -714,4 +728,11 @@ final class MailCache {
         lists.removeAll()
         threads.removeAll()
     }
+}
+
+/// The emails whose attachments the review sheet asks about (§17.1 backwards).
+struct AttachmentReview: Identifiable {
+    let id = UUID()
+    let messages: [MailMessageFull]
+    let account: ConnectedAccount
 }

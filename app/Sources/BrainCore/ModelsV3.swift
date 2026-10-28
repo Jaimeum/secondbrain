@@ -6,7 +6,7 @@ import Foundation
 // MARK: - Knowledge graph (§12.2)
 
 public enum GraphNodeKind: String, Codable, Sendable {
-    case project, meeting, email, document, note, url, person, topic, decision, question, task, page
+    case project, meeting, emailThread, document, note, url, person, topic, decision, question, task, page   // v0.7 (§17.4): emailThread = one node per thread
     case repo   // MARK: v0.4 github — wiki/repos/
     case org    // v0.6 (§16.4): global companies, orgs/<slug>.md
 }
@@ -221,6 +221,11 @@ public protocol MailCalendarProvider: AnyObject, Sendable {
     func fetchMessage(id: String) async throws -> MailMessageFull
     func fetchThread(id: String) async throws -> [MailMessageFull]         // chronological
     func events(from: Date, to: Date) async throws -> [CalendarEvent]
+    // v0.7 (§17.1): attachments (defaults in Accounts/Attachments.swift throw `AttachmentError.notImplemented`).
+    /// Every attachment of a message, inline ones included (the triage decides what to keep).
+    func listAttachments(messageId: String) async throws -> [AttachmentInfo]
+    /// The attachment's bytes.
+    func downloadAttachment(messageId: String, id: String) async throws -> Data
 }
 
 public struct MailMessageSummary: Codable, Identifiable, Hashable, Sendable {
@@ -245,8 +250,11 @@ public struct MailMessageFull: Codable, Sendable {
     public var summary: MailMessageSummary
     public var cc: [EmailAddress]
     public var bodyText: String       // plain text (HTML already stripped)
-    public init(summary: MailMessageSummary, cc: [EmailAddress] = [], bodyText: String) {
-        self.summary = summary; self.cc = cc; self.bodyText = bodyText
+    /// v0.7 (§17.1): the `cid:` ids the HTML body references (lowercased, no angle brackets), so the triage can tell
+    /// an inline logo/signature from an attached photo. nil = not known (pasted mail, providers before v0.7).
+    public var inlineContentIds: [String]?
+    public init(summary: MailMessageSummary, cc: [EmailAddress] = [], bodyText: String, inlineContentIds: [String]? = nil) {
+        self.summary = summary; self.cc = cc; self.bodyText = bodyText; self.inlineContentIds = inlineContentIds
     }
 }
 

@@ -37,6 +37,7 @@ struct SelfTest: AsyncParsableCommand {
         await t.groupAsync("routing-meetings") { await testRoutingMeetings(t, root: root.appendingPathComponent("routing-meetings")) }   // MARK: v0.4 rules UI
         await t.groupAsync("routing-review") { await testRoutingReview(t, root: root.appendingPathComponent("routing-review")) }   // MARK: v0.4 review fixes
         await t.groupAsync("capture") { await testCapture(t, root: root.appendingPathComponent("capture")) }   // MARK: v0.6 capture
+        await t.groupAsync("links") { await testLinks(t, root: root.appendingPathComponent("links")) }   // MARK: v0.7 links (§17.7)
         if let v01 {
             await t.groupAsync("migration") { await testMigration(t, source: URL(fileURLWithPath: v01), root: root.appendingPathComponent("v01")) }
         }
@@ -893,8 +894,15 @@ private final class NoTranscriber: Transcribing, @unchecked Sendable {
         t.check(!timeline.contains { $0.title.unicodeScalars.first.map { $0.properties.isEmojiPresentation } ?? false }, "no emoji left in titles")
         t.check(timeline.contains { $0.kind == .task && $0.title.hasPrefix("Preparar la demo") && $0.date == local(2026, 10, 30) }, "task due in timeline")
         let emailEntries = timeline.filter { $0.kind == .email }
-        t.eq(emailEntries.map(\.sourceId), [e0.id, e1.id, e2.id, inbox1.id], "emails by sent date")
-        t.check(emailEntries.first?.title.contains("Ana García") == true, "email entry names the sender")
+        // v0.7 (§17.4): one entry per thread, dated by its newest email, naming who wrote.
+        t.eq(Set(emailEntries.compactMap { $0.thread?.key }), Set(["contrato-proveedor-acme", inbox1.threadKey ?? "-"]),
+             "one entry per email thread")
+        let contract = emailEntries.first { $0.thread?.key == "contrato-proveedor-acme" }
+        t.eq(contract?.sourceId, e2.id, "thread entry stands on its newest email")
+        t.eq(contract?.thread?.messageCount, 3, "thread entry counts its emails")
+        t.eq(contract?.date, e2.eventDate ?? e2.timelineDate, "thread entry dated by its newest email")
+        t.check(contract?.thread?.senders.contains("Ana") == true, "thread entry names the senders: \(contract?.thread?.senders ?? [])")
+        _ = (e0, e1)
         t.check(timeline.first { $0.sourceId == note.id }?.addedAt != nil, "source entries carry addedAt")
 
         // --- Export assembly (thread).

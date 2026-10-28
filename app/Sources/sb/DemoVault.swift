@@ -371,6 +371,7 @@ enum DemoVault {
         let vault = VaultStore(root: root)
         try vault.migrateIfNeeded()
         try vault.setOwnerName("Jaime Ruiz")
+        try vault.setOwnerEmails(["jaime.ruiz@ejemplo.com"])   // v0.7: "Tú" in the conversation, own replies
         let manager = ProjectManager(vaultRoot: root)
         let today = Calendar.current.startOfDay(for: Date())
         func day(_ daysAgo: Int, hour: Int = 0) -> Date {
@@ -656,6 +657,9 @@ enum DemoVault {
         if scale > 0 { try addSynthetic(root: root, projects: created, scale: scale, today: today) }
 
         let rules = try addSampleRules(root: root, projects: created, today: today)
+        try DemoFiles.add(root: root)   // v0.7 files (§17.2)
+        try DemoThreads.enrich(root: root)   // v0.7 (§17.8): a long thread with my reply and its Outlook links
+        try DemoThreads.describeOthers(root: root)   // v0.7 fix: every demo thread is one row with its count
 
         return "Created \(root.path): \(created.count) projects, \(pageCount) project pages, \(people.count) people, \(orgs.count) companies, \(rules) routing rules"
             + (scale > 0 ? ", plus \(scale) synthetic meetings per project" : "")

@@ -23,6 +23,8 @@ final class QuickCaptureModel {
         }
     }
     var files: [URL] = []
+    /// v0.7 (§17.3): the text is an in-person meeting — saved through "Agregar al proyecto" (needs a project).
+    var inPerson = false
     /// Where it goes; nil = Sin asignar.
     var projectSlug: String?
     /// The user chose the destination: the suggestion no longer moves it.
@@ -49,7 +51,12 @@ final class QuickCaptureModel {
 
     var kind: CaptureKind { CaptureDetector.detect(text) }
     var hasText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    var canSave: Bool { !saving && (hasText || !files.isEmpty) && state.engineStarted }
+    var canSave: Bool { !saving && (hasText || !files.isEmpty) && state.engineStarted && !(inPersonActive && projectSlug == nil) }
+    /// "Reunión presencial" applies: chosen, and the text is a note (not a link or a pasted email).
+    var inPersonActive: Bool {
+        guard inPerson, hasText, case .note = kind else { return false }
+        return true
+    }
 
     func pickProject(_ slug: String?) {
         projectPicked = true
@@ -70,6 +77,7 @@ final class QuickCaptureModel {
     func reset() {
         text = ""
         files = []
+        inPerson = false
         projectPicked = false
         error = nil
         savedMessage = nil
@@ -151,10 +159,28 @@ final class QuickCaptureModel {
         let engine = state.engine
         let savingFiles = files
         let savingText = text
+        // v0.7 (§17.3): an in-person meeting goes, with the files, through "Agregar al proyecto" (/file-dump).
+        if inPersonActive, let slug {
+            do {
+                _ = try await engine.addToProject(slug, files: savingFiles, text: savingText, inPerson: true)
+            } catch {
+                self.error = FriendlyError.message(error)
+                return false
+            }
+            state.bumpVault()
+            files.removeAll { savingFiles.contains($0) }
+            if text == savingText { text = "" }
+            inPerson = false
+            savedMessage = L("capture.saved", state.projectName(slug))
+            saveCount += 1
+            projectPicked = false
+            scheduleSuggestion(delay: false)
+            return true
+        }
         var failures: [String] = []
         var failedFiles: [URL] = []
         for url in savingFiles {
-            let failed = await SourceImport.importURLs([url], projectSlug: slug, state: state)
+            let failed = await SourceImport.importURLs([url], projectSlug: slug, state: state, origin: "capture")   // Archivos › Captura
             if !failed.isEmpty {
                 failures += failed
                 failedFiles.append(url)
@@ -248,6 +274,15 @@ struct QuickCaptureView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+            if embedded, case .note = model.kind, model.hasText, model.savedMessage == nil {   // v0.7 (§17.3)
+                inPersonToggle
+            }
+            if model.inPersonActive, model.projectSlug == nil {   // v0.7 (§17.3)
+                Label(L("capture.inPersonNeedsProject"), systemImage: "info.circle")
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .lineLimit(2)
+            }
             if let error = model.error {
                 Text(error)
                     .font(Brand.caption)
@@ -303,7 +338,9 @@ struct QuickCaptureView: View {
             if !model.files.isEmpty {
                 chip(L("capture.kind.files", model.files.count), symbol: "doc")
             }
-            if model.hasText || model.files.isEmpty {
+            if model.inPersonActive {
+                chip(L("kind.inPerson"), symbol: SourceKind.inPerson.symbol)
+            } else if model.hasText || model.files.isEmpty {
                 switch model.kind {
                 case .note: chip(L("capture.kind.note"), symbol: "square.and.pencil")
                 case .link: chip(L("capture.kind.link"), symbol: "link")
@@ -394,7 +431,22 @@ struct QuickCaptureView: View {
             .labelsHidden()
             .frame(minWidth: 120, maxWidth: embedded ? 150 : 220)
             .help(L("capture.destinationHelp"))
+            if !embedded, case .note = model.kind {   // v0.7 (§17.3)
+                inPersonToggle
+            }
         }
+    }
+
+    /// "Reunión presencial" (v0.7, §17.3): in the panel's footer; in the narrow menu bar, on its own line.
+    private var inPersonToggle: some View {
+        Toggle(L("capture.inPerson"), isOn: $model.inPerson)
+            .toggleStyle(.checkbox)
+            .font(Brand.caption)
+            .foregroundStyle(Brand.color.text2)
+            .lineLimit(1)
+            .fixedSize()
+            .disabled(!model.hasText)
+            .help(model.projectSlug == nil ? L("capture.inPersonNeedsProject") : L("capture.inPersonHelp"))
     }
 
     private var saveButton: some View {
@@ -442,6 +494,8 @@ struct CaptureTextView: NSViewRepresentable {
     var onFiles: ([URL]) -> Void
     var onSubmit: () -> Void
     var onCancel: (() -> Void)?
+    /// Takes the focus whenever its window becomes key (the capture panel); false in the main window (v0.7 drop box).
+    var autoFocus = true
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
@@ -489,6 +543,7 @@ struct CaptureTextView: NSViewRepresentable {
         textView.onFiles = onFiles
         textView.onSubmit = onSubmit
         textView.onCancel = onCancel
+        textView.autoFocus = autoFocus
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -506,6 +561,7 @@ final class CaptureNSTextView: NSTextView {
     var onFiles: (([URL]) -> Void)?
     var onSubmit: (() -> Void)?
     var onCancel: (() -> Void)?
+    var autoFocus = true
     private var keyObserver: NSObjectProtocol?
 
     private static func fileURLs(_ pasteboard: NSPasteboard) -> [URL] {
@@ -543,7 +599,7 @@ final class CaptureNSTextView: NSTextView {
         super.viewDidMoveToWindow()
         if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
         keyObserver = nil
-        guard let window else { return }
+        guard let window, autoFocus else { return }
         keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window,
                                                              queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {

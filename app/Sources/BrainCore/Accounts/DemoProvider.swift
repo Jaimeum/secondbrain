@@ -3,18 +3,25 @@ import Foundation
 /// Invented but believable mail and calendar (es/en) for snapshots and UX review without real accounts
 /// (`SB_DEMO_ACCOUNTS=1`, CONTRACT §12.3). Dates are relative to when the provider is created.
 ///
-/// Microsoft account (ana@contoso.com): 12 emails over the last 10 days from 5 people (two threads) and 8 events from
+/// Microsoft account (ana@contoso.com): 14 emails over the last 10 days from 5 people (three threads) and 8 events from
 /// yesterday to +7 days, one of them in progress (started 10 min ago, ends in 50 min, Teams link).
 /// Google account (demo@gmail.com): a few personal emails and two events.
 public final class DemoProvider: MailCalendarProvider {
     public let account: ConnectedAccount
     private let messages: [MailMessageFull]
     private let calendar: [CalendarEvent]
+    private let lang: Lang   // v0.7: attachment names
 
     public init(account: ConnectedAccount, language: String = "es", now: Date = Date()) {
         self.account = account
-        let data = DemoData(account: account, lang: Lang(language), now: now)
-        messages = data.messages.sorted { $0.summary.date > $1.summary.date }
+        let lang = Lang(language)
+        self.lang = lang
+        let data = DemoData(account: account, lang: lang, now: now)
+        messages = data.messages.sorted { $0.summary.date > $1.summary.date }.map { m in   // v0.7: cid: images of the body
+            var m = m
+            m.inlineContentIds = DemoAttachments.inlineContentIds(messageId: m.summary.id, lang: lang)
+            return m
+        }
         calendar = data.events.sorted { $0.start < $1.start }
     }
 
@@ -54,6 +61,20 @@ public final class DemoProvider: MailCalendarProvider {
 
     public func fetchThread(id: String) async throws -> [MailMessageFull] {
         messages.filter { $0.summary.threadId == id }.sorted { $0.summary.date < $1.summary.date }
+    }
+
+    // MARK: v0.7 attachments (§17.1) — synthetic files (`DemoAttachments`): a contract PDF, a 4 KB inline logo PNG, a
+    // whiteboard photo, a budget CSV…
+    public func listAttachments(messageId: String) async throws -> [AttachmentInfo] {
+        guard messages.contains(where: { $0.summary.id == messageId }) else { throw AccountError.failed("demo message \(messageId) not found") }
+        return DemoAttachments.list(messageId: messageId, lang: lang)
+    }
+
+    public func downloadAttachment(messageId: String, id: String) async throws -> Data {
+        guard let data = DemoAttachments.download(messageId: messageId, id: id, lang: lang) else {
+            throw AccountError.failed("demo attachment \(id) not found")
+        }
+        return data
     }
 
     public func events(from: Date, to: Date) async throws -> [CalendarEvent] {
@@ -103,7 +124,7 @@ private struct DemoData {
             .prefix(2).joined(separator: " ")
         let link = account.provider == .microsoft
             ? "https://outlook.office.com/mail/inbox/id/\(id)"
-            : "https://mail.google.com/mail/u/0/#inbox/\(id)"
+            : OriginalLinks.gmailThread(accountEmail: account.email, threadId: thread ?? id)
         let summary = MailMessageSummary(id: id, threadId: thread ?? id, from: from, to: to, subject: subject,
                                          snippet: String(firstLine.prefix(140)), date: date, isRead: read,
                                          hasAttachments: attachments, webLink: link)
@@ -337,6 +358,38 @@ private struct DemoData {
 
                 Diego
                 """), at: Self.ago(now, days: 0, hours: 1.5), read: false)
+        // MARK: v0.7 replies (§17.5) — the contract thread (demo-m11) goes on after it is saved: the owner's own reply
+        // (sent mail, with a promise and an answer to Sofía's request) and Laura's.
+        let d11 = Self.ago(now, days: 0, hours: 5)
+        let d13 = Self.ago(now, days: 0, hours: 3)
+        let b13 = l.t("""
+            Gracias, Sofía.
+
+            Lo reviso con Laura hoy y te confirmo antes de la llamada de mañana. Te mando los datos de facturación el viernes.
+
+            Ana
+            """, """
+            Thanks, Sofía.
+
+            I'll go over it with Laura today and confirm before tomorrow's call. I'll send you the billing details on Friday.
+
+            Ana
+            """)
+        mail(account, id: "demo-m13", thread: "demo-m11", from: me, to: [sofia], cc: [laura],
+             subject: l.t("RE: Contrato actualizado — Acme Logistics", "RE: Updated contract — Acme Logistics"),
+             body: b13 + "\n\n" + Self.quoteHeader(l, d11, sofia) + "\n" + Self.quoted(l.t("Ana, adjunto el contrato…", "Ana, attached is the contract…")),
+             at: d13)
+        mail(account, id: "demo-m14", thread: "demo-m11", from: laura, to: [me, sofia],
+             subject: l.t("RE: Contrato actualizado — Acme Logistics", "RE: Updated contract — Acme Logistics"),
+             body: l.t("""
+                Ya lo revisé: de mi lado todo bien. Solo pediría que la penalización por retraso quede en 2% y no en 5%.
+
+                Laura
+                """, """
+                I went through it: all good on my side. I'd only ask for the late-delivery penalty to be 2%, not 5%.
+
+                Laura
+                """) + "\n\n" + Self.quoteHeader(l, d13, me) + "\n" + Self.quoted(b13), at: Self.ago(now, days: 0, hours: 2.5), read: false)
 
         // Calendar (8 events: yesterday … +7 days).
         let acc = account.id

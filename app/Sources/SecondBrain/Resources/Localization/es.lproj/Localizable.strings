@@ -1100,7 +1100,7 @@
 "rules.default.label" = "Lo que no coincide con ninguna regla va a";
 "rules.unassigned" = "Sin asignar";
 "rules.autoImport" = "Revisar el correo cada 15 min";
-"rules.autoImport.on" = "Solo agrego los correos de las reglas marcadas «Agrega automáticamente».";
+"rules.autoImport.on" = "Agrego los correos de las reglas marcadas «Agrega automáticamente» y las respuestas nuevas (también las tuyas) en los hilos que ya guardaste.";
 "rules.autoImport.none" = "Todavía ninguna regla agrega correos automáticamente. Puedes activarlo al editar una regla.";
 "rules.editor.newTitle" = "Nueva regla";
 "rules.editor.editTitle" = "Editar regla";
@@ -1601,3 +1601,205 @@
 "record.intro.needsPermission" = "Falta el permiso de audio de la computadora.";
 "record.intro.restartHint" = "¿Ya lo activaste en Ajustes del Sistema y aquí no aparece? macOS necesita que reabras secondbrain. Si ya estaba activado de antes, usa «Reparar permiso».";
 "record.intro.modelsHint" = "Puedes grabar ya: la descarga sigue en segundo plano y transcribo en cuanto termine.";
+
+/* v0.7 foundation */
+"sidebar.files" = "Archivos";
+"kind.image" = "Imagen";
+"kind.inPerson" = "Reunión presencial";
+"files.empty.title" = "Aquí estarán tus archivos";
+"files.empty.message" = "Los documentos, imágenes y adjuntos de correo que guardes aparecerán aquí para encontrarlos rápido.";
+"original.outlook" = "Abrir en Outlook";
+"original.gmail" = "Abrir en Gmail";
+"original.outlookCalendar" = "Abrir en Outlook Calendar";
+"original.googleCalendar" = "Abrir en Google Calendar";
+
+/* v0.7 attach */
+"attach.title" = "Adjuntos";
+"attach.loading" = "Buscando los adjuntos…";
+"attach.failed" = "No pude ver los adjuntos: %@";
+"attach.state.saved" = "Guardado";
+"attach.state.discarded" = "Descartado (%@)";
+"attach.state.notSaved" = "No guardado";
+"attach.state.tooBig" = "Muy grande";
+"attach.state.notAFile" = "No es un archivo";
+"attach.save" = "Guardar";
+"attach.save.help" = "Lo guardo junto a este correo y aprendo de él.";
+"attach.saveAnyway" = "Guardar de todos modos";
+"attach.saveEmailFirst" = "Guarda el correo para poder guardar sus adjuntos.";
+"attach.saveFailed" = "No pude guardar «%@». Inténtalo de nuevo.";
+"attach.open" = "Abrir";
+"attach.reason.inlineImage" = "logo o firma";
+"attach.reason.smallImage" = "imagen pequeña";
+"attach.reason.junkName" = "imagen decorativa";
+"attach.reason.junkType" = "invitación, contacto o firma digital";
+"attach.reason.duplicate" = "ya estaba guardado";
+"attach.reason.claude" = "Claude no lo vio útil";
+"attach.reason.user" = "lo desmarcaste";
+
+/* v0.7 threads */
+"thread.last" = "último %@";
+"thread.conversation" = "Conversación";
+"thread.you" = "Tú";
+"thread.collapse" = "Ocultar la conversación";
+"thread.expand" = "Mostrar la conversación";
+"thread.noNewText" = "Sin texto nuevo: solo reenvía o cita correos anteriores.";
+"thread.showMore" = "Ver más";
+"thread.showLess" = "Ver menos";
+"thread.openAttachment" = "Abrir el adjunto";
+"thread.kind" = "Hilo de correo";
+"mail.inProjectSeeThread" = "En %@ · Ver hilo";
+"graph.kind.emailThread" = "Hilo de correo";
+"entity.kind.emailThread" = "Hilo de correo";
+
+/* v0.7 links */
+"original.help" = "%@ (se abre en el navegador)";
+
+/* v0.7 replies */
+"replies.auto.title" = "Hilos al día";
+"replies.auto.own" = "Agregué tu respuesta a «%@».";
+"replies.auto.one" = "Agregué un correo nuevo a «%@».";
+"replies.auto.thread" = "Agregué %1$d correos a «%2$@».";
+"replies.auto.many" = "Agregué %d correos a hilos que sigues.";
+"replies.auto.noSubject" = "(sin asunto)";
+
+/* v0.7 backfill */
+"batch.title.searching" = "Buscando correos anteriores…";
+"batch.title.ruleFrom" = "%@ de %@";
+"batch.subtitle.selection" = "Van a %@: los hilos completos, con los adjuntos que marques.";
+"batch.subtitle.window" = "De los últimos %@ · Van a %@";
+"batch.subtitle.rule" = "Por la regla «%@»";
+"batch.searching" = "Buscando en tu correo…";
+"batch.loading" = "Leyendo los hilos…";
+"batch.empty.title" = "No encontré correos anteriores";
+"batch.empty.message" = "Nada de los últimos %@ coincide con esta regla. De ahora en adelante funciona sola.";
+"batch.saveNothing" = "Guardar";
+"batch.row.saved" = "Ya guardado · %@";
+"batch.row.newOf" = "%@ de %ld";
+"batch.row.staysIn" = "Sigue en %@";
+"batch.attachmentsLoading" = "Viendo los adjuntos…";
+"batch.reason.notFile" = "No es un archivo";
+"batch.reason.tooBig" = "Muy grande";
+"batch.reason.logo" = "Logo o firma";
+"batch.reason.small" = "Imagen pequeña";
+"batch.reason.junkType" = "Archivo técnico";
+"batch.reason.duplicate" = "Ya está guardado";
+"batch.saveHelp" = "Guarda los hilos completos de los correos marcados. Antes te muestro sus adjuntos.";
+"batch.check" = "Seleccionar";
+"batch.uncheck" = "Quitar de la selección";
+"batch.bringEarlier" = "Traer anteriores…";
+"batch.progress" = "Guardando correos… %ld de %ld";
+"batch.title.none" = "Ningún correo anterior";
+
+/* v0.7 files */
+"search.group.files" = "Archivos";
+"entity.section.files" = "Archivos";
+"files.search" = "Buscar por nombre o contenido";
+"files.filter.type" = "Tipo";
+"files.filter.origin" = "Origen";
+"files.filter.person" = "Persona";
+"files.filter.project" = "Proyecto";
+"files.filter.anyType" = "Todos los tipos";
+"files.filter.anyOrigin" = "Todos los orígenes";
+"files.filter.anyPerson" = "Todas las personas";
+"files.filter.anyProject" = "Todos los proyectos";
+"files.filter.inbox" = "Sin asignar";
+"files.clear" = "Limpiar";
+"files.type.pdf" = "PDF";
+"files.type.document" = "Documento";
+"files.type.spreadsheet" = "Hoja de cálculo";
+"files.type.presentation" = "Presentación";
+"files.type.image" = "Imagen";
+"files.type.other" = "Otro";
+"files.origin.email" = "Correo";
+"files.origin.upload" = "Subido";
+"files.origin.dump" = "Agregar al proyecto";
+"files.origin.capture" = "Captura";
+"files.from.thread" = "✉️ %1$@ · de %2$@";
+"files.from.upload" = "Subido";
+"files.from.dump" = "Agregado al proyecto";
+"files.from.capture" = "Captura rápida";
+"files.sort.date" = "Fecha";
+"files.sort.name" = "Nombre";
+"files.sort.size" = "Tamaño";
+"files.sort.help" = "Ordenar por fecha, nombre o tamaño";
+"files.noMatch.title" = "Nada con esos filtros";
+"files.noMatch.message" = "Prueba con otras palabras o limpia los filtros.";
+"files.pick" = "Elige un archivo";
+"files.pickMessage" = "Verás su vista previa, lo que dice en breve y de dónde vino. Espacio abre la vista rápida.";
+"files.panel.inShort" = "En breve";
+"files.panel.noSummary" = "Claude aún no lo resume.";
+"files.panel.people" = "Personas";
+"files.action.open" = "Abrir";
+"files.action.openHelp" = "Abrir con su app (doble clic o ↩)";
+"files.action.finder" = "Mostrar en Finder";
+"files.action.ficha" = "Ver ficha";
+"files.action.thread" = "Ir al hilo";
+"files.action.copy" = "Copiar";
+"files.action.copied" = "Copiado";
+"files.action.copyHelp" = "Copia el archivo para pegarlo en Finder, Mail u otra app";
+"files.action.quickLook" = "Vista rápida (Espacio)";
+"files.discarded" = "Descartados (%ld)";
+"files.discarded.help" = "Adjuntos que no guardé (logos, firmas, invitaciones…): se borran solos a los 30 días";
+"files.discarded.notice" = "Lo que no guardé de tus correos espera aquí 30 días por si lo necesitas.";
+"files.discarded.emptyTitle" = "Nada descartado";
+"files.discarded.emptyMessage" = "Los adjuntos que no guarde (logos, firmas, invitaciones…) esperarán aquí 30 días por si los necesitas.";
+"files.discarded.from" = "de %@";
+"files.discarded.rescue" = "Rescatar";
+"files.discarded.rescueHelp" = "Lo guardo en su proyecto como si lo hubiera guardado desde el principio";
+"files.discarded.delete" = "Eliminar ya";
+"files.discarded.rescueFailed" = "No pude rescatar «%@».";
+"files.reason.inlineImage" = "Imagen del cuerpo del correo (logo o firma)";
+"files.reason.smallImage" = "Imagen muy pequeña";
+"files.reason.junkName" = "Logo, firma o banner";
+"files.reason.junkType" = "Invitación, contacto o firma digital";
+"files.reason.duplicate" = "Ya estaba guardado";
+"files.reason.claude" = "Claude: %@";
+"files.reason.user" = "Lo desmarcaste";
+
+/* v0.7 dump */
+"dump.title" = "Agregar al proyecto";
+"dump.placeholder" = "Arrastra archivos aquí o escribe lo que pasó: «Hoy en la visita a la planta…». Yo lo archivo donde va.";
+"dump.chooseFiles" = "Archivos…";
+"dump.chooseFilesHelp" = "Elegir documentos, fotos o grabaciones para agregar";
+"dump.inPerson" = "Es una reunión presencial";
+"dump.inPersonHelp" = "Guardo el texto como la minuta de una reunión en persona, con su fecha, participantes y acuerdos";
+"dump.add" = "Agregar";
+"dump.addHelp" = "Lo guardo en el proyecto y Claude lo archiva: nota, reunión, documento, decisiones, pendientes y personas (⌘↩)";
+"dump.someFailed" = "No pude agregar todo: %@";
+"dump.files" = "Archivos: %ld";
+"dump.textAndFiles" = "%@ · archivos: %ld";
+"dump.showEarlier" = "Envíos anteriores: %ld";
+"dump.hideEarlier" = "Ocultar envíos anteriores";
+"dump.queued" = "En la fila para archivarlo…";
+"dump.filing" = "Leyendo y archivando…";
+"dump.waitingClaude" = "Esperando a que Claude esté disponible…";
+"dump.failed" = "No pude archivarlo.";
+"dump.undone" = "Deshecho: lo quité del proyecto.";
+"dump.undo" = "Deshacer";
+"dump.undoHelp" = "Quita lo que agregaste y los cambios que hice en el cerebro (también está en Historial)";
+"dump.retry" = "Reintentar";
+"dump.openPage" = "Abrir la página";
+"dump.sheetTitle" = "Agregar al proyecto";
+"dump.sheetHint" = "Suelta archivos (varios a la vez) y/o escribe o pega lo que pasó. Yo lo clasifico y lo archivo en el proyecto: notas, reuniones presenciales, documentos, decisiones, pendientes y personas.";
+"dump.project" = "Proyecto";
+"dump.pickProject" = "Elige un proyecto";
+"add.dump" = "Agregar al proyecto…";
+"queue.filingDump" = "Archivando lo que agregaste a %@…";
+"notify.dumpTitle" = "Lo archivé";
+"capture.inPerson" = "Reunión presencial";
+"capture.inPersonHelp" = "Guardo el texto como la minuta de una reunión en persona en el proyecto elegido";
+"capture.inPersonNeedsProject" = "Elige un proyecto para guardar una reunión presencial.";
+
+/* v0.7 integration */
+"attach.checklist.save" = "Guardar los marcados (%ld)";
+"attach.checklist.hint" = "Marqué lo que parece útil. Lo que no marques queda 30 días en Descartados.";
+
+/* v0.7 fix */
+"graph.kinds.emailThread" = "Hilos de correo";
+"dump.folderEmpty" = "No hay archivos en la carpeta «%@».";
+"files.filters" = "Filtros";
+"files.filtersActive" = "Filtros (%ld)";
+"attach.review.title" = "¿Qué adjuntos guardo?";
+"attach.review.hint" = "Ya guardé el correo. Marqué los adjuntos que parecen útiles: revisa y confirma con «Guardar los marcados».";
+"attach.review.done" = "Listo";
+"batch.wholeThreads" = "+%ld del resto de sus conversaciones";

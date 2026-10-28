@@ -53,6 +53,9 @@ struct MailDetailView: View {
         .background(Brand.color.card)
         .animation(Brand.motion.animation(reduceMotion: reduceMotion), value: model.toast)
         .animation(Brand.motion.animation(reduceMotion: reduceMotion), value: model.ruleOffer.current)
+        .sheet(item: Binding(get: { model.attachmentReview }, set: { model.attachmentReview = $0 })) { review in
+            MailAttachmentReviewSheet(review: review) { model.source(for: $0) }
+        }
     }
 
     // MARK: Message
@@ -94,11 +97,17 @@ struct MailDetailView: View {
                         Label(L("mail.attachments"), systemImage: "paperclip")
                             .font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
                     }
+                    // v0.7 (§17.7): the message in Outlook / Gmail.
+                    OpenOriginalButton(link: s.webLink, provider: model.account?.provider, style: .link,
+                                       gmailThreadId: s.threadId, accountEmail: model.account?.email)
                 }
                 .layoutPriority(1)
             }
             if detail.thread.count > 1 {
                 ThreadMessages(detail: detail).id(s.id)
+            }
+            if s.hasAttachments, let account = model.account {   // v0.7 attach (§17.1)
+                MailAttachmentsList(message: detail.message, account: account, source: model.source(for: s.id)).id(s.id)
             }
             Rectangle().fill(Brand.color.line).frame(height: 1)
             Text(detail.parsed.body.isEmpty ? L("mail.onlyQuoted") : detail.parsed.body)
@@ -235,8 +244,11 @@ struct MailDetailView: View {
                 }
             }
         } else {
+            // v0.7 (§17.4): a saved conversation reads "✓ En 🚀 Acme · Ver hilo" and opens the thread's ficha.
+            let isThread = source.threadKey != nil
             let open = Button { model.open(source) } label: {
-                Label(L("mail.saved") + " · " + L("mail.seeInProject"), systemImage: "checkmark")
+                Label(isThread ? L("mail.inProjectSeeThread", dest) : L("mail.saved") + " · " + L("mail.seeInProject"),
+                      systemImage: "checkmark")
                     .lineLimit(1)
             }
             .buttonStyle(.brandSecondary)
@@ -244,7 +256,7 @@ struct MailDetailView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Brand.spacing.m) {
                     open
-                    Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                    if !isThread { Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1) }
                     Spacer(minLength: 0)
                     SavedMoreMenu(source: source, model: model)
                 }
@@ -254,7 +266,7 @@ struct MailDetailView: View {
                         Spacer(minLength: 0)
                         SavedMoreMenu(source: source, model: model)
                     }
-                    Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                    if !isThread { Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1) }
                 }
             }
         }

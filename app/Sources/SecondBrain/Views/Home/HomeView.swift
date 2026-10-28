@@ -82,7 +82,11 @@ struct HomeView: View {
         let busy = all.filter { $0.kind != .github && $0.status.isInProgress }
             .sorted { $0.updatedAt > $1.updatedAt }
             .map(HomeRecentItem.init(source:))
-        let done = all.filter { $0.kind != .github && $0.status == .done }.map(HomeRecentItem.init(source:))
+        let finished = all.filter { $0.kind != .github && $0.status == .done }
+        // v0.7 (§17.4): an email thread is one card (its newest email), not one per email.
+        let threads = Dictionary(grouping: finished.filter { $0.kind == .email && $0.threadKey != nil }) { $0.threadKey ?? "" }
+            .map { _, mails in HomeRecentItem(thread: mails.sorted { $0.timelineDate > $1.timelineDate }) }
+        let done = finished.filter { !($0.kind == .email && $0.threadKey != nil) }.map(HomeRecentItem.init(source:)) + threads
         let repos = Dictionary(grouping: all.filter { $0.kind == .github }, by: HomeRecentItem.repoName(of:))
             .map { repo, syncs in HomeRecentItem(repo: repo, syncs: syncs.sorted { $0.timelineDate > $1.timelineDate }) }
         let learned = (done + repos).sorted { $0.sortDate > $1.sortDate }
@@ -90,9 +94,11 @@ struct HomeView: View {
         guard items.count < 6 else { return items }
         var seen = Set(items.compactMap(\.sourceId))
         var seenPaths = Set<String>()
+        let seenThreads = Set(items.compactMap(\.threadKey))
         for entry in timelineRecents where items.count < 6 {
             guard let path = entry.pagePath else { continue }
             if let id = entry.sourceId, seen.contains(id) { continue }
+            if let key = entry.thread?.key, seenThreads.contains(key) { continue }
             guard seenPaths.insert(path).inserted else { continue }
             if let id = entry.sourceId { seen.insert(id) }
             items.append(HomeRecentItem(entry: entry))

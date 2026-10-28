@@ -149,7 +149,7 @@ struct GraphView: View {
 
 /// Every kind the graph draws, with its SF Symbol (the same icons `graph.js` draws as inline SVG).
 enum GraphKindStyle {
-    static let all: [GraphNodeKind] = [.project, .meeting, .email, .document, .note, .url, .person, .org, .topic, .decision,
+    static let all: [GraphNodeKind] = [.project, .meeting, .emailThread, .document, .note, .url, .person, .org, .topic, .decision,
                                        .question, .task, .page,
                                        .repo]   // MARK: v0.4 github
 
@@ -157,7 +157,7 @@ enum GraphKindStyle {
         switch kind {
         case .project: "folder"
         case .meeting: "waveform"
-        case .email: "envelope"
+        case .emailThread: "envelope"
         case .document: "doc.text"
         case .note: "note.text"
         case .url: "link"

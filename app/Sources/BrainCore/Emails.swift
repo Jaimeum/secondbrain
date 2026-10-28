@@ -11,14 +11,49 @@ struct ThreadMeta: Codable, Equatable {
         var added: Date?
         /// v0.3: `"<provider>:<messageId>"` when it came from a connected account.
         var externalId: String? = nil
+        // v0.7 (§17.4/§17.7): the provider's link to open it ("Abrir en Outlook/Gmail") and whether the owner sent it.
+        var webLink: String? = nil
+        var isFromOwner: Bool? = nil
     }
     var key: String
     var subject: String
     var participants: [EmailAddress]
     var messages: [Message]
     var createdAt: Date
+    // v0.7 (§17.4): account id ("microsoft:ana@x.com") → provider conversation/thread id. Mail of that account with
+    // that id always joins this thread.
+    var providerThreadIds: [String: String]? = nil
+    // v0.7: other conversations of the same account that were saved into this thread before (a reply from another
+    // client or an edited subject starts a new provider conversation): still followed, newest last.
+    var earlierProviderThreadIds: [String: [String]]? = nil
+    // v0.7 (§17.1): saved attachments (`message` = the email file it came with).
+    var attachments: [ThreadAttachment]? = nil
 
     static let fileName = "_thread.json"
+
+    /// Records that the account's provider conversation `id` lives in this thread (§17.4). A different id the account
+    /// had here is kept in `earlierProviderThreadIds`, so both conversations keep joining this thread (§17.5). Returns
+    /// whether anything changed.
+    @discardableResult
+    mutating func recordProviderThread(_ id: String, account: String) -> Bool {
+        guard !id.isEmpty else { return false }
+        var ids = providerThreadIds ?? [:]
+        guard ids[account] != id else { return false }
+        var earlier = earlierProviderThreadIds ?? [:]
+        var list = earlier[account] ?? []
+        if let old = ids[account], !old.isEmpty, !list.contains(old) { list.append(old) }
+        list.removeAll { $0 == id }
+        earlier[account] = list.isEmpty ? nil : list
+        earlierProviderThreadIds = earlier.isEmpty ? nil : earlier
+        ids[account] = id
+        providerThreadIds = ids
+        return true
+    }
+
+    /// Every provider conversation id of `account` that lives in this thread (current first).
+    func providerThreadIdList(account: String) -> [String] {
+        ([providerThreadIds?[account]].compactMap { $0 } + (earlierProviderThreadIds?[account] ?? []).reversed()).filter { !$0.isEmpty }
+    }
 
     static func load(from dir: URL) -> ThreadMeta? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return nil }
@@ -109,7 +144,7 @@ extension VaultStore {
     /// `_thread.json`, or one rebuilt from the message files when it is missing.
     func threadMeta(at folder: String) -> ThreadMeta? {
         let dir = url(for: folder)
-        if let meta = ThreadMeta.load(from: dir) { return meta }
+        if let meta = ThreadMetaCache.load(from: dir) { return meta }   // v0.7: cached by the file's mtime and size
         let files = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).filter { $0.hasSuffix(".md") }.sorted()
         guard !files.isEmpty else { return nil }
         var meta = ThreadMeta(key: (folder as NSString).lastPathComponent, subject: "", participants: [], messages: [], createdAt: Date())
@@ -120,7 +155,8 @@ extension VaultStore {
             meta.messages.append(.init(file: file, date: Frontmatter.field("date", in: text).flatMap { SBDate.parseISO($0)?.date },
                                        from: from, sourceId: Frontmatter.field("source_id", in: text),
                                        bodyHash: EmailParser.bodyFingerprint(Self.emailBody(text).body), added: nil,
-                                       externalId: Frontmatter.field("external_id", in: text)))
+                                       externalId: Frontmatter.field("external_id", in: text),
+                                       webLink: Frontmatter.field("web_link", in: text)))
             meta.addParticipants([from].compactMap { $0 })
         }
         return meta
@@ -203,11 +239,19 @@ public extension BrainEngine {
         }
         // A provider message is identified by its externalId: the body heuristic (for pasted copies) only compares it
         // with messages that have none, and never on an empty body (two plain forwards in the same minute differ).
+        // Outlook is the exception: a Graph message id changes when the message moves to another folder, so an Outlook
+        // message is also the same as a stored Outlook one with the same sender, minute and body.
         if externalId != nil, email.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
         let hash = EmailParser.bodyFingerprint(email.body)
+        let outlook = "\(AccountProvider.microsoft.rawValue):"
+        func comparable(_ stored: String?) -> Bool {
+            guard let externalId else { return true }
+            guard let stored else { return true }
+            return externalId.hasPrefix(outlook) && stored.hasPrefix(outlook)
+        }
         for folder in vault.threadFolders() {
             guard let meta = vault.threadMeta(at: folder) else { continue }
-            for m in meta.messages where (externalId == nil || m.externalId == nil) && m.bodyHash == hash
+            for m in meta.messages where comparable(m.externalId) && m.bodyHash == hash
                 && Self.sameSender(m.from, email.from) && Self.sameMinute(m.date, email.date) {
                 return sources.first { $0.id == m.sourceId } ?? SourceRecord(id: m.sourceId ?? m.file, kind: .email, title: meta.subject,
                                                                             projectSlug: VaultStore.projectSlug(of: folder), status: .done,
@@ -238,7 +282,7 @@ public extension BrainEngine {
     /// same message again throws `EngineError.duplicateEmail`.
     @discardableResult
     func addEmail(_ email: ParsedEmail, threadKey: String?, projectSlug: String?, externalId: String?,
-                  routeIfUnassigned: Bool = true) throws -> SourceRecord {
+                  routeIfUnassigned: Bool = true, origin: MailOrigin? = nil) throws -> SourceRecord {
         guard !email.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(email.quotedHistory ?? "").isEmpty else {
             throw EngineError.emptyEmail
         }
@@ -297,7 +341,7 @@ public extension BrainEngine {
         cc: \(YAML.list(email.cc.map(EmailParser.format)))
         date: \(SBDate.iso(sent))
         added: \(SBDate.iso(added))
-        project: \(YAML.scalar(project))\(externalId.map { "\nexternal_id: \(YAML.quoted($0))" } ?? "")
+        project: \(YAML.scalar(project))\(externalId.map { "\nexternal_id: \(YAML.quoted($0))" } ?? "")\((email.webLink ?? origin?.webLink).map { "\nweb_link: \(YAML.quoted($0))" } ?? "")
         ---
 
 
@@ -314,7 +358,12 @@ public extension BrainEngine {
         if meta.subject.isEmpty { meta.subject = EmailParser.normalizeSubject(email.subject ?? "") }
         meta.addParticipants([email.from].compactMap { $0 } + email.to + email.cc)
         meta.messages.append(.init(file: file.lastPathComponent, date: email.date, from: email.from, sourceId: id,
-                                   bodyHash: EmailParser.bodyFingerprint(email.body), added: added, externalId: externalId))
+                                   bodyHash: EmailParser.bodyFingerprint(email.body), added: added, externalId: externalId,
+                                   webLink: email.webLink ?? origin?.webLink, isFromOwner: email.isFromOwner))
+        // v0.7 (§17.4): this provider conversation now lives here; later mail of it always joins this thread.
+        if let origin, let pid = origin.providerThreadId, !pid.isEmpty {
+            meta.recordProviderThread(pid, account: origin.accountId)
+        }
         meta.messages.sort { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }
         try meta.save(to: dir)
 
@@ -487,7 +536,16 @@ public extension BrainEngine {
             guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
             try Frontmatter.setField("project", to: YAML.scalar(projectSlug), in: text).write(to: url, atomically: true, encoding: .utf8)
         }
-        for var src in sources where src.kind == .email && src.threadKey == key {
+        // v0.7 (§17.1): saved attachments travel with their thread (their `_thread.json` paths too).
+        if var meta = ThreadMeta.load(from: to), let list = meta.attachments, !list.isEmpty {
+            meta.attachments = list.map { a in
+                var a = a
+                if a.file.hasPrefix(folder + "/") { a.file = target + a.file.dropFirst(folder.count) }
+                return a
+            }
+            try? meta.save(to: to)
+        }
+        for var src in sources where (src.kind == .email || src.parentSourceId != nil) && src.threadKey == key {
             if let raw = src.rawPath, raw.hasPrefix(folder + "/") { src.rawPath = target + raw.dropFirst(folder.count) }
             src.projectSlug = projectSlug
             src.suggestedProject = nil
@@ -507,6 +565,15 @@ public extension BrainEngine {
         try moveThread(key, to: projectSlug)
         for member in emails(inThread: key) where !(member.status == .done && member.historyId != nil) {
             guard var src = source(member.id) else { continue }
+            removeJobs(for: src.id) { $0.status != .running }
+            src.status = .queued
+            src.error = nil
+            upsert(&src)
+            enqueue(Job(kind: .ingest, sourceId: src.id, projectSlug: projectSlug))
+        }
+        // v0.7 (§17.1): then its saved attachments, after the emails they came with.
+        for var src in sources where src.parentSourceId != nil && src.threadKey == key
+            && !(src.status == .done && src.historyId != nil) {
             removeJobs(for: src.id) { $0.status != .running }
             src.status = .queued
             src.error = nil

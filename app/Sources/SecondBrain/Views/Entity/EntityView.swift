@@ -23,6 +23,9 @@ struct EntityView: View {
     /// The page's own `##` headings: an automatic section Claude's page already has (its "Proyectos", "En
     /// reuniones"…) isn't repeated under it.
     @ViewState private var pageHeadings: [String] = []
+    /// v0.7 (§17.2): the files this ficha lists (Archivos section).
+    @ViewState private var files: [FileEntry] = []
+    @ViewState private var paneHeight: CGFloat = 0
 
     private var entity: Entity? { snapshot.entity(path) }
 
@@ -40,23 +43,31 @@ struct EntityView: View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
+            if let threadKey = ThreadConversationView.threadKey(forPage: path) {   // v0.7 (§17.4)
+                ThreadConversationView(threadKey: threadKey, scope: scope, paneHeight: paneHeight)
+            }
             WikiWebView(vault: state.engine.vault, path: path, hideType: true, showsChrome: false,
                         appendix: loaded ? EntityMarkdown.sections(
                             EntityMarkdown.withoutDuplicates(snapshot.sections(for: path, projectSlug: filterSlug),
                                                              pageHeadings: pageHeadings),
-                            snapshot: snapshot) : nil) { next in
+                            snapshot: snapshot) + FilesFicha.section(files, pageHeadings: pageHeadings) : nil) { next in
                 follow(next)
             }
         }
         .background(Brand.color.surface)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { paneHeight = $0 }
         .navigationTitle(shownTitle)
         .task(id: "\(path)-\(state.vaultRevision)-\(state.tasksRevision)-\(state.projects.hashValue)") {
             let vault = state.engine.vault, page = path
             let snap = await EntityIndex.snapshot(vaultRoot: vault.root)
             let headings = await Task.detached { EntityMarkdown.headings(in: (try? vault.read(page)) ?? "") }.value
             guard !Task.isCancelled else { return }
+            await FilesModel.shared.refresh(state: state)   // v0.7 (§17.2)
+            guard !Task.isCancelled else { return }
             snapshot = snap
             pageHeadings = headings
+            files = FilesFicha.files(for: page, snapshot: snap)
+                .filter { filterSlug == nil || $0.projectSlug == filterSlug }
             loaded = true
         }
     }
@@ -128,6 +139,7 @@ struct EntityView: View {
 
     private func actions(iconOnly: Bool) -> some View {
         HStack(spacing: Brand.spacing.s) {
+            EntityOriginalButton(path: path, iconOnly: iconOnly)   // v0.7 (§17.7): thread → newest email; meeting → its event
             if EntityView.isEditable(path) {
                 let edit = Button { state.editPage(path) } label: { Label(L("entity.edit"), systemImage: "pencil") }
                     .buttonStyle(.brandSecondary)
@@ -157,6 +169,10 @@ struct EntityView: View {
     /// The single click rule (§16.4): a project row goes to that project's Resumen, a task to its row in Pendientes,
     /// a page to the host (push) or the router.
     private func follow(_ target: String) {
+        if let file = FilesFicha.filePath(fromLink: target) {   // v0.7 (§17.2): a row of Archivos
+            FilesModel.reveal(file, scope: scope, state: state)
+            return
+        }
         switch EntityMarkdown.decode(target) {
         case .project(let slug):
             state.navigate(to: .projectTab(slug, .summary))
@@ -373,7 +389,7 @@ enum EntityStyle {
         case .org: "building.2"
         case .project: "sparkles"
         case .meeting: "waveform"
-        case .email: "envelope"
+        case .emailThread: "envelope"
         case .document: "doc.text"
         case .note: "note.text"
         case .url: "link"

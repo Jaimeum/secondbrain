@@ -276,7 +276,7 @@ struct ProjectContentView: View {
     private func entryRow(_ entry: TimelineEntry) -> some View {
         let source = entry.sourceId.flatMap { state.engine.source($0) }
         let clickable = entry.pagePath != nil || source != nil
-        return ContentListRow(symbol: entry.kind.symbol, title: entry.title, caption: caption(entry),
+        return ContentListRow(symbol: entry.symbol(engine: state.engine), title: entry.title, caption: caption(entry),
                               isSelected: isSelected(entry)) {
             if clickable { open(entry) }
         }
@@ -292,6 +292,7 @@ struct ProjectContentView: View {
     }
 
     private func caption(_ entry: TimelineEntry) -> String {
+        if let thread = entry.thread { return ThreadText.caption(thread, last: entry.date) }   // v0.7 (§17.4)
         let date = Fmt.dayTime(entry.date, hasTime: entry.hasTime)
         return entry.kind == .task || entry.kind == .decision || entry.kind == .milestone
             ? "\(entry.kind.label) · \(date)" : date

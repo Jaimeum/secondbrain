@@ -14,6 +14,8 @@ struct RuleEditorSheet: View {
     var mail: [MailMessageSummary] = []
     /// Snapshots: run "Probar" right away.
     var testOnAppear = false
+    /// v0.7 backfill: a new rule was saved (the rules panel then offers "Traer anteriores", §17.6).
+    var onCreated: ((RoutingRule) -> Void)?
 
     @ViewState private var draft: RoutingRule
     @ViewState private var showIssues = false
@@ -23,7 +25,9 @@ struct RuleEditorSheet: View {
     @ViewState private var testTask: Task<Void, Never>?
     @FocusState private var focused: Int?
 
-    init(store: RoutingStore, item: RuleEditorItem, mail: [MailMessageSummary] = [], testOnAppear: Bool = false) {
+    init(store: RoutingStore, item: RuleEditorItem, mail: [MailMessageSummary] = [], testOnAppear: Bool = false,
+         onCreated: ((RoutingRule) -> Void)? = nil) {
+        self.onCreated = onCreated
         self.store = store
         self.isNew = item.isNew
         self.mail = mail
@@ -300,7 +304,12 @@ struct RuleEditorSheet: View {
         guard isValid else { return }
         let rule = RuleValidation.cleaned(draft)
         do {
-            if isNew || store.rule(id: rule.id) == nil { try store.add(rule) } else { try store.update(rule) }
+            if isNew || store.rule(id: rule.id) == nil {
+                try store.add(rule)
+                onCreated?(rule)
+            } else {
+                try store.update(rule)
+            }
             dismiss()
         } catch {
             self.error = FriendlyError.message(error)

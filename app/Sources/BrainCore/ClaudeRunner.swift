@@ -213,7 +213,9 @@ private final class ClaudeProcess: @unchecked Sendable {
 
         DispatchQueue.global(qos: .utility).async {
             group.wait()
-            self.process.waitUntilExit()
+            // Not `waitUntilExit()`: on a dispatch worker it waits on that thread's run loop for a termination
+            // notification that can be missed when the child is already gone (seen as a selftest hang), so poll.
+            while self.process.isRunning { Thread.sleep(forTimeInterval: 0.02) }
             Self.running.lock()
             Self.live[ObjectIdentifier(self)] = nil
             Self.running.unlock()

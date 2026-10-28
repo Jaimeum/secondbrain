@@ -256,6 +256,10 @@ struct AddControl: View {
             }
             // ⌘⇧V is the app menu's (Edit › Pegar correo); the label shows it.
             Button { state.requestEmail() } label: { Label(L("add.email"), systemImage: "envelope") }
+            Button { state.dumpRequest = DumpRequest(projectSlug: state.currentProjectSlug) } label: {   // v0.7 (§17.3)
+                Label(L("add.dump"), systemImage: "tray.and.arrow.down")
+            }
+            .disabled(state.projects.isEmpty)
             Divider()
             Button { state.recordNow(placement: .sidebar, meeting: false) } label: {
                 Label(state.isRecording ? L("add.stopRecording") : L("record.start"), systemImage: "record.circle")

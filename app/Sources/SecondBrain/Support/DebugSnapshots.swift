@@ -23,6 +23,7 @@ enum DebugSnapshots {
             // light and dark, at the default size and at the minimum window size (where layouts break first).
             if ProcessInfo.processInfo.environment["SB_SNAPSHOT_WINDOW"] == "1" {
                 await renderWindows(state: state, dir: dir)
+                await BackfillSnapshots.render(state: state, dir: dir)   // MARK: v0.7 backfill
                 NSApp.terminate(nil)
                 return
             }
@@ -176,12 +177,14 @@ enum DebugSnapshots {
             }
             shots += await RulesSnapshots.shots(state: state)   // MARK: v0.4 rules
             shots += CorrectionsModel.snapshotShots(state: state)   // MARK: v0.6 facts — editor + "Revisar cambios"
+            shots += DumpSnapshots.shots(state: state)   // v0.7 dump
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
             // v0.5 shell: these also render dark ("<name>-dark").
             var darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "search-text", "record-control", "record-control-plain",
                                         "record-control-recording", "record-control-error", "menubar", "new-project",
                                         "content-by-date", "content-by-topic", "capture", "capture-email"]
             darkToo.formUnion(CorrectionsModel.snapshotDarkNames)   // MARK: v0.6 facts
+            darkToo.formUnion(DumpSnapshots.darkNames)   // v0.7 dump
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
                 for dark in darkToo.contains(name) ? [false, true] : [false] {
                     let file = dir.appendingPathComponent(name + (dark ? "-dark" : "") + ".png")
@@ -210,6 +213,23 @@ enum DebugSnapshots {
             if only.isEmpty || "mail-rule-routed".hasPrefix(only), let mail = await MailModel.snapshotRouted(state: state) {
                 await render(MailView(model: mail).environment(state), size: CGSize(width: 1000, height: 640),
                              to: dir.appendingPathComponent("mail-rule-routed.png"))
+            }
+            // v0.7 fix (§17.1 backwards): the sheet "Guardar" opens on an email with attachments (writes the email).
+            if only.isEmpty || "mail-attach-review".hasPrefix(only), let (review, mail) = await MailModel.snapshotAttachmentReview(state: state) {
+                for dark in [false, true] {
+                    await render(MailAttachmentReviewSheet(review: review) { mail.source(for: $0) }.environment(state),
+                                 size: CGSize(width: 560, height: 460), dark: dark,
+                                 to: dir.appendingPathComponent("mail-attach-review\(dark ? "-dark" : "").png"))
+                }
+            }
+            // v0.7 attach (§17.1): the reader's attachment list after saving the demo contract email (writes to the vault).
+            if only.isEmpty || "mail-attachments".hasPrefix(only), let mail = await MailModel.snapshotAttachments(state: state) {
+                for (suffix, size) in [("", CGSize(width: 1000, height: 640)), ("-min", CGSize(width: 760, height: 560))] {
+                    for dark in [false, true] {
+                        await render(MailView(model: mail).environment(state), size: size, dark: dark,
+                                     to: dir.appendingPathComponent("mail-attachments\(suffix)\(dark ? "-dark" : "").png"))
+                    }
+                }
             }
             // MARK: v0.3 mail — after the smart button: ✓ chips + "Aprendiendo del correo… · Deshacer" (writes to the vault).
             if let mail = await MailModel.snapshotAfterAdd(state: state) {
@@ -305,18 +325,24 @@ enum DebugSnapshots {
     /// Every sidebar item inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer), and the
     /// project on each tab (`window-project-<tab>-…`), all through the router. `min` = the minimum window.
     private static func renderWindows(state: AppState, dir: URL) async {
+        DumpSnapshots.seed(state: state)   // v0.7 dump: past drops in Resumen's box
         var items: [(name: String, item: SidebarItem, tab: ProjectTab?)] = [
             ("home", .home, nil), ("ask", .ask, nil), ("graph", .graph, nil), ("tasks", .tasks, nil),
-            ("people", .people, nil), ("mail", .mail, nil), ("meetings", .meetings, nil), ("unassigned", .unassigned, nil),
+            ("people", .people, nil), ("files", .files, nil), ("mail", .mail, nil), ("meetings", .meetings, nil), ("unassigned", .unassigned, nil),
         ]
         if let project = state.projects.first {
             items.append(("project", .project(project.slug), nil))
-            let tabs: [(String, ProjectTab)] = [("summary", .summary), ("content", .content), ("ask", .ask), ("graph", .graph),
+            let tabs: [(String, ProjectTab)] = [("summary", .summary), ("content", .content), ("files", .files), ("ask", .ask), ("graph", .graph),
                                                 ("tasks", .tasks), ("people", .people)]
             for (tabName, tab) in tabs { items.append(("project-\(tabName)", .project(project.slug), tab)) }
             items.append(("project-ask-thread", .project(project.slug), .ask))   // MARK: v0.6 ask — list + inspector
         }
         items.append(("ask-thread", .ask, nil))   // MARK: v0.6 ask
+        // v0.7 files (§17.8): Archivos with a file's panel (global and project) and Descartados.
+        items.append(("files-panel", .files, nil))
+        items.append(("files-discarded", .files, nil))
+        if let project = state.projects.first { items.append(("project-files-panel", .project(project.slug), .files)) }
+        await FilesSnapshots.prepare(state: state)
         // ⌘K over Inicio (the palette inside the real window, with its query).
         items.append(("search", .home, nil))
         // MARK: v0.6 entity — fichas (§16.13): a person's global ficha (Personas), the same person filtered to the
@@ -333,6 +359,12 @@ enum DebugSnapshots {
             if snap.entity("index.md") != nil {
                 fichas["entity-home"] = .entity("index.md", .brain)
                 items.append(("entity-home", .home, nil))
+            }
+            // v0.7 threads (§17.4): a thread's ficha with its conversation on top (the longest saved thread).
+            if let thread = state.engine.vault.allThreads().filter({ $0.pagePath.map { snap.entity($0) != nil } ?? false })
+                .max(by: { $0.messageCount < $1.messageCount }), let page = thread.pagePath {
+                fichas["entity-thread"] = .entity(page, .brain)
+                items.append(("entity-thread", .home, nil))
             }
         }
         // v0.6 tasks: Pendientes with Proyecto / Persona / Buscar set (§16.13 "Pendientes con filtros").
@@ -356,6 +388,7 @@ enum DebugSnapshots {
                         AskSnapshots.seed(state: state, scope: entry.tab == nil ? .brain : Scope(projectSlug: state.currentProjectSlug))
                     }
                     TaskFilterStore.shared.filter = entry.name == "tasks-filtered" ? snapshotTaskFilter(state) : TaskFilter()
+                    FilesSnapshots.preset(entry.name, state: state)   // v0.7 files
                     let file = "window-\(entry.name)-\(sizeName)-\(dark ? "dark" : "light").png"
                     let view = entry.name == "search"
                         ? AnyView(ZStack { MainView(); SearchPalette(initialQuery: "comi") })

@@ -238,6 +238,8 @@ public struct SessionManifest: Codable, Equatable, Sendable {
 public enum SourceKind: String, Codable, Sendable {
     case meeting, document, note, url, email
     case github   // MARK: v0.4 github — one raw per repo sync (CONTRACT §13.3)
+    // v0.7 (§17.1/§17.3): a saved image attachment/upload, and an in-person meeting from "Agregar al proyecto".
+    case image, inPerson
 }
 
 public enum SourceStatus: String, Codable, Sendable {
@@ -266,6 +268,10 @@ public struct SourceRecord: Codable, Identifiable, Equatable, Sendable {
     // v0.3 (§12.3/§12.5): "<provider>:<messageId>" for mail added from a connected account; linked calendar event.
     public var externalId: String?
     public var calendarEventId: String?
+    // v0.7 (§17.1): an attachment's source points at the email it came with (that email's SourceRecord.id).
+    public var parentSourceId: String?
+    // v0.7 (§17.7): a recording tied to a calendar event keeps the event's web link ("Abrir en Outlook Calendar").
+    public var webLink: String?
 
     /// The date the timeline uses: when it happened, falling back to when it was added.
     public var timelineDate: Date { eventDate ?? createdAt }
@@ -277,7 +283,10 @@ public struct SourceRecord: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
-public enum JobKind: String, Codable, Sendable { case transcribe, ingest, classify, lint, saveAnswer, reformat, makeTemplate, manualEdit }
+public enum JobKind: String, Codable, Sendable {
+    case transcribe, ingest, classify, lint, saveAnswer, reformat, makeTemplate, manualEdit
+    case fileDump   // v0.7 (§17.3): "Agregar al proyecto" → /file-dump
+}
 public enum JobStatus: String, Codable, Sendable { case queued, running, done, failed, cancelled }
 
 public struct Job: Codable, Identifiable, Equatable, Sendable {

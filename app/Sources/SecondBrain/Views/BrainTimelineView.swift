@@ -314,7 +314,7 @@ private struct EntryRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: entry.kind.symbol)
+            Image(systemName: entry.symbol(engine: state.engine))
                 .font(Brand.font(12, .medium))
                 .foregroundStyle(Brand.color.text2)
                 .frame(width: 26, height: 26)
@@ -343,6 +343,12 @@ private struct EntryRow: View {
                             .foregroundStyle(Brand.color.text3)
                             .help(L("content.fromCalendar"))
                     }
+                }
+                if let thread = entry.thread {   // v0.7 (§17.4): one row per thread
+                    Text(ThreadText.caption(count: thread.messageCount, last: nil, senders: thread.senders))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
                 }
                 if (showProject && state.project(entry.projectSlug) != nil) || addedLater {
                     HStack(spacing: 6) {

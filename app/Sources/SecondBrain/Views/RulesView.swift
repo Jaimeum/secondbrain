@@ -77,6 +77,11 @@ struct RulesPanel: View {
     @ViewState private var editing: RuleEditorItem?
     @ViewState private var error: String?
     @ViewState private var deleted: (rule: RoutingRule, index: Int)?
+    // MARK: v0.7 backfill — "Traer anteriores…" (§17.6): from a rule's menu, or right after creating a mail rule.
+    @ViewState private var backfill: RuleBackfillItem?
+    @ViewState private var createdRule: RoutingRule?
+    /// Only the vault's rules look in the mailbox (snapshots pass another store).
+    private var backfills: Bool { store === state.engine.routing }
 
     private var lang: String { state.config.uiLanguage }
 
@@ -98,9 +103,13 @@ struct RulesPanel: View {
         }
         .animation(Brand.motion.animation(), value: deleted?.rule.id)
         .onChange(of: editing?.id) { if editing != nil { deleted = nil } }
-        .sheet(item: $editing) { item in
-            RuleEditorSheet(store: store, item: item, mail: mail)
+        .sheet(item: $editing, onDismiss: {
+            if let rule = createdRule, backfills, canBackfill(rule, state: state) { backfill = RuleBackfillItem(rule: rule) }
+            createdRule = nil
+        }) { item in
+            RuleEditorSheet(store: store, item: item, mail: mail, onCreated: { createdRule = $0 })
         }
+        .sheet(item: $backfill) { RuleBackfillSheet(rule: $0.rule) }
         .onAppear { store.refresh() }   // `sb rules add` or another Mac may have changed them
     }
 
@@ -193,7 +202,8 @@ struct RulesPanel: View {
                 .labelsHidden()
                 .frame(maxWidth: 240)
             }
-            if store.rules.contains(where: \.autoAddMail) {
+            // v0.7 (§17.5): the switch also drives following saved threads, so it shows with any mail account.
+            if store.rules.contains(where: \.autoAddMail) || state.engine.accounts.accounts.contains(where: \.provider.hasMail) {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("rules.autoImport")).foregroundStyle(Brand.color.text)
@@ -247,6 +257,9 @@ struct RulesPanel: View {
             Menu {
                 Button(L("rules.edit")) { editing = RuleEditorItem(rule: rule, isNew: false) }
                 Button(L("rules.duplicate")) { duplicate(rule) }
+                if backfills, canBackfill(rule, state: state) {
+                    Button(L("batch.bringEarlier")) { backfill = RuleBackfillItem(rule: rule) }
+                }
                 if let i = store.rules.firstIndex(where: { $0.id == rule.id }), store.rules.count > 1 {
                     // Drag also works; these keep reordering possible from the keyboard.
                     Divider()

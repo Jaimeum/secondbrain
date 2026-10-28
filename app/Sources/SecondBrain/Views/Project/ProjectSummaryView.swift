@@ -14,19 +14,25 @@ struct ProjectSummaryView: View {
     @ViewState private var snapshot: EntityIndex.Snapshot = .empty
     @ViewState private var entries: [TimelineEntry] = []
     @ViewState private var loaded = false
+    @ViewState private var paneHeight: CGFloat = 0
 
     private var slug: String { project.slug }
     private var overview: String? { snapshot.overviewPath(ofProject: slug) }
 
     var body: some View {
-        GeometryReader { geo in
-            HStack(spacing: 0) {
-                brief.frame(maxWidth: .infinity, maxHeight: .infinity)
-                Rectangle().fill(Brand.color.line).frame(width: 1)
-                sideColumn.frame(width: Self.sideWidth(for: geo.size.width))
+        VStack(spacing: 0) {
+            // v0.7 (§17.3): "Agregar al proyecto", at the top — at most 45 % of the tab, so the brief keeps its room.
+            ProjectDropBox(project: project, maxHeight: paneHeight > 0 ? (paneHeight * 0.45).rounded() : .infinity)
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    brief.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Rectangle().fill(Brand.color.line).frame(width: 1)
+                    sideColumn.frame(width: Self.sideWidth(for: geo.size.width))
+                }
             }
         }
         .background(Brand.color.surface)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { paneHeight = $0 }
         .task(id: "\(state.vaultRevision)-\(state.tasksRevision)-\(state.projects.hashValue)") { await reload() }
     }
 

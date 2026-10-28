@@ -35,7 +35,7 @@ struct SecondBrainApp: App {
                     .keyboardShortcut("n")
                     .disabled(!state.config.onboardingComplete || !state.engineStarted)
             }
-            // MARK: v0.6 navigation (CONTRACT §16.1): ⌘1–⌘7 and ⌘K.
+            // MARK: v0.6 navigation (CONTRACT §16.1, §17.2): ⌘1–⌘8 and ⌘K.
             CommandMenu(L("menu.go")) {
                 ForEach(SidebarItem.main + SidebarItem.sources, id: \.self) { item in
                     if let key = item.shortcut {
@@ -47,7 +47,7 @@ struct SecondBrainApp: App {
                 Button(L("menu.search")) { state.searchPresented.toggle() }
                     .keyboardShortcut("k")
                     .disabled(!state.config.onboardingComplete || state.showNewProject || state.emailRequest != nil
-                              || state.noteRequest != nil)
+                              || state.noteRequest != nil || state.dumpRequest != nil)
             }
             CommandGroup(after: .pasteboard) {
                 Divider()

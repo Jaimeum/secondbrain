@@ -25,10 +25,20 @@ struct TimelineBuilder {
     func build(sources: [SourceRecord], projectSlugs: [String]) -> [TimelineEntry] {
         var entries: [TimelineEntry] = []
         var knownKeys: Set<String> = []          // source keys / thread keys / decision names already listed
+        var threads: [String: [SourceRecord]] = [:]   // v0.7 (§17.4): one entry per email thread
         for src in sources {
-            entries.append(entry(for: src))
+            if src.kind == .email, let key = src.threadKey {
+                threads[key, default: []].append(src)
+            } else {
+                entries.append(entry(for: src))
+            }
             if let raw = src.rawPath { knownKeys.insert(((raw as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()) }
+            if src.kind == .inPerson, let key = FileDumpNames.pageKey(of: src) { knownKeys.insert(key.lowercased()) }   // v0.7
             if let thread = src.threadKey { knownKeys.insert(thread.lowercased()) }
+        }
+        if !threads.isEmpty {
+            let owners = Set(vault.ownerEmails())
+            for (key, members) in threads { entries.append(threadEntry(key: key, members: members, owners: owners)) }
         }
         let owner = vault.ownerInfo()
         for slug in projectSlugs {
@@ -55,9 +65,9 @@ struct TimelineBuilder {
     private func entry(for src: SourceRecord) -> TimelineEntry {
         let kind: TimelineKind
         switch src.kind {
-        case .meeting: kind = .meeting
+        case .meeting, .inPerson: kind = .meeting   // v0.7 (§17.3): shown as a meeting
         case .email: kind = .email
-        case .document: kind = .document
+        case .document, .image: kind = .document
         case .note: kind = .note
         case .url: kind = .url
         case .github: kind = .document   // MARK: v0.4 github (filtered out above; kept exhaustive)
@@ -75,12 +85,41 @@ struct TimelineBuilder {
                              projectSlug: src.projectSlug, pagePath: page ?? src.rawPath, sourceId: src.id)
     }
 
+    /// One row for a whole email thread (§17.4): its subject, dated by its newest message, opening the thread page.
+    /// `sourceId` = the newest learned message (so a reply still being learned doesn't hide the thread), else the newest.
+    private func threadEntry(key: String, members: [SourceRecord], owners: Set<String>) -> TimelineEntry {
+        let sorted = members.sorted { $0.timelineDate < $1.timelineDate }
+        let newest = sorted[sorted.count - 1]
+        let anchor = sorted.last { $0.status == .done } ?? newest
+        let info = vault.threadInfo(folder: (newest.rawPath as NSString?)?.deletingLastPathComponent ?? "", owners: owners)
+            ?? vault.threadInfo(key: key)
+        let you = lang.t("Tú", "You")
+        var title = info?.subject ?? ""
+        if title.isEmpty { title = newest.title.components(separatedBy: " — ").first ?? newest.title }
+        if title.isEmpty { title = lang.t("(sin asunto)", "(no subject)") }
+        let count = max(info?.messageCount ?? 0, members.count)
+        var senders = info?.senderNames(you: you) ?? []
+        if senders.isEmpty {
+            // No `_thread.json` (yet): the sender is the part after " — " of each source title.
+            for m in sorted {
+                let who = m.title.components(separatedBy: " — ").dropFirst().joined(separator: " — ")
+                let name = who.lowercased() == lang.t("tú", "you") ? you : (who.split(separator: " ").first.map(String.init) ?? "")
+                if !name.isEmpty, !senders.contains(name) { senders.append(name) }
+            }
+        }
+        let page = pagePath(for: newest)
+        return TimelineEntry(id: "thread:\(key)", date: newest.timelineDate, hasTime: true, addedAt: newest.createdAt, kind: .email,
+                             title: title, projectSlug: newest.projectSlug, pagePath: page ?? newest.rawPath, sourceId: anchor.id,
+                             thread: .init(key: key, messageCount: count, senders: senders))
+    }
+
     private func pagePath(for src: SourceRecord) -> String? {
         guard let slug = src.projectSlug, let raw = src.rawPath else { return nil }
         let key = ((raw as NSString).lastPathComponent as NSString).deletingPathExtension
         let candidate: String
         switch src.kind {
         case .meeting: candidate = "projects/\(slug)/wiki/meetings/\(key).md"
+        case .inPerson: candidate = "projects/\(slug)/wiki/meetings/\(FileDumpNames.pageKey(of: src) ?? key).md"   // v0.7
         case .email: candidate = "projects/\(slug)/wiki/emails/\(src.threadKey ?? key).md"
         default: candidate = "projects/\(slug)/wiki/sources/\(key).md"
         }
@@ -122,7 +161,8 @@ struct TimelineBuilder {
     /// Pure parser (testable). `pagePath` holds the first wikilink target (resolved by the caller).
     static func parseTimelinePage(_ text: String, path: String, projectSlug: String, skipping known: Set<String>) -> [TimelineEntry] {
         var out: [TimelineEntry] = []
-        let kinds: [(String, TimelineKind)] = [("🎙", .meeting), ("✉", .email), ("📄", .document), ("📝", .note), ("🔗", .url),
+        let kinds: [(String, TimelineKind)] = [("🎙", .meeting), ("🤝", .meeting), ("✉", .email), ("📄", .document), ("🖼", .document),
+                                               ("📝", .note), ("🔗", .url),
                                                ("⚖", .decision), ("🚩", .milestone), ("🏁", .milestone), ("📌", .milestone),
                                                ("📅", .task)]
         for (n, line) in Frontmatter.split(text).body.components(separatedBy: "\n").enumerated() {

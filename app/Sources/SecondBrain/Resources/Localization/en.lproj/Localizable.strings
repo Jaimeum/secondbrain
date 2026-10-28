@@ -1100,7 +1100,7 @@
 "rules.default.label" = "Anything no rule matches goes to";
 "rules.unassigned" = "Unassigned";
 "rules.autoImport" = "Check my email every 15 min";
-"rules.autoImport.on" = "I only add emails for rules marked “Adds automatically”.";
+"rules.autoImport.on" = "I add emails for rules marked “Adds automatically” and new replies (yours too) in the threads you already saved.";
 "rules.autoImport.none" = "No rule adds emails automatically yet. You can turn that on when you edit a rule.";
 "rules.editor.newTitle" = "New rule";
 "rules.editor.editTitle" = "Edit rule";
@@ -1601,3 +1601,205 @@
 "record.intro.needsPermission" = "The computer audio permission is still missing.";
 "record.intro.restartHint" = "Already turned it on in System Settings and it doesn't show here? macOS needs you to reopen secondbrain. If it was already on from before, use “Fix permission”.";
 "record.intro.modelsHint" = "You can record right away: the download keeps going in the background and I transcribe as soon as it finishes.";
+
+/* v0.7 foundation */
+"sidebar.files" = "Files";
+"kind.image" = "Image";
+"kind.inPerson" = "In-person meeting";
+"files.empty.title" = "Your files will be here";
+"files.empty.message" = "The documents, images and email attachments you save will show up here, easy to find.";
+"original.outlook" = "Open in Outlook";
+"original.gmail" = "Open in Gmail";
+"original.outlookCalendar" = "Open in Outlook Calendar";
+"original.googleCalendar" = "Open in Google Calendar";
+
+/* v0.7 attach */
+"attach.title" = "Attachments";
+"attach.loading" = "Looking for the attachments…";
+"attach.failed" = "I couldn't see the attachments: %@";
+"attach.state.saved" = "Saved";
+"attach.state.discarded" = "Discarded (%@)";
+"attach.state.notSaved" = "Not saved";
+"attach.state.tooBig" = "Too big";
+"attach.state.notAFile" = "Not a file";
+"attach.save" = "Save";
+"attach.save.help" = "I'll keep it with this email and learn from it.";
+"attach.saveAnyway" = "Save anyway";
+"attach.saveEmailFirst" = "Save the email to be able to save its attachments.";
+"attach.saveFailed" = "I couldn't save “%@”. Try again.";
+"attach.open" = "Open";
+"attach.reason.inlineImage" = "logo or signature";
+"attach.reason.smallImage" = "small image";
+"attach.reason.junkName" = "decorative image";
+"attach.reason.junkType" = "invitation, contact or digital signature";
+"attach.reason.duplicate" = "already saved";
+"attach.reason.claude" = "Claude didn't find it useful";
+"attach.reason.user" = "you unticked it";
+
+/* v0.7 threads */
+"thread.last" = "last %@";
+"thread.conversation" = "Conversation";
+"thread.you" = "You";
+"thread.collapse" = "Hide the conversation";
+"thread.expand" = "Show the conversation";
+"thread.noNewText" = "No new text: it only forwards or quotes earlier emails.";
+"thread.showMore" = "Show more";
+"thread.showLess" = "Show less";
+"thread.openAttachment" = "Open the attachment";
+"thread.kind" = "Email thread";
+"mail.inProjectSeeThread" = "In %@ · See thread";
+"graph.kind.emailThread" = "Email thread";
+"entity.kind.emailThread" = "Email thread";
+
+/* v0.7 links */
+"original.help" = "%@ (opens in your browser)";
+
+/* v0.7 replies */
+"replies.auto.title" = "Threads up to date";
+"replies.auto.own" = "I added your reply to “%@”.";
+"replies.auto.one" = "I added a new email to “%@”.";
+"replies.auto.thread" = "I added %1$d emails to “%2$@”.";
+"replies.auto.many" = "I added %d emails to threads you follow.";
+"replies.auto.noSubject" = "(no subject)";
+
+/* v0.7 backfill */
+"batch.title.searching" = "Looking for earlier emails…";
+"batch.title.ruleFrom" = "%@ from %@";
+"batch.subtitle.selection" = "Going to %@: the whole threads, with the attachments you tick.";
+"batch.subtitle.window" = "From the last %@ · Going to %@";
+"batch.subtitle.rule" = "By the rule “%@”";
+"batch.searching" = "Searching your mail…";
+"batch.loading" = "Reading the threads…";
+"batch.empty.title" = "I found no earlier emails";
+"batch.empty.message" = "Nothing from the last %@ matches this rule. From now on it works by itself.";
+"batch.saveNothing" = "Save";
+"batch.row.saved" = "Already saved · %@";
+"batch.row.newOf" = "%@ of %ld";
+"batch.row.staysIn" = "Stays in %@";
+"batch.attachmentsLoading" = "Checking the attachments…";
+"batch.reason.notFile" = "Not a file";
+"batch.reason.tooBig" = "Too big";
+"batch.reason.logo" = "Logo or signature";
+"batch.reason.small" = "Small image";
+"batch.reason.junkType" = "Technical file";
+"batch.reason.duplicate" = "Already saved";
+"batch.saveHelp" = "Saves the whole threads of the ticked emails. I'll show you their attachments first.";
+"batch.check" = "Select";
+"batch.uncheck" = "Remove from the selection";
+"batch.bringEarlier" = "Bring earlier ones…";
+"batch.progress" = "Saving emails… %ld of %ld";
+"batch.title.none" = "No earlier emails";
+
+/* v0.7 files */
+"search.group.files" = "Files";
+"entity.section.files" = "Files";
+"files.search" = "Search by name or content";
+"files.filter.type" = "Type";
+"files.filter.origin" = "Origin";
+"files.filter.person" = "Person";
+"files.filter.project" = "Project";
+"files.filter.anyType" = "All types";
+"files.filter.anyOrigin" = "All origins";
+"files.filter.anyPerson" = "Everyone";
+"files.filter.anyProject" = "All projects";
+"files.filter.inbox" = "Unassigned";
+"files.clear" = "Clear";
+"files.type.pdf" = "PDF";
+"files.type.document" = "Document";
+"files.type.spreadsheet" = "Spreadsheet";
+"files.type.presentation" = "Presentation";
+"files.type.image" = "Image";
+"files.type.other" = "Other";
+"files.origin.email" = "Email";
+"files.origin.upload" = "Uploaded";
+"files.origin.dump" = "Add to project";
+"files.origin.capture" = "Capture";
+"files.from.thread" = "✉️ %1$@ · from %2$@";
+"files.from.upload" = "Uploaded";
+"files.from.dump" = "Added to the project";
+"files.from.capture" = "Quick capture";
+"files.sort.date" = "Date";
+"files.sort.name" = "Name";
+"files.sort.size" = "Size";
+"files.sort.help" = "Sort by date, name or size";
+"files.noMatch.title" = "Nothing matches";
+"files.noMatch.message" = "Try other words or clear the filters.";
+"files.pick" = "Pick a file";
+"files.pickMessage" = "You'll see its preview, what it says in short and where it came from. Space opens Quick Look.";
+"files.panel.inShort" = "In short";
+"files.panel.noSummary" = "Claude hasn't summarized it yet.";
+"files.panel.people" = "People";
+"files.action.open" = "Open";
+"files.action.openHelp" = "Open with its app (double-click or ↩)";
+"files.action.finder" = "Show in Finder";
+"files.action.ficha" = "View page";
+"files.action.thread" = "Go to thread";
+"files.action.copy" = "Copy";
+"files.action.copied" = "Copied";
+"files.action.copyHelp" = "Copy the file to paste it in Finder, Mail or another app";
+"files.action.quickLook" = "Quick Look (Space)";
+"files.discarded" = "Discarded (%ld)";
+"files.discarded.help" = "Attachments I didn't keep (logos, signatures, invites…): deleted automatically after 30 days";
+"files.discarded.notice" = "What I didn't keep from your email waits here for 30 days in case you need it.";
+"files.discarded.emptyTitle" = "Nothing discarded";
+"files.discarded.emptyMessage" = "Attachments I don't keep (logos, signatures, invites…) will wait here for 30 days in case you need them.";
+"files.discarded.from" = "from %@";
+"files.discarded.rescue" = "Rescue";
+"files.discarded.rescueHelp" = "I'll save it in its project as if it had been kept from the start";
+"files.discarded.delete" = "Delete now";
+"files.discarded.rescueFailed" = "I couldn't rescue “%@”.";
+"files.reason.inlineImage" = "Image in the email body (logo or signature)";
+"files.reason.smallImage" = "Very small image";
+"files.reason.junkName" = "Logo, signature or banner";
+"files.reason.junkType" = "Invite, contact card or digital signature";
+"files.reason.duplicate" = "Already saved";
+"files.reason.claude" = "Claude: %@";
+"files.reason.user" = "You unticked it";
+
+/* v0.7 dump */
+"dump.title" = "Add to project";
+"dump.placeholder" = "Drop files here or write what happened: “Today at the plant visit…”. I'll file it where it belongs.";
+"dump.chooseFiles" = "Files…";
+"dump.chooseFilesHelp" = "Choose documents, photos or recordings to add";
+"dump.inPerson" = "It's an in-person meeting";
+"dump.inPersonHelp" = "I'll save the text as the minutes of an in-person meeting, with its date, participants and agreements";
+"dump.add" = "Add";
+"dump.addHelp" = "I save it in the project and Claude files it: note, meeting, document, decisions, tasks and people (⌘↩)";
+"dump.someFailed" = "I couldn't add everything: %@";
+"dump.files" = "Files: %ld";
+"dump.textAndFiles" = "%@ · files: %ld";
+"dump.showEarlier" = "Earlier drops: %ld";
+"dump.hideEarlier" = "Hide earlier drops";
+"dump.queued" = "Waiting in line to be filed…";
+"dump.filing" = "Reading and filing…";
+"dump.waitingClaude" = "Waiting for Claude to be available…";
+"dump.failed" = "I couldn't file it.";
+"dump.undone" = "Undone: removed from the project.";
+"dump.undo" = "Undo";
+"dump.undoHelp" = "Removes what you added and the changes I made to the brain (also in History)";
+"dump.retry" = "Retry";
+"dump.openPage" = "Open the page";
+"dump.sheetTitle" = "Add to project";
+"dump.sheetHint" = "Drop files (several at once) and/or write or paste what happened. I'll sort it and file it in the project: notes, in-person meetings, documents, decisions, tasks and people.";
+"dump.project" = "Project";
+"dump.pickProject" = "Choose a project";
+"add.dump" = "Add to project…";
+"queue.filingDump" = "Filing what you added to %@…";
+"notify.dumpTitle" = "Filed";
+"capture.inPerson" = "In-person meeting";
+"capture.inPersonHelp" = "I'll save the text as the minutes of an in-person meeting in the chosen project";
+"capture.inPersonNeedsProject" = "Choose a project to save an in-person meeting.";
+
+/* v0.7 integration */
+"attach.checklist.save" = "Save checked (%ld)";
+"attach.checklist.hint" = "I checked what looks useful. Whatever you leave unchecked stays in Discarded for 30 days.";
+
+/* v0.7 fix */
+"graph.kinds.emailThread" = "Email threads";
+"dump.folderEmpty" = "There are no files in the folder “%@”.";
+"files.filters" = "Filters";
+"files.filtersActive" = "Filters (%ld)";
+"attach.review.title" = "Which attachments should I save?";
+"attach.review.hint" = "The email is saved. I checked the attachments that look useful: review them and confirm with “Save checked”.";
+"attach.review.done" = "Done";
+"batch.wholeThreads" = "+%ld from the rest of their conversations";

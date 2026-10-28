@@ -2,14 +2,15 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// A project's tabs (CONTRACT §16.2): Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas.
+/// A project's tabs (CONTRACT §16.2, §17.2): Resumen · Contenido · Archivos · Preguntar · Grafo · Pendientes · Personas.
 enum ProjectTab: Hashable, CaseIterable {
-    case summary, content, ask, graph, tasks, people
+    case summary, content, files, ask, graph, tasks, people
 
     var title: String {
         switch self {
         case .summary: L("project.tab.summary")
         case .content: L("tabs.content")
+        case .files: L("sidebar.files")
         case .ask: L("tab.ask")
         case .graph: L("tab.graph")
         case .tasks: L("tab.tasks")
@@ -21,6 +22,7 @@ enum ProjectTab: Hashable, CaseIterable {
         switch self {
         case .summary: "text.alignleft"
         case .content: "doc.text"
+        case .files: "doc.on.doc"
         case .ask: "bubble.left.and.text.bubble.right"
         case .graph: "point.3.connected.trianglepath.dotted"
         case .tasks: "checklist"
@@ -118,6 +120,8 @@ struct ProjectView: View {
             GraphView(scope: scope, focus: graphFocus, onOpen: openPage)
         case .people:
             ProjectPeopleView(project: project, onOpen: openPage)
+        case .files:
+            FilesView(scope: scope)
         }
     }
 
@@ -131,6 +135,9 @@ struct ProjectView: View {
             Button { sheet = .link } label: { Label(L("add.link"), systemImage: "link") }
             Button { state.requestEmail(projectSlug: project.slug) } label: {
                 Label(L("add.email"), systemImage: "envelope")
+            }
+            Button { state.dumpRequest = DumpRequest(projectSlug: project.slug) } label: {   // v0.7 (§17.3)
+                Label(L("add.dump"), systemImage: "tray.and.arrow.down")
             }
             Divider()
             Button {
@@ -312,7 +319,7 @@ private struct ReposSheet: View {
 
 /// The section switcher: the brand segmented control (the same as Por fecha | Por tema under it) while it fits, a
 /// pop-up menu when it doesn't (never wider than its bar). No `fixedSize` (§15.2): ViewThatFits measures the
-/// control's ideal width (equal 104 pt minimum segments, so labels never shift), then the chosen one fills the bar.
+/// control's ideal width (equal 84 pt minimum segments, so labels never shift; seven tabs fit at the minimum window), then the chosen one fills the bar.
 struct TabPicker: View {
     let tabs: [ProjectTab]
     @Binding var selection: ProjectTab
@@ -320,7 +327,7 @@ struct TabPicker: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             BrandSegmentedControl(options: tabs.map { ($0, $0.title) }, selection: $selection,
-                                  minSegmentWidth: 92, height: 26)
+                                  minSegmentWidth: 84, height: 26)
             Picker("", selection: $selection) {
                 ForEach(tabs, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
             }
@@ -332,12 +339,12 @@ struct TabPicker: View {
 }
 
 extension View {
-    /// The section switcher in a slim bar above the content (centered, at most 600 pt, 16 pt from the edges).
+    /// The section switcher in a slim bar above the content (centered, at most 720 pt, 16 pt from the edges).
     func tabBar(_ picker: TabPicker) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 picker
-                    .frame(maxWidth: 600)
+                    .frame(maxWidth: 720)
                     .padding(.horizontal, Brand.spacing.l)
                     .padding(.vertical, Brand.spacing.s)
                     .frame(maxWidth: .infinity)

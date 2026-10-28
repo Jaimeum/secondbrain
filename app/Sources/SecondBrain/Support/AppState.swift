@@ -127,6 +127,8 @@ final class AppState {
     var showNewProject = false
     /// "Nueva nota" from ⌘K.
     var noteRequest: NoteRequest?
+    /// v0.7 (§17.3): "Agregar al proyecto…" (MainView presents `ProjectDropSheet`).
+    var dumpRequest: DumpRequest?
     /// v0.6 ask (§16.3): Preguntar's saved conversations per scope ("brain" / "project:<slug>"), kept while the app
     /// runs so an answer keeps streaming off screen. Created on first use; dropped when the vault changes.
     @ObservationIgnored private var conversationsByScope: [String: Conversations] = [:]
@@ -465,7 +467,7 @@ final class AppState {
         engine.sources.filter { $0.projectSlug == slug && $0.status.isInProgress }.count
     }
 
-    var inboxCount: Int { engine.sources.filter { $0.status == .needsProject }.count }
+    var inboxCount: Int { engine.sources.filter { $0.status == .needsProject && $0.parentSourceId == nil }.count }
 
     // MARK: Templates, tasks, emails (v0.2)
 
@@ -631,6 +633,7 @@ final class AppState {
     // MARK: Queue status
 
     func queueStatus(now: Date = Date()) -> QueueStatus? {
+        if let saving = MailBatchSaver.shared.status { return saving }   // MARK: v0.7 backfill — §17.6 progress
         let jobs = engine.jobs
         if let job = jobs.first(where: { $0.status == .running }) {
             let title = engine.sources.first { $0.id == job.sourceId }?.title ?? ""
@@ -648,6 +651,8 @@ final class AppState {
                 let name = job.payload["name"] ?? ""
                 return QueueStatus(text: name.isEmpty ? L("queue.makingTemplateUnnamed") : L("queue.makingTemplate", name), progress: nil)
             case .manualEdit: return QueueStatus(text: L("queue.savingEdit"), progress: nil)
+            case .fileDump:   // v0.7 (§17.3)
+                return QueueStatus(text: L("queue.filingDump", projectName(job.projectSlug)), progress: nil)
             }
         }
         let queued = jobs.filter { $0.status == .queued }
@@ -698,6 +703,9 @@ final class AppState {
             switch entry.kind {
             case .lint: notifyOnce("hist-\(entry.id)", title: L("notify.lintTitle"), body: L("notify.lintBody", entry.changes.count))
             case .saveAnswer: notifyOnce("hist-\(entry.id)", title: L("notify.savedTitle"), body: entry.title)
+            case .fileDump:   // v0.7 (§17.3)
+                vaultRevision += 1
+                notifyOnce("hist-\(entry.id)", title: L("notify.dumpTitle"), body: entry.title)
             default: break
             }
         }

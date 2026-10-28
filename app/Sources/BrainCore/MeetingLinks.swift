@@ -267,6 +267,7 @@ public extension BrainEngine {
     func linkCalendarEvent(sourceId: String, event: CalendarEvent) {
         guard var src = source(sourceId) else { return }
         src.calendarEventId = event.id
+        src.webLink = OriginalLinks.link(for: event)?.link   // v0.7 (§17.7)
         if !event.isAllDay { src.eventDate = event.start }
         upsert(&src)
     }

@@ -4,18 +4,17 @@ Tu segundo cerebro por proyecto, 100% en tu Mac. Junta lo que pasa en tu día �
 
 ![Inicio de secondbrain: lo último que aprendí, tus pendientes de hoy y la agenda](docs/screenshots/home.png)
 
-## Novedades 0.6.0
+## Novedades 0.7.0
 
-El lugar fija el ámbito, todo tiene una ficha y capturar es tan fácil como grabar.
+Los adjuntos y los hilos de correo entran al cerebro, y todo lo que no es una reunión también.
 
-- **El lugar fija el ámbito.** Dentro de un proyecto, Preguntar, Grafo y Pendientes son solo del proyecto; fuera, son de todo tu cerebro. Ya no hay interruptor "Este proyecto | Todo el cerebro". La barra lateral es **Inicio · Preguntar · Grafo · Pendientes · Personas**, **Correo · Reuniones · Sin asignar** y tus proyectos.
-- **Proyectos con seis pestañas:** Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas (agrega o quita personas a mano).
-- **Fichas.** Cualquier persona, empresa, tema, decisión o reunión tiene una ficha con lo que sabemos, sus reuniones, correos, decisiones, pendientes y relacionados. **⌘K** busca en el texto completo.
-- **Preguntar guarda tus conversaciones**, abre las citas al lado y puede **Guardar como página**.
-- **Corregir el cerebro:** edita una página y revisa los cambios propuestos en las demás; queda como hecho confirmado.
-- **Captura rápida** con **⌥⌘N** desde cualquier app, y **+ Agregar** en la barra lateral.
-- **Empresas** (`orgs/`) como fichas globales, y el Grafo muestra la ficha en un panel al lado.
-- Las conversaciones guardadas son por cerebro; **⌥⌘N** reemplaza "Nueva carpeta inteligente" del Finder mientras secondbrain está abierta.
+- **Adjuntos de correo:** se guardan solos; logos y firmas se descartan (quedan 30 días en **Descartados**). Word, Excel y PowerPoint se leen también.
+- **Archivos:** todos tus PDFs, documentos, hojas y fotos en un solo lugar, con búsqueda, filtros y vista previa.
+- **Agregar al proyecto:** tira archivos o cuenta lo que pasó y Claude lo archiva donde va.
+- **Hilos de correo** como unidad, que se siguen solos (tus respuestas y los pendientes que prometes).
+- **Abrir el original** en Outlook, Gmail o Google Calendar.
+- **Hacia atrás:** guarda varios correos juntos y trae los anteriores al crear una regla.
+- Incluye todo lo de 0.6.
 
 ## Instalar
 
@@ -67,12 +66,17 @@ El lugar fija el ámbito: fuera de un proyecto todo es de tu cerebro completo; d
 - **Buscar o preguntar (⌘K):** busca en el texto completo, sin preocuparte por acentos ni mayúsculas. Grupos: Personas · Empresas · Temas · Decisiones · Reuniones · Correos · Notas y documentos · Preguntas guardadas · Repos · Pendientes · Proyectos · Acciones. ↑↓ para moverte, ↩ para abrir, esc para cerrar; la última fila es **Preguntar a todo el cerebro: «…»** (⌘↩).
 - **Correo y Reuniones:** **Guardar en 🚀 Proyecto ▾** agrega un correo al proyecto; Reuniones es **Hoy · Próximas · Anteriores** (ver abajo).
 - **Pendientes:** **Míos · De otros · Sin dueño · Hechos**, **Origen ▾** y **Exportar**; fuera de un proyecto, además, filtros por proyecto y persona. Cada pendiente muestra de qué reunión o correo salió.
-- **Proyecto:** seis pestañas.
-  - **Resumen:** en breve, decisiones recientes, próximas fechas, personas, actividad y tus pendientes abiertos.
+- **Proyecto:** siete pestañas (con **Archivos**).
+  - **Resumen:** la caja **Agregar al proyecto**, en breve, decisiones recientes, próximas fechas, personas, actividad y tus pendientes abiertos.
   - **Contenido:** lista **Por fecha** (lo más nuevo primero, agrupado por mes) o **Por tema**; a la derecha la página.
   - **Preguntar · Grafo · Pendientes:** las mismas vistas, solo de ese proyecto.
   - **Personas:** quién aparece en el proyecto; **+ Agregar persona** o *Quitar del proyecto* (clic derecho).
   - En la barra de herramientas: **+ Agregar** (Nota · Archivo… · Enlace… · Pegar correo ⇧⌘V · Grabar aquí), **Historial** y **⋯** (formato por defecto, **Repositorios…**, Mostrar en Finder). También puedes arrastrar PDFs, textos o enlaces al proyecto. Clic derecho en un proyecto de la barra lateral → *Editar proyecto…*.
+- **Archivos:** en la barra lateral y como pestaña de cada proyecto. Todos los PDFs, documentos, hojas y fotos, con búsqueda, filtros por tipo, origen y persona, vista previa con **Espacio** y de dónde vino cada uno.
+- **Adjuntos de correo:** los de correos nuevos se guardan solos; logos, firmas e imágenes decorativas se descartan (Claude decide lo dudoso) y quedan 30 días en **Descartados** para rescatarlos. Al guardar correos anteriores, la hoja **¿Qué adjuntos guardo?** te deja elegir con casillas; más de 25 MB no se baja solo.
+- **Agregar al proyecto:** en el Resumen, una caja donde tiras archivos o escribes lo que pasó (una visita presencial, una llamada) y Claude lo archiva donde va (reunión, decisión, pendientes, documento) y te dice cómo.
+- **Hilos y respuestas:** el correo se guarda por hilo, con la conversación completa y tus mensajes marcados "Tú". Todo hilo guardado se sigue solo: tus respuestas y las de otros se agregan, y lo que prometes queda en tus pendientes con enlace al correo enviado. Para guardar hacia atrás, selecciona varios correos o acepta **Traer anteriores** al crear una regla (últimos 90 días).
+- **Abrir el original:** **Abrir en Outlook / Gmail / Google Calendar** en correos, hilos, eventos y archivos que vinieron de un correo.
 - **Fichas:** haz clic en cualquier nombre, enlace, cita o punto del grafo y se abre su ficha: la página que escribió Claude más lo que sabemos de esa persona, empresa, tema o decisión (reuniones, correos, documentos, decisiones, pendientes y relacionados). Dentro de un proyecto la ficha se filtra a ese proyecto ("En 🚀 Kickoff · Ver todo →"). **⌘[** vuelve atrás.
 
   ![La ficha de una persona: rol, empresa, proyectos, compromisos y reuniones](docs/screenshots/entity.png)
@@ -154,7 +158,7 @@ scripts/release.sh <versión>          # publica en GitHub Releases
 - **El esquema del cerebro** está en `app/Sources/BrainCore/Resources/vault-template/`.
 - **Marca:** el kit está en `docs/brand/` y su uso en código en `docs/brand/USAGE.md`; todos los colores y fuentes salen de `app/Sources/SecondBrain/Support/Brand.swift` (y de las variables `:root` de `wiki.css`/`graph.css`). Reglas de UX y layout: `docs/CONTRACT.md` §15 (v0.5) y §16 (v0.6, vinculante).
 - **Nombre:** el ejecutable y el paquete siguen siendo `SecondBrain` / `SecondBrain.app`; lo que ve el usuario (`CFBundleName`, `CFBundleDisplayName`, textos) es `secondbrain`.
-- **Pruebas:** `sb selftest` (incluye ruteo y grafo), `sb github selftest`, `sb entity selftest` (índice y backlinks), `sb chat selftest` (conversaciones guardadas), `sb facts selftest` (ediciones propuestas y `facts.md`) y `sb search selftest` (texto completo). `sb chat list [--project]` lista conversaciones guardadas.
+- **Pruebas:** `sb selftest` (incluye ruteo y grafo), `sb github selftest`, `sb entity selftest` (índice y backlinks), `sb chat selftest` (conversaciones guardadas), `sb facts selftest` (ediciones propuestas y `facts.md`) y `sb search selftest` (texto completo), `sb attachments selftest`, `sb threads selftest`, `sb files selftest`, `sb dump selftest` (Agregar al proyecto), `sb replies selftest` y `sb backfill selftest`. `sb chat list [--project]` lista conversaciones guardadas.
 - **Capturas para revisar la UI:** `SB_SNAPSHOT_DIR=<carpeta>` renderiza cada vista a PNG y sale; con `SB_SNAPSHOT_WINDOW=1` renderiza la ventana completa (1100×720 y 920×620, claro y oscuro); `SB_SNAPSHOT_ONLY=<prefijo>` limita cuáles; `SB_DEMO_ACCOUNTS=1` y `SB_DEMO_GITHUB=1` usan datos de ejemplo.
 
 ---

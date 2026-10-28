@@ -4,22 +4,23 @@ import Foundation
 
 // MARK: v0.6 navigation (CONTRACT §16.1, §16.12): the sidebar, the one router and what it leaves for each screen.
 
-/// Sidebar destinations (§16.1): Inicio ⌘1 · Preguntar ⌘2 · Grafo ⌘3 · Pendientes ⌘4 · Personas ⌘5 — Fuentes: Correo ⌘6 ·
-/// Reuniones ⌘7 · Sin asignar (only while something waits) — Proyectos.
+/// Sidebar destinations (§16.1, §17.2): Inicio ⌘1 · Preguntar ⌘2 · Grafo ⌘3 · Pendientes ⌘4 · Personas ⌘5 · Archivos ⌘6
+/// — Fuentes: Correo ⌘7 · Reuniones ⌘8 · Sin asignar (only while something waits) — Proyectos.
 enum SidebarItem: Hashable {
     case home
     case ask
     case graph
     case tasks
     case people
+    case files   // v0.7 (§17.2): Archivos
     case mail
     case meetings
     case unassigned
     case project(String)
 
-    /// The items above "Fuentes", in order (⌘1–⌘5).
-    static let main: [SidebarItem] = [.home, .ask, .graph, .tasks, .people]
-    /// "Fuentes" (⌘6, ⌘7; Sin asignar has no shortcut and only shows with a count).
+    /// The items above "Fuentes", in order (⌘1–⌘6).
+    static let main: [SidebarItem] = [.home, .ask, .graph, .tasks, .people, .files]
+    /// "Fuentes" (⌘7, ⌘8; Sin asignar has no shortcut and only shows with a count).
     static let sources: [SidebarItem] = [.mail, .meetings]
 
     var title: String {
@@ -29,6 +30,7 @@ enum SidebarItem: Hashable {
         case .graph: L("sidebar.graph")
         case .tasks: L("tasks.title")
         case .people: L("sidebar.people")
+        case .files: L("sidebar.files")
         case .mail: L("sidebar.mail")
         case .meetings: L("sidebar.meetings")
         case .unassigned: L("inbox.title")
@@ -43,6 +45,7 @@ enum SidebarItem: Hashable {
         case .graph: "point.3.connected.trianglepath.dotted"
         case .tasks: "checklist"
         case .people: "person.2"
+        case .files: "doc.on.doc"
         case .mail: "envelope"
         case .meetings: "calendar"
         case .unassigned: "tray"
@@ -50,7 +53,7 @@ enum SidebarItem: Hashable {
         }
     }
 
-    /// ⌘1–⌘7 (the "Ir" menu).
+    /// ⌘1–⌘8 (the "Ir" menu).
     var shortcut: Character? {
         switch self {
         case .home: "1"
@@ -58,8 +61,9 @@ enum SidebarItem: Hashable {
         case .graph: "3"
         case .tasks: "4"
         case .people: "5"
-        case .mail: "6"
-        case .meetings: "7"
+        case .files: "6"
+        case .mail: "7"
+        case .meetings: "8"
         case .unassigned, .project: nil
         }
     }
@@ -76,7 +80,7 @@ enum HomeRoute: Hashable {
 /// The one router's targets (§16.12). Every way of going somewhere (sidebar, ⌘K, notifications, links, Inicio)
 /// ends in `AppState.navigate(to:)`.
 enum Destination: Hashable {
-    /// A sidebar item as is (⌘1–⌘7, a row click). Re-selecting Inicio pops it to its root.
+    /// A sidebar item as is (⌘1–⌘8, a row click). Re-selecting Inicio pops it to its root.
     case sidebar(SidebarItem)
     /// A vault page's ficha (§16.4), opened in the context of `scope`: inside a project, its own pages open in
     /// Contenido and any other page is pushed as a ficha filtered to the project; from the brain, a project page

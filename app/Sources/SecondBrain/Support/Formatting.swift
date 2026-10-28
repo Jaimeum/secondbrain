@@ -116,9 +116,9 @@ extension SourceRecord {
     /// When it happened ("Reunión: …", "Enviado: …").
     var eventLabel: String {
         switch kind {
-        case .meeting: L("dates.meeting")
+        case .meeting, .inPerson: L("dates.meeting")
         case .email: L("dates.sent")
-        case .document: L("dates.document")
+        case .document, .image: L("dates.document")
         case .note: L("dates.note")
         case .url: L("dates.url")
         case .github: "GitHub"   // MARK: v0.4 github (a name, same in every language)
@@ -128,7 +128,7 @@ extension SourceRecord {
     /// When it was added ("Agregada: …" / "Agregado: …").
     var addedLabel: String {
         switch kind {
-        case .meeting, .note, .url: L("dates.addedF")
+        case .meeting, .note, .url, .inPerson, .image: L("dates.addedF")   // v0.7: "imagen", "reunión" (f)
         case .email, .document: L("dates.addedM")
         case .github: L("dates.addedM")   // MARK: v0.4 github
         }
@@ -208,6 +208,8 @@ extension SourceKind {
         case .url: "link"
         case .email: "envelope"
         case .github: "chevron.left.forwardslash.chevron.right"   // MARK: v0.4 github
+        case .image: "photo"           // v0.7 (§17.1)
+        case .inPerson: "person.2"     // v0.7 (§17.3)
         }
     }
 
@@ -222,6 +224,8 @@ extension SourceKind {
         case .url: L("kind.url")
         case .email: L("kind.email")
         case .github: "GitHub"   // MARK: v0.4 github
+        case .image: L("kind.image")         // v0.7
+        case .inPerson: L("kind.inPerson")   // v0.7
         }
     }
 }

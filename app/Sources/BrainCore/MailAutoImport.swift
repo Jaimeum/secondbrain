@@ -144,6 +144,7 @@ public extension BrainEngine {
                     let added = try addMailMessages([full], account: account, threadKey: threadKey, projectSlug: nil, routeIfUnassigned: true)
                     for src in added { report.record(src) }
                     budget -= added.count
+                    if !added.isEmpty { await saveNewAttachments(for: [full], account: account, provider: provider) }   // v0.7 §17.1
                 } catch EngineError.emptyEmail, EngineError.duplicateEmail {
                     // Nothing to add, now or later.
                 } catch {

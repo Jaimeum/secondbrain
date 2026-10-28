@@ -372,7 +372,7 @@ private final class ConfigBox: @unchecked Sendable {
     public func assign(sourceId: String, to projectSlug: String) throws {
         guard var src = source(sourceId) else { throw EngineError.sourceNotFound(sourceId) }
         guard projects.get(projectSlug) != nil else { throw ProjectError.notFound(projectSlug) }
-        if src.kind == .email, let key = src.threadKey {
+        if src.kind == .email || src.parentSourceId != nil, let key = src.threadKey {   // v0.7: an attachment goes with its thread
             try assignThread(key, to: projectSlug)   // the whole thread moves
             return
         }
@@ -433,6 +433,11 @@ private final class ConfigBox: @unchecked Sendable {
             }
             try? fm.removeItem(at: url)
             if src.kind == .email { forgetEmail(rawPath: raw) }
+            if src.parentSourceId != nil { forgetAttachment(rawPath: raw) }   // v0.7 (§17.1)
+        }
+        // v0.7 (§17.1): an email's attachments not learned yet go with it ("Deshacer" in Correo).
+        if src.kind == .email {
+            for child in sources where child.parentSourceId == sourceId && child.historyId == nil { try? delete(sourceId: child.id) }
         }
         writeGeneration += 1
         sourceStore.delete(id: sourceId)

@@ -41,13 +41,28 @@ public final class GoogleProvider: MailCalendarProvider {
         return try await GmailParser.thread(try await api.get(url), account: account)
     }
 
-    // MARK: v0.7 attachments (§17.1) — v0.7: filled in by attach. Gmail parts with `filename`/`attachmentId` → `users/me/messages/{id}/attachments/{aid}`.
+    // MARK: v0.7 attachments (§17.1) — Gmail parts with a `filename`. The attachment id is the part id (Gmail's
+    // `attachmentId` changes on every read): downloading reads the message again for its current `attachmentId`, then
+    // `users/me/messages/{id}/attachments/{aid}` (small parts carry their bytes inline).
     public func listAttachments(messageId: String) async throws -> [AttachmentInfo] {
-        throw AttachmentError.notImplemented
+        let url = HTTP.url(Self.gmail + "/messages/" + MicrosoftGraphProvider.pathSegment(messageId), query: [("format", "full")])
+        return try GmailParser.attachments(try await api.get(url))
     }
 
     public func downloadAttachment(messageId: String, id: String) async throws -> Data {
-        throw AttachmentError.notImplemented
+        let url = HTTP.url(Self.gmail + "/messages/" + MicrosoftGraphProvider.pathSegment(messageId), query: [("format", "full")])
+        guard let part = try GmailParser.attachmentPart(try await api.get(url), partId: id) else {
+            throw AccountError.failed("attachment \(id) not found")
+        }
+        if let inline = part.body?.data, let data = HTTP.base64urlDecode(inline) { return data }
+        guard let aid = part.body?.attachmentId else { throw AttachmentError.notDownloadable }
+        let data = try await api.get(Self.attachmentURL(messageId: messageId, attachmentId: aid))
+        return try GmailParser.attachmentData(data)
+    }
+
+    public static func attachmentURL(messageId: String, attachmentId: String) -> URL {
+        URL(string: gmail + "/messages/" + MicrosoftGraphProvider.pathSegment(messageId) + "/attachments/"
+            + MicrosoftGraphProvider.pathSegment(attachmentId))!
     }
 
     public func events(from: Date, to: Date) async throws -> [CalendarEvent] {
@@ -132,6 +147,7 @@ public enum GmailParser {
     struct Header: Decodable { var name: String; var value: String }
     struct Body: Decodable { var size: Int?; var data: String?; var attachmentId: String? }
     final class Part: Decodable {
+        var partId: String?   // v0.7: the attachment's stable id
         var mimeType: String?
         var filename: String?
         var headers: [Header]?
@@ -224,9 +240,56 @@ public enum GmailParser {
         } else {
             text = HTTP.decodeEntities(m.snippet ?? "")
         }
+        // v0.7 (§17.1): the `cid:` images the HTML body shows (logos, signatures), for the attachments triage.
+        let cids = firstPart(m.payload, mime: "text/html").flatMap(decode).map(AttachmentTriage.contentIds(inHTML:)) ?? []
         return MailMessageFull(summary: summary(m, account: account),
                                cc: header(m, "Cc").map(EmailParser.parseAddresses) ?? [],
-                               bodyText: GraphParser.cleanBody(text))
+                               bodyText: GraphParser.cleanBody(text), inlineContentIds: cids)
+    }
+
+    // MARK: v0.7 attachments (§17.1)
+
+    static func partHeader(_ part: Part, _ name: String) -> String? {
+        part.headers?.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.value
+    }
+
+    /// Depth-first: every part with a file name (an attachment, inline or not).
+    static func attachmentParts(_ part: Part?) -> [Part] {
+        guard let part else { return [] }
+        var out: [Part] = []
+        if !(part.filename ?? "").isEmpty, part.body?.attachmentId != nil || part.body?.data != nil { out.append(part) }
+        for child in part.parts ?? [] { out += attachmentParts(child) }
+        return out
+    }
+
+    /// `messages.get?format=full` → its attachments (`id` = the part id).
+    public static func attachments(_ data: Data) throws -> [AttachmentInfo] {
+        let m = try decodeJSON(Message.self, data, provider: .google)
+        return attachmentParts(m.payload).enumerated().map { i, p in
+            let disposition = partHeader(p, "Content-Disposition")?.lowercased() ?? ""
+            let cid = partHeader(p, "Content-ID").flatMap { AttachmentTriage.normalizedContentId($0).nonEmptyString }
+            return AttachmentInfo(id: p.partId?.nonEmptyString ?? "idx-\(i)", name: decodeMIMEWords(p.filename ?? ""),
+                                  mimeType: p.mimeType?.nonEmptyString ?? "application/octet-stream",
+                                  size: p.body?.size ?? 0, isInline: disposition.hasPrefix("inline"), contentId: cid)
+        }
+    }
+
+    /// The attachment part with this id (as `attachments` hands it out), or nil.
+    static func attachmentPart(_ data: Data, partId: String) throws -> Part? {
+        let m = try decodeJSON(Message.self, data, provider: .google)
+        let parts = attachmentParts(m.payload)
+        if let p = parts.first(where: { $0.partId == partId }) { return p }
+        if partId.hasPrefix("idx-"), let i = Int(partId.dropFirst(4)), parts.indices.contains(i) { return parts[i] }
+        return nil
+    }
+
+    /// `messages.attachments.get` → the bytes.
+    static func attachmentData(_ data: Data) throws -> Data {
+        struct Body: Decodable { var data: String? }
+        guard let encoded = try decodeJSON(Body.self, data, provider: .google).data, let bytes = HTTP.base64urlDecode(encoded) else {
+            throw AccountError.failed("empty attachment")
+        }
+        return bytes
     }
 
     /// Depth-first: the first body part of `mime` that is not an attachment.

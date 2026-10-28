@@ -10,11 +10,18 @@ public final class DemoProvider: MailCalendarProvider {
     public let account: ConnectedAccount
     private let messages: [MailMessageFull]
     private let calendar: [CalendarEvent]
+    private let lang: Lang   // v0.7: attachment names
 
     public init(account: ConnectedAccount, language: String = "es", now: Date = Date()) {
         self.account = account
-        let data = DemoData(account: account, lang: Lang(language), now: now)
-        messages = data.messages.sorted { $0.summary.date > $1.summary.date }
+        let lang = Lang(language)
+        self.lang = lang
+        let data = DemoData(account: account, lang: lang, now: now)
+        messages = data.messages.sorted { $0.summary.date > $1.summary.date }.map { m in   // v0.7: cid: images of the body
+            var m = m
+            m.inlineContentIds = DemoAttachments.inlineContentIds(messageId: m.summary.id, lang: lang)
+            return m
+        }
         calendar = data.events.sorted { $0.start < $1.start }
     }
 
@@ -56,13 +63,18 @@ public final class DemoProvider: MailCalendarProvider {
         messages.filter { $0.summary.threadId == id }.sorted { $0.summary.date < $1.summary.date }
     }
 
-    // MARK: v0.7 attachments (§17.1) — v0.7: filled in by attach. synthetic: a contract PDF and a 4 KB logo PNG.
+    // MARK: v0.7 attachments (§17.1) — synthetic files (`DemoAttachments`): a contract PDF, a 4 KB inline logo PNG, a
+    // whiteboard photo, a budget CSV…
     public func listAttachments(messageId: String) async throws -> [AttachmentInfo] {
-        throw AttachmentError.notImplemented
+        guard messages.contains(where: { $0.summary.id == messageId }) else { throw AccountError.failed("demo message \(messageId) not found") }
+        return DemoAttachments.list(messageId: messageId, lang: lang)
     }
 
     public func downloadAttachment(messageId: String, id: String) async throws -> Data {
-        throw AttachmentError.notImplemented
+        guard let data = DemoAttachments.download(messageId: messageId, id: id, lang: lang) else {
+            throw AccountError.failed("demo attachment \(id) not found")
+        }
+        return data
     }
 
     public func events(from: Date, to: Date) async throws -> [CalendarEvent] {

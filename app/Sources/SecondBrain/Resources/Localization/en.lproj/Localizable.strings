@@ -1612,3 +1612,26 @@
 "original.gmail" = "Open in Gmail";
 "original.outlookCalendar" = "Open in Outlook Calendar";
 "original.googleCalendar" = "Open in Google Calendar";
+
+/* v0.7 attach */
+"attach.title" = "Attachments";
+"attach.loading" = "Looking for the attachments…";
+"attach.failed" = "I couldn't see the attachments: %@";
+"attach.state.saved" = "Saved";
+"attach.state.discarded" = "Discarded (%@)";
+"attach.state.notSaved" = "Not saved";
+"attach.state.tooBig" = "Too big";
+"attach.state.notAFile" = "Not a file";
+"attach.save" = "Save";
+"attach.save.help" = "I'll keep it with this email and learn from it.";
+"attach.saveAnyway" = "Save anyway";
+"attach.saveEmailFirst" = "Save the email to be able to save its attachments.";
+"attach.saveFailed" = "I couldn't save “%@”. Try again.";
+"attach.open" = "Open";
+"attach.reason.inlineImage" = "logo or signature";
+"attach.reason.smallImage" = "small image";
+"attach.reason.junkName" = "decorative image";
+"attach.reason.junkType" = "invitation, contact or digital signature";
+"attach.reason.duplicate" = "already saved";
+"attach.reason.claude" = "Claude didn't find it useful";
+"attach.reason.user" = "you unticked it";

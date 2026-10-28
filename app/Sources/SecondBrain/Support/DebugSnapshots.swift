@@ -211,6 +211,15 @@ enum DebugSnapshots {
                 await render(MailView(model: mail).environment(state), size: CGSize(width: 1000, height: 640),
                              to: dir.appendingPathComponent("mail-rule-routed.png"))
             }
+            // v0.7 attach (§17.1): the reader's attachment list after saving the demo contract email (writes to the vault).
+            if only.isEmpty || "mail-attachments".hasPrefix(only), let mail = await MailModel.snapshotAttachments(state: state) {
+                for (suffix, size) in [("", CGSize(width: 1000, height: 640)), ("-min", CGSize(width: 760, height: 560))] {
+                    for dark in [false, true] {
+                        await render(MailView(model: mail).environment(state), size: size, dark: dark,
+                                     to: dir.appendingPathComponent("mail-attachments\(suffix)\(dark ? "-dark" : "").png"))
+                    }
+                }
+            }
             // MARK: v0.3 mail — after the smart button: ✓ chips + "Aprendiendo del correo… · Deshacer" (writes to the vault).
             if let mail = await MailModel.snapshotAfterAdd(state: state) {
                 await render(MailView(model: mail).environment(state), size: CGSize(width: 1000, height: 640),

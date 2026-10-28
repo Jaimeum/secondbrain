@@ -100,6 +100,9 @@ struct MailDetailView: View {
             if detail.thread.count > 1 {
                 ThreadMessages(detail: detail).id(s.id)
             }
+            if s.hasAttachments, let account = model.account {   // v0.7 attach (§17.1)
+                MailAttachmentsList(message: detail.message, account: account, source: model.source(for: s.id)).id(s.id)
+            }
             Rectangle().fill(Brand.color.line).frame(height: 1)
             Text(detail.parsed.body.isEmpty ? L("mail.onlyQuoted") : detail.parsed.body)
                 .font(Brand.body)

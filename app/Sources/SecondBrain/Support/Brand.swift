@@ -18,6 +18,17 @@ enum Brand {
         let cardAlt = Brand.dynamic(light: 0xE9E0D4, dark: 0x2A322A)
         /// Dividers and 1 px borders.
         let line = Brand.dynamic(light: 0xDAD3C9, dark: 0xFFFFFF, darkAlpha: 0.10)
+        /// The quieter border (§15.1 calm surfaces): resting fields, quiet capsules, inset separators. `line` at about
+        /// 60 %, so an edge is felt more than seen. Prefer spacing or a tone change over any separator at all.
+        let lineSoft = Brand.dynamic(light: 0xDAD3C9, lightAlpha: 0.6, dark: 0xFFFFFF, darkAlpha: 0.06)
+        /// Pointer hover on rows and quiet controls (ink 4 % / ivory 5 %): lighter than `accentSoft`, so hover never
+        /// reads as selection.
+        let hover = Brand.dynamic(light: 0x232B25, lightAlpha: 0.04, dark: 0xF5F0E8, darkAlpha: 0.05)
+        /// Keyboard focus halo around fields and controls (accent 18 % / 26 %), drawn as a soft 3 pt ring outside
+        /// the control together with a `focusBorder` edge. Never a dark 1.5 pt stroke.
+        let focusRing = Brand.dynamic(light: 0x475243, lightAlpha: 0.18, dark: 0xAEB5A4, darkAlpha: 0.26)
+        /// The edge of a focused field (accent 45 % / 55 %): clearly there, never black-looking.
+        let focusBorder = Brand.dynamic(light: 0x475243, lightAlpha: 0.45, dark: 0xAEB5A4, darkAlpha: 0.55)
         /// Primary text (ink / ivory).
         let text = Brand.dynamic(light: 0x232B25, dark: 0xF5F0E8)
         /// Secondary text: AA everywhere it sits (light #5F665D: 5.2:1 on bg, 5.5:1 on surface, 4.5:1 on cardAlt; the
@@ -133,6 +144,10 @@ enum Brand {
         let card: CGFloat = 12
         /// Sheets, overlays (⌘K palette): 14.
         let sheet: CGFloat = 14
+        /// Text fields: 10 (between `control` and `card`, softer on a 34 pt field).
+        let field: CGFloat = 10
+        /// Tiles (emoji, small pickers): 10.
+        let tile: CGFloat = 10
     }
 
     static let radius = Radius()

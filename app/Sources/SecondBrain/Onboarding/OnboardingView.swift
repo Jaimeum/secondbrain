@@ -75,7 +75,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 16) {
                 OwnerNameField()
                 OwnerAddressesField()
-                Rectangle().fill(Brand.color.line).frame(height: 1).padding(.vertical, 4)
+                Color.clear.frame(height: 8)   // space, not a hairline, between "you" and the first project (§15.1)
                 ProjectFormFields(form: $form)
                 if let projectError { Text(projectError).foregroundStyle(Brand.color.danger) }
             }

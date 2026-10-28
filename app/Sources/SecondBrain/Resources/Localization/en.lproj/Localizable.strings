@@ -233,6 +233,9 @@
 "newProject.name" = "Name";
 "newProject.namePlaceholder" = "e.g. App launch, Acme client, Thesis";
 "newProject.emoji" = "Icon";
+"newProject.emojiMore" = "More emoji…";
+"newProject.emojiMoreHelp" = "Open the emoji picker: what you choose becomes the icon";
+"newProject.emojiFieldHelp" = "Type or paste any emoji to use it as the icon";
 "newProject.description" = "What is it about?";
 "newProject.descriptionHint" = "A sentence or two. It helps me know which meetings belong here.";
 "newProject.descriptionPlaceholder" = "e.g. Website redesign with the marketing team";

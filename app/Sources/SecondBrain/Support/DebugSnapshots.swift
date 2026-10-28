@@ -156,9 +156,9 @@ enum DebugSnapshots {
             shots.append(("record-control-plain", CGSize(width: 220, height: 130), footer(.plain)))
             shots.append(("record-control-recording", CGSize(width: 220, height: 170), footer(.recording)))
             shots.append(("record-control-error", CGSize(width: 220, height: 170), footer(.plain)))
-            shots.append(("new-project", CGSize(width: 480, height: 440), AnyView(NewProjectSheet())))
+            shots.append(("new-project", CGSize(width: 480, height: 480), AnyView(NewProjectSheet())))
             if let project {
-                shots.append(("edit-project", CGSize(width: 480, height: 440), AnyView(NewProjectSheet(editing: project))))
+                shots.append(("edit-project", CGSize(width: 480, height: 480), AnyView(NewProjectSheet(editing: project))))
             }
             // MARK: v0.3 graph — focused graph + web views need a run loop and WKWebView.takeSnapshot.
             if let topic = await state.engine.graph(projectSlug: nil).nodes.filter({ $0.kind == .topic }).max(by: { $0.links < $1.links }) {
@@ -413,16 +413,26 @@ enum DebugSnapshots {
         let previous = NSApp.appearance
         NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         defer { NSApp.appearance = previous }
+        // `SB_SNAPSHOT_CHROME=1`: the window's own titlebar and SwiftUI toolbar too (bridged by the hosting view, a
+        // unified full-size-content window like the app's WindowGroup), captured from the window's frame view.
+        let chrome = ProcessInfo.processInfo.environment["SB_SNAPSHOT_CHROME"] == "1"
+        var style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+        if chrome {
+            style.insert(.fullSizeContentView)
+            host.sceneBridgingOptions = [.toolbars, .title]
+        }
         let window = NSWindow(contentRect: CGRect(origin: CGPoint(x: -10_000, y: -10_000), size: size),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+                              styleMask: style, backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.backgroundColor = Brand.nsColor(dark ? 0x202721 : 0xF5F0E8)   // Brand bg
+        if chrome { window.toolbarStyle = .unified }
         window.contentView = host
         host.layoutSubtreeIfNeeded()
         try? await Task.sleep(for: .seconds(3))
         host.layoutSubtreeIfNeeded()
-        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
-        host.cacheDisplay(in: host.bounds, to: rep)
+        let target: NSView = chrome ? (host.superview ?? host) : host
+        guard let rep = target.bitmapImageRepForCachingDisplay(in: target.bounds) else { return }
+        target.cacheDisplay(in: target.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
         window.contentView = nil
     }

@@ -25,6 +25,7 @@ struct MainView: View {
             }
         }
         .animation(Brand.motion.animation(fast: true), value: state.searchPresented)
+        .brandWindowChrome()
         .sheet(isPresented: $state.showNewProject) {
             NewProjectSheet { project in state.navigate(to: .sidebar(.project(project.slug))) }
         }

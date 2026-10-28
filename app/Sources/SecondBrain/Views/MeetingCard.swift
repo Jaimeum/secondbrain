@@ -265,7 +265,7 @@ struct MeetingProjectChip: View {
                     } label: {
                         Image(systemName: "checkmark").foregroundStyle(Brand.color.accent)
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .help(event.seriesId == nil ? L("meetings.yesProject") : L("meetings.yesProjectSeries"))
                     picker {
                         Image(systemName: "xmark").foregroundStyle(Brand.color.text2)

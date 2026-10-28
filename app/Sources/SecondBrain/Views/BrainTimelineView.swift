@@ -43,7 +43,7 @@ struct BrainTimelineView: View {
                                         Button(showAllUpcoming ? L("content.showLess") : L("home.seeAllTasks", total)) {
                                             withAnimation(Brand.motion.animation(fast: true)) { showAllUpcoming.toggle() }
                                         }
-                                        .buttonStyle(.borderless)
+                                        .buttonStyle(.plain)
                                         .font(Brand.caption)
                                         .foregroundStyle(Brand.color.accent)
                                         .padding(.horizontal, Brand.spacing.content + 80)

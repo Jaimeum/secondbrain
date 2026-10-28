@@ -152,7 +152,7 @@ struct ProjectContentView: View {
                         Button(L("timeline.today")) {
                             withAnimation(Brand.motion.animation()) { proxy.scrollTo(TimelineGroups.topAnchor, anchor: .top) }
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.plain)
                         .font(Brand.font(11, .medium))
                         .foregroundStyle(Brand.color.accent)
                         .help(L("timeline.todayHelp"))
@@ -232,7 +232,7 @@ struct ProjectContentView: View {
         Button(expanded ? L("content.showLess") : L("home.seeAllTasks", count)) {
             withAnimation(Brand.motion.animation(fast: true)) { toggle() }
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .font(Brand.caption)
         .foregroundStyle(Brand.color.accent)
         .padding(.horizontal, Brand.spacing.s)
@@ -455,7 +455,7 @@ private struct ProcessingRow: View {
                     smallIcon("arrow.clockwise", help: L("sources.retry"), action: onRetry)
                 } else {
                     Button(L("sources.retry"), action: onRetry)
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.plain)
                         .font(Brand.font(11, .medium))
                         .foregroundStyle(Brand.color.accent)
                         .lineLimit(1)
@@ -474,7 +474,7 @@ private struct ProcessingRow: View {
                 .frame(width: 18, height: 18)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(Text(help))
     }

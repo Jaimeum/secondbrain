@@ -52,7 +52,7 @@ struct MailAttachmentsList: View {
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 HStack(spacing: Brand.spacing.s) {
-                    ProgressView().controlSize(.small)
+                    BrandLoader(size: 14)
                     Text(L("attach.loading")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                 }
             }
@@ -83,7 +83,7 @@ struct MailAttachmentsList: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if savingBatch {
-                ProgressView().controlSize(.small)
+                BrandLoader(size: 14)
             } else {
                 Button(L("attach.checklist.save", n)) { saveChecked() }
                     .buttonStyle(.brandPrimary)
@@ -132,7 +132,7 @@ struct MailAttachmentsList: View {
 
     @ViewBuilder private func action(_ a: AttachmentInfo, _ st: AttachmentState) -> some View {
         if saving.contains(a.id) {
-            ProgressView().controlSize(.small)
+            BrandLoader(size: 14)
         } else {
             switch st {
             case .saved(let entry):

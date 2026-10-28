@@ -321,8 +321,9 @@ struct ReconnectClaudeSheet: View {
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack {
+            // Space and a soft fade separate the footer (no rule; §15.1 calm surfaces).
+            .brandScrollEdgeFade(.bottom)
+            BrandSheetFooter(horizontalPadding: 24) {
                 Spacer()
                 if connected {
                     Button(L("common.done")) { dismiss() }
@@ -330,11 +331,10 @@ struct ReconnectClaudeSheet: View {
                         .keyboardShortcut(.defaultAction)
                 } else {
                     Button(L("common.done")) { dismiss() }
-                        .buttonStyle(.brandSecondary)
+                        .buttonStyle(.brandGhost)
                         .keyboardShortcut(.cancelAction)
                 }
             }
-            .padding(12)
         }
         .frame(minWidth: 560, idealWidth: 640, minHeight: 360, idealHeight: 520)
         .background(Brand.color.surface)

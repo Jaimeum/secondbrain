@@ -86,11 +86,9 @@ struct WikiBrowser: View {
 enum ContentLayout {
     static func listWidth(for total: CGFloat) -> CGFloat { min(260, max(200, (total * 0.3).rounded())) }
 
-    /// The rule between a list column and its detail (§15.1 calm surfaces): 1 pt of `lineSoft`, inset from the top and
-    /// bottom so it never meets the window's edges or a header at a corner.
-    static var columnRule: some View {
-        Rectangle().fill(Brand.color.lineSoft).frame(width: 1).padding(.vertical, Brand.spacing.m)
-    }
+    /// The rule between a list column and its detail (§15.1 calm surfaces): the shared `BrandColumnDivider`, so every
+    /// split (Ask, People, Files, Graph, project tabs, Mail, Meetings) uses one inset `lineSoft` capsule.
+    static var columnRule: some View { BrandColumnDivider() }
 }
 
 // MARK: - Page list

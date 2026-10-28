@@ -158,10 +158,9 @@ struct EntityView: View {
         }
     }
 
-    /// Wiki pages and fichas can be edited; sources under `raw/` never (§16.6).
-    static func isEditable(_ path: String) -> Bool {
-        path.hasSuffix(".md") && !path.hasPrefix("raw/") && !path.contains("/raw/")
-    }
+    /// Wiki pages and fichas can be edited; sources under `raw/`, `_inbox/` and the schema never (§16.6; the editor's
+    /// own rule, `Corrections.isEditable`).
+    static func isEditable(_ path: String) -> Bool { Corrections.isEditable(path) }
 
     /// Whether a link from a ficha shown in `scope` is pushed as another ficha in the same host (true), or goes to its
     /// own place through the router (false): inside a project, its own pages open in Contenido; from the brain, a

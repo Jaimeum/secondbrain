@@ -46,6 +46,8 @@ struct EntityCard: View {
     var scope: Scope = .brain
     /// "Abrir" and every row (default: the router, in this scope).
     var onOpen: ((String) -> Void)? = nil
+    /// False when the host already shows the kind, title and "Abrir" (the graph's `GraphNodePanel`).
+    var showsHeader = true
 
     @ViewState private var snapshot: EntityIndex.Snapshot = .empty
     @ViewState private var excerpt = ""
@@ -62,14 +64,16 @@ struct EntityCard: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Brand.spacing.m) {
-                HStack(alignment: .firstTextBaseline, spacing: Brand.spacing.s) {
-                    Image(systemName: EntityStyle.symbol(entity?.kind, path: path))
-                        .foregroundStyle(Brand.color.text2)
-                    Text(entity?.title ?? WikiGrouping.humanize(path))
-                        .font(Brand.section)
-                        .foregroundStyle(Brand.color.text)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
+                if showsHeader {
+                    HStack(alignment: .firstTextBaseline, spacing: Brand.spacing.s) {
+                        Image(systemName: EntityStyle.symbol(entity?.kind, path: path))
+                            .foregroundStyle(Brand.color.text2)
+                        Text(entity?.title ?? WikiGrouping.humanize(path))
+                            .font(Brand.section)
+                            .foregroundStyle(Brand.color.text)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if let entity {
                     EntityChips(entity: entity, snapshot: snapshot, here: scope.projectSlug, onOpen: open, limit: 5)
@@ -81,11 +85,13 @@ struct EntityCard: View {
                         .lineLimit(8)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Button { open(path) } label: {
-                    Label(L("page.open"), systemImage: "arrow.up.forward.square")
+                if showsHeader {
+                    Button { open(path) } label: {
+                        Label(L("page.open"), systemImage: "arrow.up.forward.square")
+                    }
+                    .buttonStyle(.brandPrimary)
+                    .help(L("entity.openHelp"))
                 }
-                .buttonStyle(.brandPrimary)
-                .help(L("entity.openHelp"))
                 ForEach(sections.filter { $0.kind != .tasks }) { section in
                     VStack(alignment: .leading, spacing: 2) {
                         ContentListHeader(title: EntityStyle.sectionTitle(section.kind), trailing: "\(section.rows.count)")

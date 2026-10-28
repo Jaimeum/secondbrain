@@ -43,7 +43,7 @@ struct GraphView: View {
                         }
                     if let id = selected, let node = loaded.nodes[id] {
                         Rectangle().fill(Brand.color.line).frame(width: 1)
-                        GraphNodePanel(node: node, neighbours: loaded.neighbours(of: id, limit: 6), scope: scope,
+                        GraphNodePanel(node: node, scope: scope,
                                        projects: state.projects,
                                        isNode: { loaded.nodes[$0] != nil },
                                        onOpen: open, onSelect: { selected = $0 }, onClose: { selected = nil })

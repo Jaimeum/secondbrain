@@ -226,14 +226,13 @@ private struct ConversationRow: View {
 
 // MARK: - Citation inspector
 
-/// The page a citation points at, read beside the conversation. Links inside move within the panel (Atrás ⌘[);
-/// "Abrir" goes to the page's place in the current context (§16.4); ✕ closes the panel.
+/// The page a citation points at, read beside the conversation as its ficha (§16.4: the page Claude wrote plus its
+/// sections, filtered to the project inside one). Links, chips and rows inside push within the panel (Atrás ⌘[), so
+/// reading never leaves the conversation; "Abrir" goes to the page's place in the current context; ✕ closes the panel.
 private struct CitationInspector: View {
     @Environment(AppState.self) private var state
     let conversations: Conversations
     let scope: Scope
-
-    @ViewState private var title = ""
 
     private var shown: String { conversations.inspected.last ?? "" }
 
@@ -241,15 +240,12 @@ private struct CitationInspector: View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
-            WikiWebView(vault: state.engine.vault, path: shown) { next in
+            EntityView(path: shown, scope: scope, onOpen: { next in
                 if next != shown { conversations.inspected.append(next) }
-            }
+                if conversations.inspected.count > 50 { conversations.inspected.removeFirst() }
+            })
         }
         .background(Brand.color.surface)
-        .task(id: shown) {
-            let vault = state.engine.vault, page = shown
-            title = await Task.detached { vault.title(of: page) }.value
-        }
     }
 
     private var header: some View {
@@ -265,14 +261,7 @@ private struct CitationInspector: View {
                 .keyboardShortcut("[", modifiers: .command)
                 .help(L("wiki.back"))
             }
-            Image(systemName: SourceLabels.symbol(forPath: shown)).foregroundStyle(Brand.color.text2)
-            Text(title)
-                .font(Brand.callout)
-                .foregroundStyle(Brand.color.text)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(title)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
             let open = Button {
                 let target = shown
                 conversations.inspected = []
@@ -298,6 +287,6 @@ private struct CitationInspector: View {
             .accessibilityLabel(Text(L("ask.closeInspector")))
         }
         .padding(.horizontal, Brand.spacing.m)
-        .frame(height: 44)
+        .frame(height: 36)
     }
 }

@@ -50,12 +50,20 @@ public struct ThreadInfo: Codable, Identifiable, Hashable, Sendable {
     public var folderPath: String
     /// Account id → provider conversation/thread id.
     public var providerThreadIds: [String: String]
+    /// Account id → other conversations of that account saved into this thread before (still followed).
+    public var earlierProviderThreadIds: [String: [String]] = [:]
     public var id: String { key }
 
     public init(key: String, subject: String, participants: [EmailAddress], messages: [Message], projectSlug: String?,
-                folderPath: String, providerThreadIds: [String: String] = [:]) {
+                folderPath: String, providerThreadIds: [String: String] = [:], earlierProviderThreadIds: [String: [String]] = [:]) {
         self.key = key; self.subject = subject; self.participants = participants; self.messages = messages
         self.projectSlug = projectSlug; self.folderPath = folderPath; self.providerThreadIds = providerThreadIds
+        self.earlierProviderThreadIds = earlierProviderThreadIds
+    }
+
+    /// Every provider conversation id of the account that lives in this thread (current first).
+    public func providerThreadIdList(account: String) -> [String] {
+        ([providerThreadIds[account]].compactMap { $0 } + (earlierProviderThreadIds[account] ?? []).reversed()).filter { !$0.isEmpty }
     }
 
 
@@ -153,7 +161,7 @@ public extension VaultStore {
     func threadKey(accountId: String, providerThreadId: String) -> String? {
         guard !providerThreadId.isEmpty else { return nil }
         for folder in threadFolders() {
-            if let meta = threadMeta(at: folder), meta.providerThreadIds?[accountId] == providerThreadId { return meta.key }
+            if let meta = threadMeta(at: folder), meta.providerThreadIdList(account: accountId).contains(providerThreadId) { return meta.key }
         }
         return nil
     }
@@ -176,7 +184,8 @@ public extension VaultStore {
         }.sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
         return ThreadInfo(key: meta.key, subject: meta.subject, participants: meta.participants, messages: messages,
                           projectSlug: Self.projectSlug(of: folder), folderPath: folder,
-                          providerThreadIds: meta.providerThreadIds ?? [:])
+                          providerThreadIds: meta.providerThreadIds ?? [:],
+                          earlierProviderThreadIds: meta.earlierProviderThreadIds ?? [:])
     }
 }
 

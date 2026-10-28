@@ -108,8 +108,11 @@ import Foundation
         bare.body = "Otro texto"
         t.check(engine.duplicateOf(bare, externalId: "microsoft:demo-m03") != nil, "externalId matched via sources/_thread.json")
         t.check(engine.duplicateOf(bare, externalId: "microsoft:nope") == nil, "unknown externalId + different body → new")
-        t.check(engine.duplicateOf(e3, externalId: "microsoft:other-id") == nil,
+        t.check(engine.duplicateOf(e3, externalId: "google:other-id") == nil,
                 "another provider message (new externalId) is never a body-hash duplicate of an imported one")
+        // v0.7: a Graph id changes when the message moves to another folder: same sender, minute and body = the same one.
+        t.check(engine.duplicateOf(e3, externalId: "microsoft:other-id") != nil,
+                "an Outlook message under a new id (moved) is the stored one")
 
         // Continue a thread: the first message alone, then the conversation → only the new one, same thread.
         let k1 = try await demo.fetchMessage(id: "demo-m04")

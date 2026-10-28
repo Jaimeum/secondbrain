@@ -87,6 +87,8 @@ public extension BrainEngine {
     /// v0.7: saved threads of older versions (no provider thread id in `_thread.json`) learn it with one fetch each, at
     /// most this many per cycle.
     nonisolated static let threadFollowMigrationsPerCycle = 10
+    /// Pages of the provider's mail list read per account and cycle (newest first; Graph 50, Gmail 25 per page).
+    nonisolated static let mailAutoImportPages = 20
 
     /// One auto-add cycle. Per mail account: lists the mail since its cursor (`mailSyncCursors`; the first time at most
     /// 7 days back), sent mail included, oldest first; skips what is already in the brain (`externalId`). A message of a
@@ -98,7 +100,7 @@ public extension BrainEngine {
     /// (tests pass their own).
     @discardableResult
     func runMailAutoImport(now: Date = Date(), cap: Int = BrainEngine.mailAutoImportCap, maxFetches: Int = 60,
-                           followCap: Int = BrainEngine.threadFollowCap,
+                           followCap: Int = BrainEngine.threadFollowCap, maxPages: Int = BrainEngine.mailAutoImportPages,
                            accounts accountList: [ConnectedAccount]? = nil,
                            provider makeProvider: ((ConnectedAccount) -> MailCalendarProvider)? = nil) async -> MailAutoImportReport {
         var report = MailAutoImportReport()
@@ -122,18 +124,20 @@ public extension BrainEngine {
         let owners = vault.ownerEmails()
         let savedThreads = follows ? vault.allThreads() : []
         var budget = autoRules.isEmpty ? 0 : cap
-        var followBudget = followCap
+        var followBudget = follows ? followCap : 0
         var fetches = 0
         var migrations = Self.threadFollowMigrationsPerCycle
 
         accountLoop: for account in mailAccounts {
-            guard autoRules.isEmpty || budget > 0, followBudget > 0, fetches < maxFetches else {
+            // The rules' cap only stops the rules: saved threads are still followed (§17.5, "sin tope de 20").
+            guard budget > 0 || followBudget > 0, fetches < maxFetches + followCap else {
                 report.reachedCap = true
                 break
             }
             let since = max(routing.settings.mailSyncCursors[account.id] ?? firstStart, floor)
             let provider = makeProvider?(account) ?? accounts.provider(for: account)
             var summaries: [MailMessageSummary] = []
+            var truncated = false
             do {
                 var token: String?
                 var pages = 0
@@ -142,7 +146,8 @@ public extension BrainEngine {
                     summaries += page.messages
                     token = page.next
                     pages += 1
-                } while token != nil && pages < 20
+                } while token != nil && pages < max(1, maxPages)
+                truncated = token != nil
             } catch {
                 if Task.isCancelled { return report }
                 Log.error("auto-add: could not list \(account.id): \(error)")
@@ -151,22 +156,45 @@ public extension BrainEngine {
             }
             // MARK: v0.7 replies — provider thread id → saved thread (§17.4/§17.5).
             var followed = followIndex(savedThreads, account: account)
+            // Messages of followed conversations the listing can't show (fetched whole, they skip the window filter).
+            var catchUp: [MailMessageFull] = []
             if follows, migrations > 0 {
-                for (threadId, key) in await migrateFollowIndex(savedThreads, account: account, provider: provider, limit: &migrations) {
-                    followed[threadId] = key
+                let migrated = await migrateFollowIndex(savedThreads, account: account, provider: provider, limit: &migrations)
+                for (threadId, key) in migrated { followed[threadId] = key }
+                // A thread of an older version was not followed until now: replies that came after its newest saved
+                // message may already be behind the cursor (§17.5 must not lose them).
+                for (threadId, key) in migrated {
+                    let last = savedThreads.first { $0.key == key }?.lastDate ?? floor
+                    catchUp += await conversationCatchUp(threadId: threadId, account: account, provider: provider, after: last,
+                                                         fetches: &fetches)
                 }
             }
+            if follows, truncated, migrations > 0, let oldest = summaries.map(\.date).min() {
+                // The listing stopped at its page cap (newest first): the oldest part of the window was not seen. The
+                // most active followed threads ask for their conversation instead, so their replies aren't skipped.
+                Log.info("auto-add: \(account.id) has more mail since \(since) than one cycle lists; catching up followed threads")
+                report.reachedCap = true
+                let ids = Set(followed.keys)
+                for thread in savedThreads where migrations > 0 {
+                    for threadId in thread.providerThreadIdList(account: account.id) where ids.contains(threadId) && migrations > 0 {
+                        migrations -= 1
+                        catchUp += await conversationCatchUp(threadId: threadId, account: account, provider: provider, after: since,
+                                                             before: oldest, fetches: &fetches)
+                    }
+                }
+            }
+            var prefetched: [String: MailMessageFull] = [:]
+            for m in catchUp { prefetched[m.summary.id] = m }
             var seen = Set<String>()
-            let fresh = summaries.filter { $0.date >= since && seen.insert($0.id).inserted }.sorted { $0.date < $1.date }
+            let fresh = (summaries.filter { $0.date >= since } + catchUp.map(\.summary))
+                .filter { seen.insert($0.id).inserted }.sorted { $0.date < $1.date }
             var cursor: Date?
+            // Once the rules stop (their cap or the fetch budget) the cursor stays before the first message they didn't
+            // judge, so it is judged next cycle; following saved threads goes on meanwhile (what it adds is skipped then).
+            var cursorFrozen = false
+            func advance(_ date: Date) { if !cursorFrozen { cursor = date } }
             for summary in fresh {
                 if Task.isCancelled { break accountLoop }
-                // The rules' cap stops the account here (the cursor stays at the last message added); the rest, threads
-                // included, waits for the next cycle.
-                guard autoRules.isEmpty || budget > 0 else {
-                    report.reachedCap = true
-                    break
-                }
                 let externalId = MailImport.externalId(account: account, messageId: summary.id)
                 if let stored = emailSource(externalId: externalId) {
                     // Saved by hand (or by an older version): its conversation is followed from now on.
@@ -175,7 +203,7 @@ public extension BrainEngine {
                         followed[summary.threadId] = key
                         linkThread(key, account: account, providerThreadId: summary.threadId)
                     }
-                    cursor = summary.date
+                    advance(summary.date)
                     continue
                 }
                 // §17.5: the conversation is a saved thread → it joins it, no rule.
@@ -184,15 +212,19 @@ public extension BrainEngine {
                         report.reachedCap = true
                         break
                     }
-                    fetches += 1
                     let full: MailMessageFull
-                    do {
-                        full = try await provider.fetchMessage(id: summary.id)
-                    } catch {
-                        if Task.isCancelled { break accountLoop }
-                        Log.error("follow: could not read a message of \(account.id): \(error)")
-                        report.failedAccounts.append(account.id)
-                        break   // the cursor stays before it: retried next cycle
+                    if let cached = prefetched[summary.id] {
+                        full = cached
+                    } else {
+                        fetches += 1
+                        do {
+                            full = try await provider.fetchMessage(id: summary.id)
+                        } catch {
+                            if Task.isCancelled { break accountLoop }
+                            Log.error("follow: could not read a message of \(account.id): \(error)")
+                            report.failedAccounts.append(account.id)
+                            break   // the cursor stays before it: retried next cycle
+                        }
                     }
                     do {
                         let added = try addMailMessages([full], account: account, threadKey: key, projectSlug: nil, routeIfUnassigned: false)
@@ -206,7 +238,8 @@ public extension BrainEngine {
                         linkThread(key, account: account, providerThreadId: summary.threadId,
                                    owned: added.map { ($0.id, isFromOwner) })
                     } catch EngineError.emptyEmail, EngineError.duplicateEmail {
-                        // Nothing to add, now or later.
+                        // Nothing to add, now or later (an Outlook message moved to another folder comes back with a new
+                        // id: it is the stored one, §17.5).
                     } catch EngineError.threadNotFound {
                         followed[summary.threadId] = nil   // the thread was deleted meanwhile: not followed any more
                         Log.info("follow: thread \(key) is gone")
@@ -214,22 +247,29 @@ public extension BrainEngine {
                         Log.error("follow: could not add a message of \(account.id): \(error)")
                         break   // the cursor stays before it: retried next cycle
                     }
-                    cursor = summary.date
+                    advance(summary.date)
                     continue
                 }
                 // Rules (§14.5): only mail not older than the oldest auto rule.
                 guard !autoRules.isEmpty, summary.date >= ruleStart else {
-                    cursor = summary.date
+                    advance(summary.date)
+                    continue
+                }
+                // The rules' cap: the rest waits for the next cycle (followed threads go on).
+                guard budget > 0 else {
+                    report.reachedCap = true
+                    cursorFrozen = true
                     continue
                 }
                 let quick = routing.match(.mail(summary, ownerEmails: owners))
                 if quick?.rule.autoAddMail != true, !needsFull {
-                    cursor = summary.date
+                    advance(summary.date)
                     continue
                 }
                 guard fetches < maxFetches else {
                     report.reachedCap = true
-                    break
+                    cursorFrozen = true
+                    continue
                 }
                 fetches += 1
                 let full: MailMessageFull
@@ -243,7 +283,7 @@ public extension BrainEngine {
                 }
                 let parsed = MailImport.parsedEmail(full, account: account, ownerEmails: owners, language: config.uiLanguage)
                 guard let decision = routing.match(.mail(parsed, ownerEmails: owners)), decision.rule.autoAddMail, decides(decision) else {
-                    cursor = summary.date
+                    advance(summary.date)
                     continue
                 }
                 // A conversation already in the brain is continued (and keeps its project, §14.2 step 2). Its earlier
@@ -275,7 +315,7 @@ public extension BrainEngine {
                     Log.error("auto-add: could not add a message of \(account.id): \(error)")
                     break   // the cursor stays before it: retried next cycle
                 }
-                cursor = summary.date
+                advance(summary.date)
             }
             if let cursor, cursor > (routing.settings.mailSyncCursors[account.id] ?? .distantPast) {
                 do { try routing.setMailSyncCursor(cursor, for: account.id) } catch { Log.error("auto-add: cursor not saved: \(error)") }
@@ -300,15 +340,15 @@ extension BrainEngine {
     func followIndex(_ threads: [ThreadInfo], account: ConnectedAccount) -> [String: String] {
         var out: [String: String] = [:]
         for thread in threads {
-            guard let id = thread.providerThreadIds[account.id], !id.isEmpty, out[id] == nil else { continue }
-            out[id] = thread.key
+            for id in thread.providerThreadIdList(account: account.id) where out[id] == nil { out[id] = thread.key }
         }
         return out
     }
 
     /// Saved threads of an older version know their messages (`externalId`) but not the provider's thread id: ask the
     /// provider for their newest message of this provider, once per thread and run of the app, `limit` per cycle; the
-    /// id found is written to `_thread.json`. Threads that already have an id for any account are left alone.
+    /// id found is written to `_thread.json`. Threads that already have an id for any account are left alone. A fetch
+    /// that fails (network, expired session) is tried again next cycle.
     func migrateFollowIndex(_ threads: [ThreadInfo], account: ConnectedAccount, provider: MailCalendarProvider,
                             limit: inout Int) async -> [String: String] {
         let prefix = account.provider.rawValue + ":"
@@ -317,15 +357,41 @@ extension BrainEngine {
             guard let message = thread.messages.last(where: { $0.externalId?.hasPrefix(prefix) == true }),
                   let externalId = message.externalId else { continue }
             let tried = "\(vault.root.path)|\(account.id)|\(thread.key)"
-            guard threadFollowMigrationTried.insert(tried).inserted else { continue }
+            guard !threadFollowMigrationTried.contains(tried) else { continue }
             limit -= 1
-            guard let full = try? await provider.fetchMessage(id: String(externalId.dropFirst(prefix.count))) else { continue }
+            let full: MailMessageFull
+            do {
+                full = try await provider.fetchMessage(id: String(externalId.dropFirst(prefix.count)))
+            } catch {
+                Log.info("follow: thread \(thread.key) not linked yet (\(error)); retried next cycle")
+                continue
+            }
+            threadFollowMigrationTried.insert(tried)
             let threadId = full.summary.threadId
             guard !threadId.isEmpty else { continue }
             out[threadId] = thread.key
             linkThread(thread.key, account: account, providerThreadId: threadId)
         }
         return out
+    }
+
+    /// The messages of the provider conversation `threadId` that are not in the brain, sent after `after` (and before
+    /// `before`, when given), oldest first: replies the cursor-based listing can no longer show. One fetch; best effort.
+    func conversationCatchUp(threadId: String, account: ConnectedAccount, provider: MailCalendarProvider, after: Date,
+                             before: Date? = nil, fetches: inout Int) async -> [MailMessageFull] {
+        guard !threadId.isEmpty else { return [] }
+        fetches += 1
+        guard let list = try? await provider.fetchThread(id: threadId) else { return [] }
+        return list.filter { m in
+            m.summary.date > after && (before.map { m.summary.date < $0 } ?? true)
+                && emailSource(externalId: MailImport.externalId(account: account, messageId: m.summary.id)) == nil
+        }
+        .map { m in
+            var m = m
+            if m.summary.threadId.isEmpty { m.summary.threadId = threadId }
+            return m
+        }
+        .sorted { $0.summary.date < $1.summary.date }
     }
 
     /// Records in `_thread.json` that the account's provider thread `providerThreadId` is this thread (§17.4), and marks
@@ -336,13 +402,8 @@ extension BrainEngine {
               let folder = vault.threadFolders().first(where: { ($0 as NSString).lastPathComponent == key }) else { return }
         let dir = vault.url(for: folder)
         guard var meta = ThreadMeta.load(from: dir) else { return }
-        var changed = false
-        if meta.providerThreadIds?[account.id] != providerThreadId {
-            var ids = meta.providerThreadIds ?? [:]
-            ids[account.id] = providerThreadId
-            meta.providerThreadIds = ids
-            changed = true
-        }
+        // A second conversation saved into the thread keeps the first one followed too.
+        var changed = meta.recordProviderThread(providerThreadId, account: account.id)
         for (sourceId, isFromOwner) in owned {
             guard let i = meta.messages.firstIndex(where: { $0.sourceId == sourceId }), meta.messages[i].isFromOwner != isFromOwner else { continue }
             meta.messages[i].isFromOwner = isFromOwner

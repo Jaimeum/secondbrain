@@ -23,10 +23,37 @@ struct ThreadMeta: Codable, Equatable {
     // v0.7 (§17.4): account id ("microsoft:ana@x.com") → provider conversation/thread id. Mail of that account with
     // that id always joins this thread.
     var providerThreadIds: [String: String]? = nil
+    // v0.7: other conversations of the same account that were saved into this thread before (a reply from another
+    // client or an edited subject starts a new provider conversation): still followed, newest last.
+    var earlierProviderThreadIds: [String: [String]]? = nil
     // v0.7 (§17.1): saved attachments (`message` = the email file it came with).
     var attachments: [ThreadAttachment]? = nil
 
     static let fileName = "_thread.json"
+
+    /// Records that the account's provider conversation `id` lives in this thread (§17.4). A different id the account
+    /// had here is kept in `earlierProviderThreadIds`, so both conversations keep joining this thread (§17.5). Returns
+    /// whether anything changed.
+    @discardableResult
+    mutating func recordProviderThread(_ id: String, account: String) -> Bool {
+        guard !id.isEmpty else { return false }
+        var ids = providerThreadIds ?? [:]
+        guard ids[account] != id else { return false }
+        var earlier = earlierProviderThreadIds ?? [:]
+        var list = earlier[account] ?? []
+        if let old = ids[account], !old.isEmpty, !list.contains(old) { list.append(old) }
+        list.removeAll { $0 == id }
+        earlier[account] = list.isEmpty ? nil : list
+        earlierProviderThreadIds = earlier.isEmpty ? nil : earlier
+        ids[account] = id
+        providerThreadIds = ids
+        return true
+    }
+
+    /// Every provider conversation id of `account` that lives in this thread (current first).
+    func providerThreadIdList(account: String) -> [String] {
+        ([providerThreadIds?[account]].compactMap { $0 } + (earlierProviderThreadIds?[account] ?? []).reversed()).filter { !$0.isEmpty }
+    }
 
     static func load(from dir: URL) -> ThreadMeta? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return nil }
@@ -212,11 +239,19 @@ public extension BrainEngine {
         }
         // A provider message is identified by its externalId: the body heuristic (for pasted copies) only compares it
         // with messages that have none, and never on an empty body (two plain forwards in the same minute differ).
+        // Outlook is the exception: a Graph message id changes when the message moves to another folder, so an Outlook
+        // message is also the same as a stored Outlook one with the same sender, minute and body.
         if externalId != nil, email.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
         let hash = EmailParser.bodyFingerprint(email.body)
+        let outlook = "\(AccountProvider.microsoft.rawValue):"
+        func comparable(_ stored: String?) -> Bool {
+            guard let externalId else { return true }
+            guard let stored else { return true }
+            return externalId.hasPrefix(outlook) && stored.hasPrefix(outlook)
+        }
         for folder in vault.threadFolders() {
             guard let meta = vault.threadMeta(at: folder) else { continue }
-            for m in meta.messages where (externalId == nil || m.externalId == nil) && m.bodyHash == hash
+            for m in meta.messages where comparable(m.externalId) && m.bodyHash == hash
                 && Self.sameSender(m.from, email.from) && Self.sameMinute(m.date, email.date) {
                 return sources.first { $0.id == m.sourceId } ?? SourceRecord(id: m.sourceId ?? m.file, kind: .email, title: meta.subject,
                                                                             projectSlug: VaultStore.projectSlug(of: folder), status: .done,
@@ -327,7 +362,7 @@ public extension BrainEngine {
                                    webLink: email.webLink ?? origin?.webLink, isFromOwner: email.isFromOwner))
         // v0.7 (§17.4): this provider conversation now lives here; later mail of it always joins this thread.
         if let origin, let pid = origin.providerThreadId, !pid.isEmpty {
-            meta.providerThreadIds = (meta.providerThreadIds ?? [:]).merging([origin.accountId: pid]) { _, new in new }
+            meta.recordProviderThread(pid, account: origin.accountId)
         }
         meta.messages.sort { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }
         try meta.save(to: dir)

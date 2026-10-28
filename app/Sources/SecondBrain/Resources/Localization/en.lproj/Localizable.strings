@@ -1433,3 +1433,14 @@
 "page.openHelp" = "Open where it lives";
 "entity.edit" = "Edit";
 "entity.editHelp" = "Fix this page by hand";
+
+/* v0.6 search — ⌘K full text, groups, actions */
+"search.group.orgs" = "Companies";
+"search.group.topics" = "Topics";
+"search.group.decisions" = "Decisions";
+"search.group.questions" = "Saved questions";
+"search.group.repos" = "Repos";
+"search.more" = "Show %ld more";
+"search.action.addFile" = "Add file";
+"search.action.pasteLink" = "Paste link";
+"search.action.facts" = "Confirmed facts";

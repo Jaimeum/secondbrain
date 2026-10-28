@@ -19,11 +19,14 @@ struct ProjectSummaryView: View {
     private var overview: String? { snapshot.overviewPath(ofProject: slug) }
 
     var body: some View {
-        GeometryReader { geo in
-            HStack(spacing: 0) {
-                brief.frame(maxWidth: .infinity, maxHeight: .infinity)
-                Rectangle().fill(Brand.color.line).frame(width: 1)
-                sideColumn.frame(width: Self.sideWidth(for: geo.size.width))
+        VStack(spacing: 0) {
+            ProjectDropBox(project: project)   // v0.7 (§17.3): "Agregar al proyecto", at the top
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    brief.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Rectangle().fill(Brand.color.line).frame(width: 1)
+                    sideColumn.frame(width: Self.sideWidth(for: geo.size.width))
+                }
             }
         }
         .background(Brand.color.surface)

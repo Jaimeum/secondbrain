@@ -255,9 +255,9 @@ final class SearchIndex {
             let key = ((raw as NSString).lastPathComponent as NSString).deletingPathExtension
             let path: String
             switch source.kind {
-            case .meeting: path = "projects/\(slug)/wiki/meetings/\(key).md"
+            case .meeting, .inPerson: path = "projects/\(slug)/wiki/meetings/\(key).md"
             case .email: path = "projects/\(slug)/wiki/emails/\(source.threadKey ?? key).md"
-            case .note, .document, .url: path = "projects/\(slug)/wiki/sources/\(key).md"
+            case .note, .document, .url, .image: path = "projects/\(slug)/wiki/sources/\(key).md"
             case .github: return nil
             }
             return pageByPath[path.lowercased()]
@@ -282,7 +282,9 @@ final class SearchIndex {
             switch source.kind {
             case .meeting:
                 out.append(sourceItem(source, group: .meetings, symbol: "waveform"))
-            case .note, .document, .url:
+            case .inPerson:   // v0.7 (§17.3)
+                out.append(sourceItem(source, group: .meetings, symbol: source.kind.symbol))
+            case .note, .document, .url, .image:   // v0.7: images join notes until files adds its Archivos group
                 out.append(sourceItem(source, group: .notes, symbol: source.kind.symbol))
             case .email:
                 let key = source.threadKey ?? source.id

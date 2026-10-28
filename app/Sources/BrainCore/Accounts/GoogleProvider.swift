@@ -41,6 +41,15 @@ public final class GoogleProvider: MailCalendarProvider {
         return try await GmailParser.thread(try await api.get(url), account: account)
     }
 
+    // MARK: v0.7 attachments (§17.1) — v0.7: filled in by attach. Gmail parts with `filename`/`attachmentId` → `users/me/messages/{id}/attachments/{aid}`.
+    public func listAttachments(messageId: String) async throws -> [AttachmentInfo] {
+        throw AttachmentError.notImplemented
+    }
+
+    public func downloadAttachment(messageId: String, id: String) async throws -> Data {
+        throw AttachmentError.notImplemented
+    }
+
     public func events(from: Date, to: Date) async throws -> [CalendarEvent] {
         var all: [CalendarEvent] = []
         var token: String?

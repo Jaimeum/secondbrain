@@ -11,12 +11,20 @@ struct ThreadMeta: Codable, Equatable {
         var added: Date?
         /// v0.3: `"<provider>:<messageId>"` when it came from a connected account.
         var externalId: String? = nil
+        // v0.7 (§17.4/§17.7): the provider's link to open it ("Abrir en Outlook/Gmail") and whether the owner sent it.
+        var webLink: String? = nil
+        var isFromOwner: Bool? = nil
     }
     var key: String
     var subject: String
     var participants: [EmailAddress]
     var messages: [Message]
     var createdAt: Date
+    // v0.7 (§17.4): account id ("microsoft:ana@x.com") → provider conversation/thread id. Mail of that account with
+    // that id always joins this thread.
+    var providerThreadIds: [String: String]? = nil
+    // v0.7 (§17.1): saved attachments (`message` = the email file it came with).
+    var attachments: [ThreadAttachment]? = nil
 
     static let fileName = "_thread.json"
 

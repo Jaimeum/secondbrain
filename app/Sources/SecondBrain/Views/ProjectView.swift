@@ -2,14 +2,15 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// A project's tabs (CONTRACT §16.2): Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas.
+/// A project's tabs (CONTRACT §16.2, §17.2): Resumen · Contenido · Archivos · Preguntar · Grafo · Pendientes · Personas.
 enum ProjectTab: Hashable, CaseIterable {
-    case summary, content, ask, graph, tasks, people
+    case summary, content, files, ask, graph, tasks, people
 
     var title: String {
         switch self {
         case .summary: L("project.tab.summary")
         case .content: L("tabs.content")
+        case .files: L("sidebar.files")
         case .ask: L("tab.ask")
         case .graph: L("tab.graph")
         case .tasks: L("tab.tasks")
@@ -21,6 +22,7 @@ enum ProjectTab: Hashable, CaseIterable {
         switch self {
         case .summary: "text.alignleft"
         case .content: "doc.text"
+        case .files: "doc.on.doc"
         case .ask: "bubble.left.and.text.bubble.right"
         case .graph: "point.3.connected.trianglepath.dotted"
         case .tasks: "checklist"
@@ -118,6 +120,8 @@ struct ProjectView: View {
             GraphView(scope: scope, focus: graphFocus, onOpen: openPage)
         case .people:
             ProjectPeopleView(project: project, onOpen: openPage)
+        case .files:
+            FilesView(scope: scope)
         }
     }
 

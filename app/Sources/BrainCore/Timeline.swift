@@ -55,9 +55,9 @@ struct TimelineBuilder {
     private func entry(for src: SourceRecord) -> TimelineEntry {
         let kind: TimelineKind
         switch src.kind {
-        case .meeting: kind = .meeting
+        case .meeting, .inPerson: kind = .meeting   // v0.7 (§17.3): shown as a meeting
         case .email: kind = .email
-        case .document: kind = .document
+        case .document, .image: kind = .document
         case .note: kind = .note
         case .url: kind = .url
         case .github: kind = .document   // MARK: v0.4 github (filtered out above; kept exhaustive)

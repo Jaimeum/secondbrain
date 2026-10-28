@@ -44,6 +44,15 @@ public final class MicrosoftGraphProvider: MailCalendarProvider {
         return try await GraphParser.thread(data)
     }
 
+    // MARK: v0.7 attachments (§17.1) — v0.7: filled in by attach. Graph `/me/messages/{id}/attachments` (fileAttachment only; item/reference listed as not downloadable).
+    public func listAttachments(messageId: String) async throws -> [AttachmentInfo] {
+        throw AttachmentError.notImplemented
+    }
+
+    public func downloadAttachment(messageId: String, id: String) async throws -> Data {
+        throw AttachmentError.notImplemented
+    }
+
     public func events(from: Date, to: Date) async throws -> [CalendarEvent] {
         var url: URL? = Self.calendarURL(from: from, to: to)
         var all: [CalendarEvent] = []

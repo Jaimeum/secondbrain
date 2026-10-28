@@ -63,9 +63,9 @@ extension BrainEngine {
         let key = ((raw as NSString).lastPathComponent as NSString).deletingPathExtension
         let candidate: String
         switch src.kind {
-        case .meeting: candidate = "projects/\(slug)/wiki/meetings/\(key).md"
+        case .meeting, .inPerson: candidate = "projects/\(slug)/wiki/meetings/\(key).md"   // v0.7: dump refines inPerson
         case .email: candidate = "projects/\(slug)/wiki/emails/\(src.threadKey ?? key).md"
-        case .document, .note, .url: candidate = "projects/\(slug)/wiki/sources/\(key).md"
+        case .document, .note, .url, .image: candidate = "projects/\(slug)/wiki/sources/\(key).md"
         case .github:   // MARK: v0.4 github — raw/github/<owner>-<repo>/… → the repo's living page
             let repoSlug = ((raw as NSString).deletingLastPathComponent as NSString).lastPathComponent
             candidate = "projects/\(slug)/wiki/repos/\(repoSlug).md"

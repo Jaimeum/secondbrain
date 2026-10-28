@@ -40,6 +40,9 @@ struct EntityView: View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
+            if let threadKey = ThreadConversationView.threadKey(forPage: path) {   // v0.7 (§17.4)
+                ThreadConversationView(threadKey: threadKey, scope: scope)
+            }
             WikiWebView(vault: state.engine.vault, path: path, hideType: true, showsChrome: false,
                         appendix: loaded ? EntityMarkdown.sections(
                             EntityMarkdown.withoutDuplicates(snapshot.sections(for: path, projectSlug: filterSlug),

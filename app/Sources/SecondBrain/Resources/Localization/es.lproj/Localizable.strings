@@ -1601,3 +1601,14 @@
 "record.intro.needsPermission" = "Falta el permiso de audio de la computadora.";
 "record.intro.restartHint" = "¿Ya lo activaste en Ajustes del Sistema y aquí no aparece? macOS necesita que reabras secondbrain. Si ya estaba activado de antes, usa «Reparar permiso».";
 "record.intro.modelsHint" = "Puedes grabar ya: la descarga sigue en segundo plano y transcribo en cuanto termine.";
+
+/* v0.7 foundation */
+"sidebar.files" = "Archivos";
+"kind.image" = "Imagen";
+"kind.inPerson" = "Reunión presencial";
+"files.empty.title" = "Aquí estarán tus archivos";
+"files.empty.message" = "Los documentos, imágenes y adjuntos de correo que guardes aparecerán aquí para encontrarlos rápido.";
+"original.outlook" = "Abrir en Outlook";
+"original.gmail" = "Abrir en Gmail";
+"original.outlookCalendar" = "Abrir en Outlook Calendar";
+"original.googleCalendar" = "Abrir en Google Calendar";

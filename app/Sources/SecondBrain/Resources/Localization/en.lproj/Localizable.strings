@@ -1601,3 +1601,14 @@
 "record.intro.needsPermission" = "The computer audio permission is still missing.";
 "record.intro.restartHint" = "Already turned it on in System Settings and it doesn't show here? macOS needs you to reopen secondbrain. If it was already on from before, use “Fix permission”.";
 "record.intro.modelsHint" = "You can record right away: the download keeps going in the background and I transcribe as soon as it finishes.";
+
+/* v0.7 foundation */
+"sidebar.files" = "Files";
+"kind.image" = "Image";
+"kind.inPerson" = "In-person meeting";
+"files.empty.title" = "Your files will be here";
+"files.empty.message" = "The documents, images and email attachments you save will show up here, easy to find.";
+"original.outlook" = "Open in Outlook";
+"original.gmail" = "Open in Gmail";
+"original.outlookCalendar" = "Open in Outlook Calendar";
+"original.googleCalendar" = "Open in Google Calendar";

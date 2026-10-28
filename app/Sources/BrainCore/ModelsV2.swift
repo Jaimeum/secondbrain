@@ -62,10 +62,10 @@ public enum TemplateScope: String, Codable, Sendable, CaseIterable {
     /// The scope a source of this kind is formatted with (links read like documents); nil for repo syncs.
     public init?(kind: SourceKind) {
         switch kind {
-        case .meeting: self = .meeting
+        case .meeting, .inPerson: self = .meeting   // v0.7 (§17.3): in-person meetings read like meetings
         case .email: self = .email
         case .note: self = .note
-        case .document, .url: self = .document
+        case .document, .url, .image: self = .document
         case .github: return nil
         }
     }

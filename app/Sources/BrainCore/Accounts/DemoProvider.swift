@@ -56,6 +56,15 @@ public final class DemoProvider: MailCalendarProvider {
         messages.filter { $0.summary.threadId == id }.sorted { $0.summary.date < $1.summary.date }
     }
 
+    // MARK: v0.7 attachments (§17.1) — v0.7: filled in by attach. synthetic: a contract PDF and a 4 KB logo PNG.
+    public func listAttachments(messageId: String) async throws -> [AttachmentInfo] {
+        throw AttachmentError.notImplemented
+    }
+
+    public func downloadAttachment(messageId: String, id: String) async throws -> Data {
+        throw AttachmentError.notImplemented
+    }
+
     public func events(from: Date, to: Date) async throws -> [CalendarEvent] {
         calendar.filter { $0.end > from && $0.start < to }
     }

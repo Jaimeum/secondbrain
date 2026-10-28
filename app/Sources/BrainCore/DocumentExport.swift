@@ -109,6 +109,8 @@ extension BrainEngine {
         switch src.kind {
         case .meeting:
             parts.append("**\(lang.t("Reunión", "Meeting")):** \(h(when))")
+        case .inPerson:   // v0.7 (§17.3)
+            parts.append("**\(lang.t("Reunión presencial", "In-person meeting")):** \(h(when, !dateOnly))")
             if let d = src.durationSeconds, d > 0 { parts.append("**\(lang.t("Duración", "Duration")):** \(max(1, Int((d / 60).rounded()))) min") }
         case .email:
             let list = thread ?? [src]
@@ -120,6 +122,7 @@ extension BrainEngine {
                 parts.append("**\(lang.t("Correo enviado", "Email sent")):** \(h(when))")
             }
         case .document: parts.append("**\(lang.t("Fecha del documento", "Document date")):** \(h(when, !dateOnly))")
+        case .image: parts.append("**\(lang.t("Fecha de la imagen", "Image date")):** \(h(when, !dateOnly))")   // v0.7 (§17.1)
         case .note: parts.append("**\(lang.t("Fecha", "Date")):** \(h(when, !dateOnly))")
         case .url: parts.append("**\(lang.t("Fecha de la página", "Page date")):** \(h(when, !dateOnly))")
         case .github: parts.append("**\(lang.t("Sincronizado de GitHub", "Synced from GitHub")):** \(h(when))")   // MARK: v0.4 github

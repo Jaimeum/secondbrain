@@ -93,6 +93,8 @@ struct MainView: View {
             TasksView(scope: .brain)
         case .people:
             PeopleView()
+        case .files:
+            FilesView(scope: .brain)
         case .mail:
             MailView()
         case .meetings:

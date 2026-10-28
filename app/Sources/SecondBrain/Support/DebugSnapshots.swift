@@ -307,11 +307,11 @@ enum DebugSnapshots {
     private static func renderWindows(state: AppState, dir: URL) async {
         var items: [(name: String, item: SidebarItem, tab: ProjectTab?)] = [
             ("home", .home, nil), ("ask", .ask, nil), ("graph", .graph, nil), ("tasks", .tasks, nil),
-            ("people", .people, nil), ("mail", .mail, nil), ("meetings", .meetings, nil), ("unassigned", .unassigned, nil),
+            ("people", .people, nil), ("files", .files, nil), ("mail", .mail, nil), ("meetings", .meetings, nil), ("unassigned", .unassigned, nil),
         ]
         if let project = state.projects.first {
             items.append(("project", .project(project.slug), nil))
-            let tabs: [(String, ProjectTab)] = [("summary", .summary), ("content", .content), ("ask", .ask), ("graph", .graph),
+            let tabs: [(String, ProjectTab)] = [("summary", .summary), ("content", .content), ("files", .files), ("ask", .ask), ("graph", .graph),
                                                 ("tasks", .tasks), ("people", .people)]
             for (tabName, tab) in tabs { items.append(("project-\(tabName)", .project(project.slug), tab)) }
             items.append(("project-ask-thread", .project(project.slug), .ask))   // MARK: v0.6 ask — list + inspector

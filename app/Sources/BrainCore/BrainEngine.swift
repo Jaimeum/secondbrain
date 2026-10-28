@@ -1102,8 +1102,9 @@ private final class ConfigBox: @unchecked Sendable {
         let sub: String
         switch kind {
         case .meeting: sub = "meetings"
-        case .note: sub = "notes"
+        case .note, .inPerson: sub = "notes"   // v0.7 (§17.3): dump text lands in raw/notes
         case .document, .url: sub = "docs"
+        case .image: sub = "assets"            // v0.7 (§17.1/§17.3)
         case .email: sub = "emails"
         case .github: sub = "github"   // MARK: v0.4 github (GitHubSync writes its own <owner>-<repo>/ subfolder)
         }

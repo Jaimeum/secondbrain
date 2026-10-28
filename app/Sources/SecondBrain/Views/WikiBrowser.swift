@@ -321,6 +321,10 @@ struct WikiPagePane: View {
 
     private func iconActions(_ path: String) -> some View {
         HStack(spacing: 2) {
+            // §16.6: every wiki page can be corrected by hand where it is read.
+            if Corrections.isEditable(path) {
+                iconButton("pencil", help: L("entity.editHelp")) { state.editPage(path) }
+            }
             if let source = meetingSource(of: path) {
                 iconButton("checklist", help: L("srctasks.title")) { tasksSource = source }
             }
@@ -339,6 +343,10 @@ struct WikiPagePane: View {
 
     private func moreMenu(_ path: String) -> some View {
         Menu {
+            if Corrections.isEditable(path) {
+                Button { state.editPage(path) } label: { Label(L("entity.edit"), systemImage: "pencil") }
+                Divider()
+            }
             if let source = meetingSource(of: path) {
                 Button { tasksSource = source } label: { Label(L("srctasks.title"), systemImage: "checklist") }
             }

@@ -2,7 +2,7 @@ import BrainCore
 import SwiftUI
 
 /// A vault page read in a sheet without leaving the screen (CONTRACT §16.4): used only where there is no navigation
-/// stack (Correo, Reuniones, a task's source, Sin asignar). Links navigate inside the sheet with Atrás (⌘[); "Abrir"
+/// stack (Correo, Reuniones, the global Pendientes, Sin asignar). Links navigate inside the sheet with Atrás (⌘[); "Abrir"
 /// closes it and goes to the page's place through the router. Replaces v0.5's `VaultPageSheet` and
 /// `PagePreviewSheet`. Sized per §15.3.
 struct PageSheet: View {
@@ -57,6 +57,25 @@ struct PageSheet: View {
                 .truncationMode(.tail)
                 .help(title)
             Spacer(minLength: Brand.spacing.s)
+            // §16.6: Editar here too. The editor is presented by the main window, so this sheet closes first.
+            if Corrections.isEditable(shown) {
+                let edit = Button {
+                    let target = shown
+                    dismiss()
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        state.editPage(target)
+                    }
+                } label: {
+                    Label(L("entity.edit"), systemImage: "pencil")
+                }
+                .buttonStyle(.brandSecondary)
+                .help(L("entity.editHelp"))
+                ViewThatFits(in: .horizontal) {
+                    edit
+                    edit.labelStyle(.iconOnly)
+                }
+            }
             let open = Button {
                 let target = shown
                 dismiss()

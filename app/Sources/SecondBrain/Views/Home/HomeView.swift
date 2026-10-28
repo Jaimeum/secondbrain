@@ -22,8 +22,6 @@ struct HomeView: View {
     /// The latest timeline entries with a page (Lo último que aprendí when few sources are learned on this Mac).
     @ViewState private var timelineRecents: [TimelineEntry] = []
     @ViewState private var timelineLoaded = false
-    /// A task's meeting or email, read over Inicio (Pendientes para hoy never leaves Inicio).
-    @ViewState private var taskPreview: VaultPageItem?
     /// The task just checked in Pendientes para hoy: "Hecho · Deshacer" for `undoSeconds`.
     @ViewState private var undoTask: TaskItem?
     /// Bumped on every check, so a newer one restarts the countdown.
@@ -163,7 +161,6 @@ struct HomeView: View {
             if let task = undoTask { undoLine(task).transition(.opacity).padding(.bottom, 12) }
         }
         .animation(Brand.motion.animation(fast: true), value: undoTask?.id)
-        .sheet(item: $taskPreview) { PageSheet(path: $0.path) }
         .task(id: undoGeneration) {
             guard undoTask != nil else { return }
             try? await Task.sleep(for: .seconds(Self.undoSeconds))
@@ -267,7 +264,7 @@ struct HomeView: View {
                             if offset > 0 { HomeDivider() }
                             TaskRow(task: task, done: tasks.isDone(task), showOwner: false, showProject: true,
                                     onToggle: { toggle(task) },
-                                    onOpen: { taskPreview = VaultPageItem(path: $0) })
+                                    onOpen: openTaskSource)
                                 .frame(minHeight: 36)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 4)
@@ -413,6 +410,16 @@ struct HomeView: View {
             .navigationBarBackButtonHidden(true)
         case .timeline:
             BrainTimelineView(projectSlug: nil) { path, _ in state.open(path: path) }
+        }
+    }
+
+    /// A task's citation (§16.4, one click rule): a global page is pushed on Inicio's stack (Atrás ⌘[); a project's
+    /// page opens in its project's Contenido.
+    private func openTaskSource(_ path: String) {
+        if EntityView.pushes(path, in: .brain) {
+            if routes.last != .entity(path) { routes.append(.entity(path)) }
+        } else {
+            state.navigate(to: .entity(path, .brain))
         }
     }
 

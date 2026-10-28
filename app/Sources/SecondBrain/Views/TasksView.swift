@@ -138,6 +138,7 @@ struct TasksView: View {
     /// A source group ("thread:<key>" for an email thread, else the citation key).
     @ViewState private var sourceFilter: String?
     @ViewState private var export: ExportRequest?
+    /// A citation read in a sheet: only in the global Pendientes, which has no navigation stack (§16.4).
     @ViewState private var preview: VaultPageItem?
     @ViewState private var pickedSegment = false
     /// The task the router asked for (⌘K, a ficha, a project chip): its segment is shown, the list scrolls to it and
@@ -327,6 +328,16 @@ struct TasksView: View {
     }
 
     /// `AppState.navigate(to: .task(id))` selected this list (the sidebar's, or this project's tab).
+    /// A task's citation (§16.4): inside a project, the project's stack (Contenido or a pushed ficha); the global
+    /// Pendientes has no stack, so it reads the page in a sheet with "Abrir".
+    private func openSource(_ path: String) {
+        if scope.projectSlug != nil, let onOpenPage {
+            onOpenPage(path)
+        } else {
+            preview = VaultPageItem(path: path)
+        }
+    }
+
     private func consumePendingTask() {
         guard let id = state.pendingTaskId else { return }
         if let slug = scope.projectSlug, Scope.projectSlug(ofPath: id) != slug { return }
@@ -514,7 +525,7 @@ struct TasksView: View {
                             TaskRow(task: task, done: model.isDone(task), showOwner: segment != .mine,
                                     showProject: isAll,
                                     onToggle: { model.toggle(task, state: state) },
-                                    onOpen: { preview = VaultPageItem(path: $0) })
+                                    onOpen: openSource)
                                 .overlay {
                                     // The task the router pointed at, outlined for a moment.
                                     RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)

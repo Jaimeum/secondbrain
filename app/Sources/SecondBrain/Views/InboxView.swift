@@ -28,6 +28,7 @@ struct InboxView: View {
     /// Keeps the newest source of each email thread (others pass through), in the original order.
     static func onePerThread(_ sources: [SourceRecord]) -> [SourceRecord] {
         var newest: [String: SourceRecord] = [:]
+        let sources = sources.filter { $0.parentSourceId == nil }   // v0.7: attachments wait with their thread's row
         for source in sources {
             guard let thread = source.threadKey else { continue }
             if let current = newest[thread], current.timelineDate >= source.timelineDate { continue }

@@ -465,7 +465,7 @@ final class AppState {
         engine.sources.filter { $0.projectSlug == slug && $0.status.isInProgress }.count
     }
 
-    var inboxCount: Int { engine.sources.filter { $0.status == .needsProject }.count }
+    var inboxCount: Int { engine.sources.filter { $0.status == .needsProject && $0.parentSourceId == nil }.count }
 
     // MARK: Templates, tasks, emails (v0.2)
 

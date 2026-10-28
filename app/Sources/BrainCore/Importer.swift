@@ -50,7 +50,7 @@ enum Importer {
             } else if richText.contains(ext) {
                 body = (try? NSAttributedString(url: file, options: [:], documentAttributes: nil).string) ?? ""
             } else {
-                body = ""
+                body = DocumentText.extract(file) ?? ""   // v0.7: xlsx → CSV per sheet, pptx slides, iWork previews
             }
             if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 body = "_(Contenido en el archivo original: `\(copy.lastPathComponent)`.)_"

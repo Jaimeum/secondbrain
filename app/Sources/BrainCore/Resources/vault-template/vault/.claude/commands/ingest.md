@@ -24,6 +24,19 @@ questions, never stop halfway.
      `projects/<slug>/raw/`, stop and reply with one line explaining that the source must be
      assigned to a project first);
    - the **source key**: the filename without extension;
+   - **email attachment** (check this first): `raw/emails/<thread-key>/attachments/<message>/<file>`
+     (or a raw `raw/assets/` image) is a file that came with an email — a document or an image, not a
+     message. Source key = its filename without extension; its page is
+     `projects/<slug>/wiki/sources/<source key>.md` (CLAUDE.md §8.2, `source_type: document` or
+     `image`), dated by the email it came with (`_thread.json` lists it under `attachments`, with
+     its `message`). Read the file directly (PDF, image); for Word/Excel/PowerPoint/Pages files
+     read `<file>.txt` next to it (its text, extracted by the app; a spreadsheet comes as CSV per
+     sheet). On its page say it came by email: "Adjunto del correo de X del <date>"
+     (`[[<message key>]]`) and link the thread `[[<thread-key>]]`; on the thread page
+     `wiki/emails/<thread-key>.md` add or update a `## Adjuntos` section (before `## Fuente`) with
+     one bullet per attachment: `- 📎 [[<source key>|<file name>]] — one line` (create the
+     thread page only if it doesn't exist yet: its own ingest fills the rest). Then continue
+     with §2 as a document.
    - the kind: `raw/meetings/` → meeting, `raw/emails/<thread-key>/` → email (one message of the
      thread `<thread-key>`), `raw/docs/` → document, `raw/notes/` → note (a note or doc with
      `source_url` in its frontmatter is a url source). If the path is a thread folder instead of
@@ -101,7 +114,9 @@ Work out (internally, don't output it):
   message adds (Cronología bullet in its place by sent date, Estado actual/En breve/`status`
   reflecting the latest message by sent date, Acuerdos, Preguntas abiertas, frontmatter
   `sources`/`messages`/`last_message`/`added`/`participants`/`people`, a ✉️ line in Fuente).
-  Never re-summarize quoted history the page already has.
+  Never re-summarize quoted history the page already has. If `_thread.json` lists saved
+  `attachments` of this message whose page `wiki/sources/<file key>.md` exists, list them under
+  `## Adjuntos` (📎 links); the others add themselves when they are learned.
 - document / note / url → `projects/<slug>/wiki/sources/<source key>.md` (CLAUDE.md §8.2)
 
 Create it (or, on re-ingest, update it) following the template's structure (CLAUDE.md §11),

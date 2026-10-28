@@ -1612,3 +1612,26 @@
 "original.gmail" = "Abrir en Gmail";
 "original.outlookCalendar" = "Abrir en Outlook Calendar";
 "original.googleCalendar" = "Abrir en Google Calendar";
+
+/* v0.7 attach */
+"attach.title" = "Adjuntos";
+"attach.loading" = "Buscando los adjuntos…";
+"attach.failed" = "No pude ver los adjuntos: %@";
+"attach.state.saved" = "Guardado";
+"attach.state.discarded" = "Descartado (%@)";
+"attach.state.notSaved" = "No guardado";
+"attach.state.tooBig" = "Muy grande";
+"attach.state.notAFile" = "No es un archivo";
+"attach.save" = "Guardar";
+"attach.save.help" = "Lo guardo junto a este correo y aprendo de él.";
+"attach.saveAnyway" = "Guardar de todos modos";
+"attach.saveEmailFirst" = "Guarda el correo para poder guardar sus adjuntos.";
+"attach.saveFailed" = "No pude guardar «%@». Inténtalo de nuevo.";
+"attach.open" = "Abrir";
+"attach.reason.inlineImage" = "logo o firma";
+"attach.reason.smallImage" = "imagen pequeña";
+"attach.reason.junkName" = "imagen decorativa";
+"attach.reason.junkType" = "invitación, contacto o firma digital";
+"attach.reason.duplicate" = "ya estaba guardado";
+"attach.reason.claude" = "Claude no lo vio útil";
+"attach.reason.user" = "lo desmarcaste";

@@ -44,13 +44,23 @@ public final class MicrosoftGraphProvider: MailCalendarProvider {
         return try await GraphParser.thread(data)
     }
 
-    // MARK: v0.7 attachments (§17.1) — v0.7: filled in by attach. Graph `/me/messages/{id}/attachments` (fileAttachment only; item/reference listed as not downloadable).
+    // MARK: v0.7 attachments (§17.1) — Graph `/me/messages/{id}/attachments` (only the base fields, never the bytes);
+    // fileAttachment downloads through `/$value`; item/reference attachments are listed by name, not downloadable.
     public func listAttachments(messageId: String) async throws -> [AttachmentInfo] {
-        throw AttachmentError.notImplemented
+        try GraphParser.attachments(try await api.get(Self.attachmentsURL(messageId: messageId)))
     }
 
     public func downloadAttachment(messageId: String, id: String) async throws -> Data {
-        throw AttachmentError.notImplemented
+        try await api.get(Self.attachmentURL(messageId: messageId, id: id))
+    }
+
+    public static func attachmentsURL(messageId: String) -> URL {
+        HTTP.url(base + "/me/messages/" + pathSegment(messageId) + "/attachments",
+                 query: [("$select", "id,name,contentType,size,isInline,lastModifiedDateTime")])
+    }
+
+    public static func attachmentURL(messageId: String, id: String) -> URL {
+        URL(string: base + "/me/messages/" + pathSegment(messageId) + "/attachments/" + pathSegment(id) + "/$value")!
     }
 
     public func events(from: Date, to: Date) async throws -> [CalendarEvent] {
@@ -273,5 +283,36 @@ public enum GraphParser {
             .replacingOccurrences(of: "\u{00A0}", with: " ")
             .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+// MARK: v0.7 attachments (§17.1)
+
+extension GraphParser {
+    struct Attachment: Decodable {
+        var odataType: String?
+        var id: String
+        var name: String?
+        var contentType: String?
+        var size: Int?
+        var isInline: Bool?
+        var contentId: String?
+        enum CodingKeys: String, CodingKey { case odataType = "@odata.type", id, name, contentType, size, isInline, contentId }
+    }
+
+    /// `/me/messages/{id}/attachments` → attachments. Only `fileAttachment` is a file; an attached email
+    /// (`itemAttachment`) or a cloud link (`referenceAttachment`) is listed by name and can't be downloaded.
+    public static func attachments(_ data: Data) throws -> [AttachmentInfo] {
+        let page = try decodeJSON(Page<Attachment>.self, data, provider: .microsoft)
+        return page.value.map { a in
+            let type = a.odataType?.lowercased() ?? "#microsoft.graph.fileattachment"
+            let isFile = type.hasSuffix("fileattachment")
+            var name = a.name?.nonEmptyString ?? "adjunto"
+            if type.hasSuffix("itemattachment"), (name as NSString).pathExtension.isEmpty { name += ".eml" }
+            return AttachmentInfo(id: a.id, name: name, mimeType: a.contentType?.nonEmptyString ?? "application/octet-stream",
+                                  size: a.size ?? 0, isInline: a.isInline ?? false,
+                                  contentId: a.contentId?.nonEmptyString.map(AttachmentTriage.normalizedContentId),
+                                  isDownloadable: isFile)
+        }
     }
 }

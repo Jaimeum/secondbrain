@@ -495,7 +495,16 @@ public extension BrainEngine {
             guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
             try Frontmatter.setField("project", to: YAML.scalar(projectSlug), in: text).write(to: url, atomically: true, encoding: .utf8)
         }
-        for var src in sources where src.kind == .email && src.threadKey == key {
+        // v0.7 (§17.1): saved attachments travel with their thread (their `_thread.json` paths too).
+        if var meta = ThreadMeta.load(from: to), let list = meta.attachments, !list.isEmpty {
+            meta.attachments = list.map { a in
+                var a = a
+                if a.file.hasPrefix(folder + "/") { a.file = target + a.file.dropFirst(folder.count) }
+                return a
+            }
+            try? meta.save(to: to)
+        }
+        for var src in sources where (src.kind == .email || src.parentSourceId != nil) && src.threadKey == key {
             if let raw = src.rawPath, raw.hasPrefix(folder + "/") { src.rawPath = target + raw.dropFirst(folder.count) }
             src.projectSlug = projectSlug
             src.suggestedProject = nil
@@ -515,6 +524,15 @@ public extension BrainEngine {
         try moveThread(key, to: projectSlug)
         for member in emails(inThread: key) where !(member.status == .done && member.historyId != nil) {
             guard var src = source(member.id) else { continue }
+            removeJobs(for: src.id) { $0.status != .running }
+            src.status = .queued
+            src.error = nil
+            upsert(&src)
+            enqueue(Job(kind: .ingest, sourceId: src.id, projectSlug: projectSlug))
+        }
+        // v0.7 (§17.1): then its saved attachments, after the emails they came with.
+        for var src in sources where src.parentSourceId != nil && src.threadKey == key
+            && !(src.status == .done && src.historyId != nil) {
             removeJobs(for: src.id) { $0.status != .running }
             src.status = .queued
             src.error = nil

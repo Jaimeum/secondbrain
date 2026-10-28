@@ -14,4 +14,10 @@ updated: null
 
 ## Personas
 
+## Empresas
+
 ## Preguntas guardadas
+
+## Hechos confirmados
+
+- [[facts|Hechos confirmados por ti]]

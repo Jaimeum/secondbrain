@@ -1433,3 +1433,25 @@
 "page.openHelp" = "Abrir en su lugar";
 "entity.edit" = "Editar";
 "entity.editHelp" = "Corregir esta página a mano";
+
+/* v0.6 facts — editar, propagar, hechos confirmados */
+"editor.save" = "Guardar";
+"editor.saveHelp" = "Guardar (⌘S) y buscar otras páginas que digan lo mismo";
+"editor.notEditable" = "Las fuentes originales no se editan.";
+"editor.properties" = "Propiedades";
+"editor.propagateHint" = "Al guardar, busco otras páginas del cerebro que digan lo que corregiste y te las muestro antes de cambiarlas.";
+"corrections.title" = "Revisar cambios en el cerebro";
+"corrections.subtitle" = "Corregiste «%@»";
+"corrections.searching" = "Buscando otras páginas que digan lo mismo…";
+"corrections.searchingDetail" = "Tu cambio ya está guardado. Puedes cerrar esto: te lo muestro cuando termine.";
+"corrections.background" = "Seguir en segundo plano";
+"corrections.intro" = "Estas páginas todavía dicen lo que corregiste. Elige cuáles cambio:";
+"corrections.factsTitle" = "Lo guardo como hecho confirmado";
+"corrections.onlyThisPage" = "Solo esta página";
+"corrections.onlyThisPageHelp" = "No cambiar otras páginas; solo guardar el hecho confirmado";
+"corrections.nothing" = "No encontré otras páginas que lo dijeran.";
+"corrections.nothingDetail" = "Tu cambio quedó guardado.";
+"corrections.factSaved" = "Tu cambio quedó guardado y lo anoté en Hechos confirmados: nunca escribiré lo contrario.";
+"corrections.failed" = "No pude revisar el resto del cerebro. Tu cambio quedó guardado.";
+"corrections.retry" = "Reintentar";
+"corrections.done" = "Listo";

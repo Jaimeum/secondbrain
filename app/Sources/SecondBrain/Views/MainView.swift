@@ -48,6 +48,7 @@ struct MainView: View {
                              set: { state.editingPage = $0?.path })) { item in
             PageEditorHost(path: item.path)
         }
+        .correctionsReview()   // v0.6 facts: "Revisar cambios en el cerebro" after a save (§16.6)
         .onAppear {
             SettingsLinkOpener.opener = { openSettings() }
         }

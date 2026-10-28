@@ -140,11 +140,13 @@ enum DebugSnapshots {
                 }
             }
             shots += await RulesSnapshots.shots(state: state)   // MARK: v0.4 rules
+            shots += CorrectionsModel.snapshotShots(state: state)   // MARK: v0.6 facts — editor + "Revisar cambios"
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
             // v0.5 shell: these also render dark ("<name>-dark").
-            let darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "record-control", "record-control-plain",
+            var darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "record-control", "record-control-plain",
                                         "record-control-recording", "record-control-error", "menubar", "new-project",
                                         "content-by-date", "content-by-topic"]
+            darkToo.formUnion(CorrectionsModel.snapshotDarkNames)   // MARK: v0.6 facts
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
                 for dark in darkToo.contains(name) ? [false, true] : [false] {
                     let file = dir.appendingPathComponent(name + (dark ? "-dark" : "") + ".png")

@@ -51,7 +51,8 @@ public final class VaultStore: @unchecked Sendable {
             let fm = FileManager.default
             let rootFiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? [])
                 .filter { $0.hasSuffix(".md") && $0 != "CLAUDE.md" && $0 != "README.md" }
-            paths = rootFiles + markdownFiles(under: "people").filter { !$0.hasSuffix("/README.md") }
+            // v0.6: `orgs/` (global companies, §16.4) next to `people/`.
+            paths = rootFiles + (markdownFiles(under: "people") + markdownFiles(under: "orgs")).filter { !$0.hasSuffix("/README.md") }
         }
         func rank(_ p: String) -> Int {
             switch (p as NSString).lastPathComponent {

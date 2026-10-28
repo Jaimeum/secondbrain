@@ -21,6 +21,14 @@ Los adjuntos y los hilos de correo entran al cerebro, y todo lo que no es una re
 **Necesitas:** una Mac con Apple Silicon (M1 o más nueva) con macOS 15 Sequoia o posterior, unos 5 GB libres, conexión a internet la primera vez y una suscripción de Claude **Pro o Max**. No necesitas saber programar ni tener una API key.
 
 1. Descarga `SecondBrain-<versión>.dmg` de la página de **Releases** (sección *Assets*).
+
+   **Lo más fácil (sin el aviso de "Apple no puede verificar…"):** abre la app **Terminal**, pega esto y pulsa Enter. Toma el `.dmg` más reciente de Descargas, cierra SecondBrain si está abierta, la instala (o actualiza) en Aplicaciones y la abre. Sirve igual para actualizar; tus archivos y ajustes no se tocan.
+
+   ```sh
+   DMG=$(ls -t ~/Downloads/SecondBrain-*.dmg | head -1) && MNT=$(hdiutil attach -nobrowse "$DMG" 2>/dev/null | grep -o '/Volumes/.*' | tail -1) && { pgrep -x SecondBrain >/dev/null && osascript -e 'quit app "SecondBrain"' && sleep 2; rm -rf /Applications/SecondBrain.app && ditto "$MNT/SecondBrain.app" /Applications/SecondBrain.app && xattr -dr com.apple.quarantine /Applications/SecondBrain.app; hdiutil detach "$MNT" -quiet; open /Applications/SecondBrain.app; }
+   ```
+
+   Si lo hiciste así, salta al paso 4. Si prefieres hacerlo a mano, sigue con los pasos 2 y 3.
 2. Ábrelo y arrastra **SecondBrain** a la carpeta **Aplicaciones** (el atajo está en la misma ventana). En el Dock y en la barra de menús se llama **secondbrain**.
 3. Abre SecondBrain desde Aplicaciones. La primera vez macOS dirá que *no puede verificar* la app (no está notarizada por Apple). Pulsa **Listo**, ve a **Ajustes del Sistema → Privacidad y seguridad**, baja hasta el aviso de SecondBrain y pulsa **Abrir de todos modos** (te pedirá tu contraseña). Solo se hace una vez.
 4. Sigue la bienvenida:
@@ -29,7 +37,7 @@ Los adjuntos y los hilos de correo entran al cerebro, y todo lo que no es una re
 
 ## Si algo no funciona
 
-- **"No se puede abrir porque Apple no puede verificar…"** → Ajustes del Sistema → Privacidad y seguridad → **Abrir de todos modos** (paso 3). Clic derecho → Abrir ya no basta en macOS 15.
+- **"No se puede abrir porque Apple no puede verificar…"** → usa el comando de Terminal del paso 1, o Ajustes del Sistema → Privacidad y seguridad → **Abrir de todos modos** (paso 3). Clic derecho → Abrir ya no basta en macOS 15.
 - **No graba a los demás / la transcripción solo tiene tu voz** → Ajustes del Sistema → Privacidad y seguridad → **Grabación de pantalla y audio del sistema**: activa SecondBrain. Después **cierra y vuelve a abrir** SecondBrain (macOS lo exige).
 - **No graba tu voz** → Privacidad y seguridad → **Micrófono**: activa SecondBrain.
 - **Claude no responde / "reconecta tu cuenta"** → abre los **Ajustes** (con la ventana de secondbrain al frente: menú *secondbrain → Ajustes…*, o ⌘,) → pestaña *Cuentas* → *Cuenta de Claude* → **Reconectar Claude** e inicia sesión de nuevo. Revisa que tu suscripción Pro/Max siga activa.
@@ -165,7 +173,7 @@ scripts/release.sh <versión>          # publica en GitHub Releases
 
 **English:** secondbrain records your meetings locally (system audio + mic), transcribes them on-device, and uses your own Claude account (via Claude Code) to maintain a per-project markdown wiki.
 
-- **Install:** requires an Apple Silicon Mac on macOS 15+, ~5 GB free and a Claude Pro/Max plan. Open the `.dmg`, drag SecondBrain to Applications and open it. When macOS says it can't verify the app (not notarized), go to *System Settings → Privacy & Security* and click **Open Anyway** (*Abrir de todos modos*). Then connect Claude (browser sign-in); the *System Audio Recording* and *Microphone* permissions and the transcription model download (~3 GB, once) happen the first time you click **Record**.
+- **Install:** requires an Apple Silicon Mac on macOS 15+, ~5 GB free and a Claude Pro/Max plan. Download the `.dmg` and, to skip the "Apple could not verify…" warning, paste the Terminal command from step 1 above (it installs or updates the newest `.dmg` in Downloads and opens the app). Or open the `.dmg`, drag SecondBrain to Applications and open it; when macOS says it can't verify the app (not notarized), go to *System Settings → Privacy & Security* and click **Open Anyway** (*Abrir de todos modos*). Then connect Claude (browser sign-in); the *System Audio Recording* and *Microphone* permissions and the transcription model download (~3 GB, once) happen the first time you click **Record**.
 - **Troubleshooting:** no other voices in the transcript → enable SecondBrain under *Privacy & Security → Screen & System Audio Recording* and reopen the app; already enabled but it still can't record (after updating from 0.5.2 or earlier, the switch stays on but belongs to the old build) → **Fix permission** under *Record*, or remove secondbrain from the list with **−** and reopen it (from 0.5.3 on, permissions survive updates); Claude errors → *secondbrain → Settings… (⌘,) → Accounts → Claude account → Reconnect Claude*; a failed model download resumes with *Retry*.
 - **Files:** wiki in `~/Documents/SecondBrain` (or the folder you chose); settings, pending audio, history and models in `~/Library/Application Support/SecondBrain`; the Claude token in the Keychain (`app.secondbrain.mac`).
 - **What's new in 0.6.0:** place sets the scope (no more "This project | Whole brain" switch): the sidebar is *Home · Ask · Graph · Tasks · People*, then *Mail · Meetings · Unassigned* and your projects; a project has six tabs (*Summary · Content · Ask · Graph · Tasks · People*). Every person, company, topic or decision has an **entity page** (what we know, with its meetings, mail, decisions, tasks and related items); **⌘K** searches full text; *Ask* keeps saved conversations and can save an answer as a page. **Edit** any page and review the changes proposed on other pages: corrections become confirmed facts in `facts.md` that Claude won't contradict. **⌥⌘N** opens quick capture (note, link, email, file) from any app; recording permissions are asked the first time you record. Saved conversations are per brain; ⌥⌘N replaces Finder's "New Smart Folder" while secondbrain runs. Everything from 0.5.x is included.

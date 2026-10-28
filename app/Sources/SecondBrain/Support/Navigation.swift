@@ -127,6 +127,8 @@ extension AppState {
         searchPresented = false
         switch destination {
         case .sidebar(let item):
+            // Only a sidebar request (row, ⌘1) pops Inicio to its root; an entity routed into Inicio pushes on top.
+            if item == .home, selection == .home { homePopToken += 1 }
             select(item)
 
         case .entity(let path, let scope):
@@ -194,9 +196,9 @@ extension AppState {
         homeRoute = nil
     }
 
-    /// Selects a sidebar item; Inicio re-selected (row, ⌘1) goes back to its root.
+    /// Selects a sidebar item (never pops Inicio: `.sidebar(.home)` does that itself, so a ficha routed into Inicio
+    /// while already there is pushed on top of its stack, §16.4).
     private func select(_ item: SidebarItem) {
-        if item == .home, selection == .home { homePopToken += 1 }
         selection = item
     }
 

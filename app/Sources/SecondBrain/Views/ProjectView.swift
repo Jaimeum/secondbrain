@@ -233,8 +233,11 @@ struct ProjectView: View {
     private func consumePending() {
         guard state.selection == .project(project.slug) else { return }
         // The tab first: the page decides last (the project's overview opens Resumen, a foreign page a ficha).
+        // A requested tab is shown even when it is the current one: a ficha pushed over it would otherwise stay on
+        // top (onChange(of: tab) doesn't fire) and hide the graph focus or the highlighted task.
         if let requested = state.pendingProjectTab {
             state.pendingProjectTab = nil
+            fichas = []
             tab = requested
         }
         if let path = state.pendingPage {
@@ -244,6 +247,7 @@ struct ProjectView: View {
         if let focus = state.pendingGraphFocus {
             state.pendingGraphFocus = nil
             graphFocus = focus
+            fichas = []
             tab = .graph
         }
     }

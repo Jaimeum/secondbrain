@@ -14,6 +14,8 @@ public struct ThreadAttachment: Codable, Hashable, Sendable {
     public var sha256: String
     /// The attachment's own source (`SourceKind.document` / `.image`, `parentSourceId` = the email).
     public var sourceId: String?
+    /// v0.7: the provider's attachment id (two attachments of one email may share a name).
+    public var attachmentId: String? = nil
     public init(file: String, message: String, name: String, mime: String, size: Int, sha256: String, sourceId: String? = nil) {
         self.file = file; self.message = message; self.name = name; self.mime = mime; self.size = size
         self.sha256 = sha256; self.sourceId = sourceId

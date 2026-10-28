@@ -95,16 +95,13 @@ public enum AttachmentTriage {
         let a = attachment
         if a.size > maxAutoBytes { return .tooBig }
         let image = isImage(a)
-        // Inline and shown by the body (`cid:` reference): a logo or a signature. Without the body's references (Graph
-        // hands out the text body), the provider's inline flag decides.
-        if a.isInline, a.size < inlineJunkBytes, image || a.contentId != nil {
-            let referenced: Bool
-            if let cid = a.contentId.map(normalizedContentId), let ids = context.inlineContentIds {
-                referenced = ids.contains(cid)
-            } else {
-                referenced = context.inlineContentIds == nil || a.contentId == nil
-            }
-            if referenced { return .discard(.inlineImage) }
+        // Inline and shown by the body (`cid:` reference): a logo or a signature. Only when the reference is known
+        // (§17.1): without the body's references or the attachment's content id (Graph lists neither) the inline flag
+        // alone doesn't discard — a screenshot pasted in the body is inline too; the size and name rules below still
+        // catch the small logos.
+        if a.isInline, a.size < inlineJunkBytes, image || a.contentId != nil,
+           let cid = a.contentId.map(normalizedContentId), let ids = context.inlineContentIds, ids.contains(cid) {
+            return .discard(.inlineImage)
         }
         if image, a.size > 0, a.size < smallImageBytes { return .discard(.smallImage) }
         if image, isJunkImageName(a.name) { return .discard(.junkName) }

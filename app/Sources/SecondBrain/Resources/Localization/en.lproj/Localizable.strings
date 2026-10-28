@@ -1792,4 +1792,4 @@
 
 /* v0.7 integration */
 "attach.checklist.save" = "Save checked (%ld)";
-"attach.checklist.hint" = "I checked what looks useful. Whatever you leave unchecked stays in Discarded for 30 days.";
+"attach.checklist.hint" = "I checked what looks useful. Whatever you leave unchecked stays in your mailbox, and you can save it later.";

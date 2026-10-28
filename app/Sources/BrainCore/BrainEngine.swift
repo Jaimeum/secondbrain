@@ -140,6 +140,7 @@ private final class ConfigBox: @unchecked Sendable {
         started = true
         stopping = false
         do { try paths.ensureExist() } catch { Log.error("could not create data folders: \(error)") }
+        Self.sweepAttachmentStaging(dataRoot: paths.root)   // v0.7: files left for Claude by a quit mid-triage
         migrateVault()
         // Crash repairs (stale `running` jobs, half-done sources) belong to whoever owns the queue: another
         // live process may be running those jobs right now.

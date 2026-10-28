@@ -10,8 +10,8 @@ import Foundation
 public enum AttachmentSaveMode: Sendable, Equatable {
     /// Forward: rules, then Claude for the ambiguous ones; > 25 MB is never downloaded.
     case automatic
-    /// Backwards: exactly these attachment ids are saved (the save sheet's ticks, "Guardar", "Guardar de todos modos");
-    /// the rest of the downloadable ones go to Descartados.
+    /// Backwards: exactly these attachment ids are saved (the save sheet's ticks, "Guardar", "Guardar de todos modos").
+    /// The unticked ones are not downloaded: they stay in the mailbox, "No guardado" in the reader, to save later.
     case confirmed([String])
 }
 
@@ -80,11 +80,29 @@ public extension BrainEngine {
             discarded = discardedStore.list().filter { $0.messageSourceId == id }
         }
         let context = AttachmentTriage.Context(inlineContentIds: inlineContentIds.map(Set.init))
+        // The provider's attachment id first; then by name, each saved/discarded entry used once (two `image.png` of
+        // one email are two attachments: saving one doesn't make the other "Guardado").
+        var savedLeft = saved, discardedLeft = discarded
+        var savedFor: [String: ThreadAttachment] = [:], discardedFor: [String: DiscardedItem] = [:]
+        for a in attachments {
+            if let i = savedLeft.firstIndex(where: { $0.attachmentId == a.id }) {
+                savedFor[a.id] = savedLeft.remove(at: i)
+            } else if let i = discardedLeft.firstIndex(where: { $0.attachmentId == a.id }) {
+                discardedFor[a.id] = discardedLeft.remove(at: i)
+            }
+        }
+        for a in attachments where savedFor[a.id] == nil && discardedFor[a.id] == nil {
+            if let i = savedLeft.firstIndex(where: { $0.name == a.name }) {
+                savedFor[a.id] = savedLeft.remove(at: i)
+            } else if let i = discardedLeft.firstIndex(where: { $0.name == DiscardedStore.safeName(a.name) }) {
+                discardedFor[a.id] = discardedLeft.remove(at: i)
+            }
+        }
         var out: [String: AttachmentState] = [:]
         for a in attachments {
-            if let s = saved.first(where: { $0.name == a.name }) {
+            if let s = savedFor[a.id] {
                 out[a.id] = .saved(s)
-            } else if let d = discarded.first(where: { $0.name == DiscardedStore.safeName(a.name) }) {
+            } else if let d = discardedFor[a.id] {
                 out[a.id] = .discarded(d)
             } else if !a.isDownloadable {
                 out[a.id] = .notAFile
@@ -114,88 +132,138 @@ public extension BrainEngine {
         guard !list.isEmpty else { return report }
         let store = discardedStore
         store.expire()
+        Self.sweepAttachmentStaging(dataRoot: paths.root)
 
         let states = attachmentStates(messageSourceId: email.id, attachments: list, inlineContentIds: message.inlineContentIds)
         let context = AttachmentTriage.Context(inlineContentIds: message.inlineContentIds.map(Set.init))
         let chosen: Set<String>? = { if case .confirmed(let ids) = mode { return Set(ids) } else { return nil } }()
-        var ambiguous: [(info: AttachmentInfo, data: Data)] = []
+        let project = threadFolder(email.threadKey ?? "").flatMap(VaultStore.projectSlug(of:))
+        let duplicateDirs = [rawDir(.document, project), rawDir(.image, project)]
+        var taken: Set<String>?
+        var ambiguous: [(info: AttachmentInfo, data: Data, hash: String)] = []
 
         for info in list {
             if Task.isCancelled { break }
+            let wanted = chosen.map { $0.contains(info.id) }
+            var fromStore: DiscardedItem?
             switch states[info.id] {
             case .saved, .notAFile:
                 report.skipped.append(info)
                 continue
             case .discarded(let item):
-                // Backwards, ticking a discarded one brings it back; otherwise it stays where it is.
-                guard chosen?.contains(info.id) == true else { report.skipped.append(info); continue }
-                store.delete(id: item.id)
+                // Backwards, ticking a discarded one brings it back (its bytes are already here); otherwise it stays.
+                guard wanted == true else { report.skipped.append(info); continue }
+                fromStore = item
             default: break
             }
+            if wanted == false {
+                // Unticked in the save sheet: not downloaded; it stays in the mailbox ("No guardado").
+                report.skipped.append(info)
+                continue
+            }
             let decision = AttachmentTriage.classify(info, context: context)
-            let wanted = chosen.map { $0.contains(info.id) }
             if decision == .tooBig, wanted != true {
                 report.tooBig.append(info)
                 continue
             }
-            let data: Data
-            do {
-                data = try await provider.downloadAttachment(messageId: message.summary.id, id: info.id)
-            } catch {
-                if Task.isCancelled || error is CancellationError { break }
-                Log.error("attachments: could not download \(info.name): \(error)")
-                report.failed.append(info.name)
+            var data: Data?
+            if let item = fromStore {
+                let url = store.fileURL(of: item)
+                data = await Task.detached { try? Data(contentsOf: url) }.value
+            }
+            if data == nil {
+                do {
+                    data = try await provider.downloadAttachment(messageId: message.summary.id, id: info.id)
+                } catch {
+                    if Task.isCancelled || error is CancellationError { break }
+                    Log.error("attachments: could not download \(info.name): \(error)")
+                    report.failed.append(info.name)   // a discarded one stays in Descartados
+                    continue
+                }
+            }
+            guard let data else { continue }
+            // Hashing and the duplicate check read files: off the main thread.
+            let vault = self.vault
+            let (hash, duplicate) = await Task.detached(priority: .utility) { () -> (String, Bool) in
+                let hash = AttachmentTriage.sha256(data)
+                return (hash, Self.savedAlready(hash: hash, size: data.count, project: project, vault: vault, dirs: duplicateDirs))
+            }.value
+            if duplicate {
+                if fromStore == nil {
+                    discard(info, data: data, reason: .duplicate, email: email, into: store, report: &report)
+                } else {
+                    report.skipped.append(info)   // already saved: the discarded copy stays where it is
+                }
                 continue
             }
-            let hash = AttachmentTriage.sha256(data)
-            let project = threadFolder(email.threadKey ?? "").flatMap(VaultStore.projectSlug(of:))
-            let duplicate = isSavedAlready(hash: hash, size: data.count, project: project)
             switch (wanted, decision) {
-            case (.some(false), let d):
-                // Unticked in the save sheet: kept 30 days in Descartados, with the rules' reason when they had one.
-                var reason = DiscardReason.user
-                if case .discard(let r) = d { reason = r }
-                discard(info, data: data, reason: duplicate ? .duplicate : reason, email: email, into: store, report: &report)
-            case (_, _) where duplicate:
-                discard(info, data: data, reason: .duplicate, email: email, into: store, report: &report)
             case (.some(true), _), (nil, .keep), (nil, .tooBig):
-                save(info, data: data, hash: hash, email: email, report: &report)
+                if await save(info, data: data, hash: hash, email: email, taken: &taken, report: &report), let item = fromStore {
+                    store.delete(id: item.id)   // only once it is safely saved
+                }
             case (nil, .discard(let r)):
                 discard(info, data: data, reason: r, email: email, into: store, report: &report)
             case (nil, .ask):
-                ambiguous.append((info, data))
+                ambiguous.append((info, data, hash))
+            case (.some(false), _):
+                report.skipped.append(info)
             }
         }
 
         // Forward: Claude settles the ambiguous ones, looking at the email and the files (read-only).
         if !ambiguous.isEmpty {
             let fm = FileManager.default
-            let folder = paths.root.appendingPathComponent("attachments-pending").appendingPathComponent(UUID().uuidString)
+            let folder = paths.root.appendingPathComponent(Self.attachmentStagingFolder).appendingPathComponent(UUID().uuidString)
+            // Each candidate gets a name of its own (two `image.png` become `image.png` and `image (2).png`), so a verdict
+            // can only be about one file.
+            var names: [String] = []
+            for item in ambiguous {
+                var name = item.info.name, n = 2
+                while names.contains(name) {
+                    let ext = (item.info.name as NSString).pathExtension
+                    let stem = (item.info.name as NSString).deletingPathExtension
+                    name = ext.isEmpty ? "\(stem) (\(n))" : "\(stem) (\(n)).\(ext)"
+                    n += 1
+                }
+                names.append(name)
+            }
             var candidates: [AttachmentTriageCandidate] = []
+            var staged: [Int] = []   // index into `ambiguous` of each candidate
             do {
                 try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-                for (i, item) in ambiguous.enumerated() {
-                    let sub = folder.appendingPathComponent("\(i + 1)")
-                    try fm.createDirectory(at: sub, withIntermediateDirectories: true)
-                    let file = sub.appendingPathComponent(DiscardedStore.safeName(item.info.name))
-                    try item.data.write(to: file)
-                    candidates.append(.init(name: item.info.name, path: file.path, mime: item.info.mimeType, size: item.data.count))
-                }
             } catch {
                 Log.error("attachments: could not stage files for Claude: \(error)")
             }
+            for (i, item) in ambiguous.enumerated() {
+                let sub = folder.appendingPathComponent("\(i + 1)")
+                let file = sub.appendingPathComponent(DiscardedStore.safeName(item.info.name))
+                do {
+                    try fm.createDirectory(at: sub, withIntermediateDirectories: true)
+                    try item.data.write(to: file)
+                    candidates.append(.init(name: names[i], path: file.path, mime: item.info.mimeType, size: item.data.count))
+                    staged.append(i)
+                } catch {
+                    Log.error("attachments: could not stage \(item.info.name) for Claude (kept): \(error)")
+                }
+            }
             let triage = claudeTriage ?? defaultClaudeAttachmentTriage()
-            let verdicts = candidates.count == ambiguous.count
-                ? await triage(email.rawPath ?? "", candidates, folder) : nil
+            let verdicts = candidates.isEmpty ? nil : await triage(email.rawPath ?? "", candidates, folder)
             try? fm.removeItem(at: folder)
             if verdicts == nil { Log.info("attachments: no answer from Claude for \(ambiguous.count) file(s): kept") }
+            // By name; by position only when Claude answered every file and none of the names matches.
+            let byPosition = verdicts.map { v in
+                v.count == candidates.count && !v.contains { verdict in candidates.contains { $0.name == verdict.name } }
+            } ?? false
             for (i, item) in ambiguous.enumerated() {
-                let verdict = verdicts?.first { $0.name == item.info.name } ?? (verdicts?.indices.contains(i) == true ? verdicts?[i] : nil)
+                var verdict: AttachmentTriageVerdict?
+                if let c = staged.firstIndex(of: i), let verdicts {
+                    verdict = verdicts.first { $0.name == candidates[c].name } ?? (byPosition ? verdicts[c] : nil)
+                }
                 if let verdict, !verdict.keep {
                     let reason = verdict.reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     discard(item.info, data: item.data, reason: .claude(reason), email: email, into: store, report: &report)
                 } else {
-                    save(item.info, data: item.data, hash: AttachmentTriage.sha256(item.data), email: email, report: &report)
+                    await save(item.info, data: item.data, hash: item.hash, email: email, taken: &taken, report: &report)
                 }
             }
         }
@@ -219,24 +287,37 @@ public extension BrainEngine {
     }
 
     /// "Rescatar" (Archivos › Descartados): imports the item as if it had been saved — back into its thread when it
-    /// still exists, else as a document/image of its project. Returns the new source.
+    /// still exists, else as a document/image of its project. Returns the new source. The item leaves Descartados only
+    /// once it is imported: when the import fails it is still there to try again.
     @discardableResult
-    func rescueDiscarded(id: String) throws -> SourceRecord? {
-        guard let (item, file) = try discardedStore.rescue(id: id) else { return nil }
-        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
-        let data = try Data(contentsOf: file)
-        let info = AttachmentInfo(id: item.id, name: item.name, mimeType: item.mimeType ?? "application/octet-stream", size: data.count)
+    func rescueDiscarded(id: String) async throws -> SourceRecord? {
+        let store = discardedStore
+        guard let item = store.item(id: id) else { return nil }
+        let file = store.fileURL(of: item)
+        guard FileManager.default.fileExists(atPath: file.path) else {
+            store.delete(id: id)
+            return nil
+        }
+        let data = try await Task.detached { try Data(contentsOf: file) }.value
+        let info = AttachmentInfo(id: item.attachmentId ?? item.id, name: item.name, mimeType: item.mimeType ?? "application/octet-stream",
+                                  size: data.count)
         if let parent = item.messageSourceId.flatMap(source), parent.threadKey != nil, let raw = parent.rawPath,
            FileManager.default.fileExists(atPath: vault.url(for: raw).path) {
             var report = AttachmentSaveReport()
-            save(info, data: data, hash: AttachmentTriage.sha256(data), email: parent, report: &report)
-            if let sid = report.sourceIds.first { return source(sid) }
+            var taken: Set<String>?
+            let hash = await Task.detached { AttachmentTriage.sha256(data) }.value
+            await save(info, data: data, hash: hash, email: parent, taken: &taken, report: &report)
+            if let sid = report.sourceIds.first {
+                store.delete(id: id)
+                return source(sid)
+            }
             if !report.failed.isEmpty { throw EngineError.rawMissing(item.name) }
         }
         // No thread to go back to: a plain import into the project (or Sin asignar).
         let project = validProject(item.project)
         let kind: SourceKind = AttachmentTriage.isImage(info) ? .image : .document
         let imported = try Importer.importFile(file, into: rawDir(kind, project), project: project, title: item.name)
+        store.delete(id: id)
         var src = SourceRecord(id: imported.sourceId, kind: kind, title: imported.title, projectSlug: project, status: .queued,
                                rawPath: imported.rawURL.relativePath(from: vault.root))
         src.eventDate = imported.eventDate
@@ -267,16 +348,15 @@ public extension BrainEngine {
     }
 
     /// Same bytes already saved in the project (or Sin asignar): an attachment of any of its threads, or a file in its
-    /// `raw/docs` / `raw/assets` of the same size.
-    internal func isSavedAlready(hash: String, size: Int, project: String?) -> Bool {
+    /// `raw/docs` / `raw/assets` (`dirs`) of the same size. Reads files: call it off the main thread.
+    nonisolated static func savedAlready(hash: String, size: Int, project: String?, vault: VaultStore, dirs: [URL]) -> Bool {
         for folder in vault.threadFolders() where VaultStore.projectSlug(of: folder) == project {
             if let meta = ThreadMeta.load(from: vault.url(for: folder)), meta.attachments?.contains(where: { $0.sha256 == hash }) == true {
                 return true
             }
         }
         let fm = FileManager.default
-        for kind in [SourceKind.document, .image] {
-            let dir = rawDir(kind, project)
+        for dir in dirs {
             for name in (try? fm.contentsOfDirectory(atPath: dir.path)) ?? [] where !name.hasPrefix(".") && !name.hasSuffix(".md") {
                 let url = dir.appendingPathComponent(name)
                 guard let attrs = try? fm.attributesOfItem(atPath: url.path), (attrs[.size] as? Int) == size,
@@ -287,12 +367,32 @@ public extension BrainEngine {
         return false
     }
 
+    internal func isSavedAlready(hash: String, size: Int, project: String?) -> Bool {
+        Self.savedAlready(hash: hash, size: size, project: project, vault: vault,
+                          dirs: [rawDir(.document, project), rawDir(.image, project)])
+    }
+
+    /// Where ambiguous attachments wait while Claude looks at them (`<data>/attachments-pending/<uuid>/`).
+    nonisolated static let attachmentStagingFolder = "attachments-pending"
+
+    /// Staging folders left behind by a quit or a crash while Claude was looking (older than `age`) are deleted.
+    nonisolated static func sweepAttachmentStaging(dataRoot: URL, age: TimeInterval = 3_600, now: Date = Date()) {
+        let fm = FileManager.default
+        let dir = dataRoot.appendingPathComponent(attachmentStagingFolder)
+        for name in (try? fm.contentsOfDirectory(atPath: dir.path)) ?? [] {
+            let url = dir.appendingPathComponent(name)
+            let modified = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date ?? .distantPast
+            if now.timeIntervalSince(modified) > age { try? fm.removeItem(at: url) }
+        }
+    }
+
     private func discard(_ info: AttachmentInfo, data: Data, reason: DiscardReason, email: SourceRecord, into store: DiscardedStore,
                          report: inout AttachmentSaveReport) {
         let from = email.rawPath.flatMap { try? vault.read($0) }.flatMap { Frontmatter.field("from", in: $0) }
-        let item = DiscardedItem(name: info.name, size: data.count, mimeType: info.mimeType, from: from?.nonEmptyString,
+        var item = DiscardedItem(name: info.name, size: data.count, mimeType: info.mimeType, from: from?.nonEmptyString,
                                  threadKey: email.threadKey, messageSourceId: email.id,
                                  project: email.threadKey.flatMap(threadFolder).flatMap(VaultStore.projectSlug(of:)), reason: reason)
+        item.attachmentId = info.id
         do {
             report.discarded.append(try store.add(item, data: data))
         } catch {
@@ -301,62 +401,98 @@ public extension BrainEngine {
         }
     }
 
-    /// Writes the file next to its thread, lists it in `_thread.json` and creates its source.
-    private func save(_ info: AttachmentInfo, data: Data, hash: String, email: SourceRecord, report: inout AttachmentSaveReport) {
+    /// Writes the file next to its thread (with its text copy, off the main thread), lists it in `_thread.json` and
+    /// creates its source. `taken` = page names already used (computed once per call, off the main thread). Returns
+    /// whether it was saved.
+    @discardableResult
+    private func save(_ info: AttachmentInfo, data: Data, hash: String, email: SourceRecord, taken: inout Set<String>?,
+                      report: inout AttachmentSaveReport) async -> Bool {
         guard let key = email.threadKey, let folder = threadFolder(key), let raw = email.rawPath else {
             report.failed.append(info.name)
-            return
+            return false
         }
-        let fm = FileManager.default
         let messageFile = (raw as NSString).lastPathComponent
         let messageDir = (messageFile as NSString).deletingPathExtension
         let dirRel = "\(folder)/attachments/\(messageDir)"
         let dir = vault.url(for: dirRel)
-        let project = VaultStore.projectSlug(of: folder)
+        if taken == nil { taken = await attachmentNamesTaken() }
+        var names = taken ?? []
+        let file = uniqueAttachmentURL(in: dir, name: info.name, taken: names)
+        names.insert(Self.stem(file.path))
+        taken = names
         do {
-            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            let file = uniqueAttachmentURL(in: dir, name: info.name)
-            try data.write(to: file, options: .withoutOverwriting)
-            DocumentText.writeSidecar(for: file)
-            let rel = "\(dirRel)/\(file.lastPathComponent)"
-            let id = SessionManifest.newId()
-            let entry = ThreadAttachment(file: rel, message: messageFile, name: info.name,
-                                         mime: info.mimeType, size: data.count, sha256: hash, sourceId: id)
+            try await Task.detached(priority: .utility) {
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try data.write(to: file, options: .withoutOverwriting)
+                _ = DocumentText.writeSidecar(for: file)   // textutil / unzip: never on the main thread
+            }.value
+        } catch {
+            Log.error("attachments: could not save \(info.name) in \(dirRel): \(error)")
+            report.failed.append(info.name)
+            return false
+        }
+        // The thread may have moved (assigned to a project) while the file was written: write next to it again.
+        guard let folderNow = threadFolder(key), folderNow == folder else {
+            try? FileManager.default.removeItem(at: file)
+            try? FileManager.default.removeItem(at: DocumentText.sidecarURL(for: file))
+            report.failed.append(info.name)
+            return false
+        }
+        let project = VaultStore.projectSlug(of: folder)
+        let rel = "\(dirRel)/\(file.lastPathComponent)"
+        let id = SessionManifest.newId()
+        var entry = ThreadAttachment(file: rel, message: messageFile, name: info.name,
+                                     mime: info.mimeType, size: data.count, sha256: hash, sourceId: id)
+        entry.attachmentId = info.id
+        do {
             // Re-read right before writing: an email may have been added to the thread meanwhile.
             var meta = vault.threadMeta(at: folder) ?? ThreadMeta(key: key, subject: email.title, participants: [], messages: [],
                                                                   createdAt: Date())
             meta.attachments = (meta.attachments ?? []) + [entry]
             try meta.save(to: vault.url(for: folder))
-            var src = SourceRecord(id: id, kind: AttachmentTriage.isImage(info) ? .image : .document, title: info.name,
-                                   projectSlug: project, status: .queued, rawPath: rel)
-            src.eventDate = email.eventDate ?? email.createdAt
-            src.threadKey = key
-            src.parentSourceId = email.id
-            if project != nil {
-                enqueueAfterRaw(&src)
-            } else {
-                // Sin asignar: it waits for its thread (assigning the thread moves and queues it; no classify of its own).
-                src.status = .needsProject
-                upsert(&src)
-            }
-            report.saved.append(entry)
-            report.sourceIds.append(id)
         } catch {
-            Log.error("attachments: could not save \(info.name) in \(dirRel): \(error)")
+            Log.error("attachments: could not list \(info.name) in _thread.json of \(key): \(error)")
+            try? FileManager.default.removeItem(at: file)
+            try? FileManager.default.removeItem(at: DocumentText.sidecarURL(for: file))
             report.failed.append(info.name)
+            return false
         }
+        var src = SourceRecord(id: id, kind: AttachmentTriage.isImage(info) ? .image : .document, title: info.name,
+                               projectSlug: project, status: .queued, rawPath: rel)
+        src.eventDate = email.eventDate ?? email.createdAt
+        src.threadKey = key
+        src.parentSourceId = email.id
+        if project != nil {
+            enqueueAfterRaw(&src)
+        } else {
+            // Sin asignar: it waits for its thread (assigning the thread moves and queues it; no classify of its own).
+            src.status = .needsProject
+            upsert(&src)
+        }
+        report.saved.append(entry)
+        report.sourceIds.append(id)
+        return true
     }
 
-    /// `<dir>/<slug>.<ext>`, the slug unique among wiki page names and other attachments, so its page
-    /// `wiki/sources/<slug>.md` never collides with another one.
-    private func uniqueAttachmentURL(in dir: URL, name: String) -> URL {
+    nonisolated private static func stem(_ path: String) -> String {
+        ((path as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()
+    }
+
+    /// Page names in use (every markdown file of the vault, walked off the main thread) and the files of other
+    /// attachments and images: a saved attachment's page `wiki/sources/<slug>.md` never collides with another one.
+    private func attachmentNamesTaken() async -> Set<String> {
+        let vault = self.vault
+        var taken = await Task.detached(priority: .utility) { Set(vault.allMarkdown().map(Self.stem)) }.value
+        for src in sources where src.parentSourceId != nil || src.kind == .image { if let r = src.rawPath { taken.insert(Self.stem(r)) } }
+        return taken
+    }
+
+    /// `<dir>/<slug>.<ext>`, the slug not in `taken` nor a file of `dir`.
+    private func uniqueAttachmentURL(in dir: URL, name: String, taken: Set<String>) -> URL {
         let safe = DiscardedStore.safeName(name)
         let ext = (safe as NSString).pathExtension.lowercased()
         var base = slugify((safe as NSString).deletingPathExtension, maxLength: 60)
         if base.isEmpty { base = "adjunto" }
-        func stem(_ path: String) -> String { ((path as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased() }
-        var taken = Set(vault.allMarkdown().map(stem))
-        for src in sources where src.parentSourceId != nil || src.kind == .image { if let r = src.rawPath { taken.insert(stem(r)) } }
         var candidate = base, n = 2
         let fm = FileManager.default
         while taken.contains(candidate) || fm.fileExists(atPath: dir.appendingPathComponent(ext.isEmpty ? candidate : "\(candidate).\(ext)").path) {

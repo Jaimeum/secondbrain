@@ -40,7 +40,10 @@ struct AttachmentsSelfTestCmd: AsyncParsableCommand {
     let ctx = T.Context(inlineContentIds: ["image001.png@01db"])
     let logo = AttachmentInfo(id: "1", name: "image001.png", mimeType: "image/png", size: 4_000, isInline: true, contentId: "<IMAGE001.png@01DB>")
     t.eq(T.classify(logo, context: ctx), .discard(.inlineImage), "inline logo referenced by the body → discard")
-    t.eq(T.classify(logo), .discard(.inlineImage), "inline logo, body unknown (Graph) → discard")
+    t.eq(T.classify(logo), .discard(.smallImage), "inline logo, body unknown (Graph) → the size/name rules discard it")
+    let pasted = AttachmentInfo(id: "9", name: "captura.png", mimeType: "image/png", size: 70_000, isInline: true)
+    t.eq(T.classify(pasted), .ask, "inline 70 KB screenshot, reference unknown (Graph) → ask, not discarded")
+    t.eq(T.classify(pasted, context: ctx), .ask, "inline without content id → never 'referenced'")
     var bigInline = logo
     bigInline.size = 60_000
     bigInline.name = "foto-planta.jpg"
@@ -237,18 +240,21 @@ private final class FakeAttachProvider: MailCalendarProvider, @unchecked Sendabl
     let messages: [MailMessageFull]
     var files: [String: [(AttachmentInfo, Data)]]
     var downloads: [String] = []
+    var failDownloads = false
     init(account: ConnectedAccount, messages: [MailMessageFull], files: [String: [(AttachmentInfo, Data)]]) {
         self.account = account; self.messages = messages; self.files = files
     }
     func profile() async throws -> ConnectedAccount { account }
     func listMessages(since: Date, pageToken: String?) async throws -> (messages: [MailMessageSummary], next: String?) { (messages.map(\.summary), nil) }
     func searchMessages(_ query: String, pageToken: String?) async throws -> (messages: [MailMessageSummary], next: String?) { ([], nil) }
-    func fetchMessage(id: String) async throws -> MailMessageFull { messages.first { $0.summary.id == id }! }
+    var extra: [MailMessageFull] = []
+    func fetchMessage(id: String) async throws -> MailMessageFull { (messages + extra).first { $0.summary.id == id }! }
     func fetchThread(id: String) async throws -> [MailMessageFull] { messages.filter { $0.summary.threadId == id } }
     func events(from: Date, to: Date) async throws -> [CalendarEvent] { [] }
     func listAttachments(messageId: String) async throws -> [AttachmentInfo] { (files[messageId] ?? []).map(\.0) }
     func downloadAttachment(messageId: String, id: String) async throws -> Data {
         downloads.append("\(messageId)/\(id)")
+        if failDownloads { throw AccountError.network("offline") }
         guard let d = files[messageId]?.first(where: { $0.0.id == id })?.1 else { throw AttachmentError.notDownloadable }
         return d
     }
@@ -352,25 +358,99 @@ private final class FakeAttachProvider: MailCalendarProvider, @unchecked Sendabl
         // Backwards: "Guardar de todos modos" for the zip.
         let r5 = try await engine.saveAttachments(for: t2, account: account, mode: .confirmed(["v"]), provider: fake)
         t.eq(r5.saved.map(\.name), ["visita.zip"], "confirmed: the big one saved on request")
-        // Backwards with an unticked document: it goes to Descartados as the user's choice.
+        // Backwards with an unticked document: not downloaded, it stays in the mailbox ("No guardado").
         let t3 = msg("t3", 5, body: "Otra versión.")
         fake.files["t3"] = [(AttachmentInfo(id: "x", name: "propuesta-v3.pdf", mimeType: "application/pdf", size: 3), Data("pdf".utf8))]
         _ = try engine.addMailMessages([t3], account: account, threadKey: nil, projectSlug: acme.slug)
         let r6 = try await engine.saveAttachments(for: t3, account: account, mode: .confirmed([]), provider: fake)
-        t.eq(r6.discarded.map(\.reason), [.user], "unticked → Descartados (user)")
+        t.eq(r6.discarded.count, 0, "unticked → not discarded")
+        t.eq(r6.skipped.map(\.name), ["propuesta-v3.pdf"], "unticked → skipped")
+        t.check(!fake.downloads.contains("t3/x"), "unticked → never downloaded")
+        let states3 = engine.attachmentStates(messageSourceId: engine.emailSource(externalId: "microsoft:t3")?.id,
+                                              attachments: try await fake.listAttachments(messageId: "t3"))
+        if case .notSaved = states3["x"] { t.check(true, "unticked → No guardado") } else { t.check(false, "unticked state: \(String(describing: states3["x"]))") }
+
+        // Two attachments with the same name: Claude's verdict and the saved state are per file.
+        let t5 = msg("t5", 3, body: "Fotos de la pizarra y el banner.")
+        fake.extra.append(t5)
+        var photo2 = photo
+        photo2.append(contentsOf: [0, 1, 2])
+        fake.files["t5"] = [(AttachmentInfo(id: "i1", name: "image.png", mimeType: "image/png", size: photo.count), photo),
+                            (AttachmentInfo(id: "i2", name: "image.png", mimeType: "image/png", size: photo2.count), photo2)]
+        _ = try engine.addMailMessages([t5], account: account, threadKey: nil, projectSlug: acme.slug)
+        var seenNames: [String] = []
+        let keepFirst: AttachmentClaudeTriage = { _, candidates, _ in
+            candidates.enumerated().map { AttachmentTriageVerdict(name: $0.element.name, keep: $0.offset == 0, reason: "Banner") }
+        }
+        let r8 = try await engine.saveAttachments(for: t5, account: account, mode: .automatic, provider: fake, claudeTriage: { raw, c, f in
+            await MainActor.run { seenNames = c.map(\.name) }
+            return await keepFirst(raw, c, f)
+        })
+        t.eq(seenNames, ["image.png", "image (2).png"], "same-named candidates get names of their own")
+        t.eq(r8.saved.count, 1, "one image.png kept")
+        t.eq(r8.discarded.map(\.reason), [.claude("Banner")], "the other discarded with its own verdict")
+        let states5 = engine.attachmentStates(messageSourceId: engine.emailSource(externalId: "microsoft:t5")?.id,
+                                              attachments: try await fake.listAttachments(messageId: "t5"))
+        if case .saved = states5["i1"] { t.check(true, "first image.png: Guardado") } else { t.check(false, "i1 state") }
+        if case .discarded = states5["i2"] { t.check(true, "second image.png: Descartado, not Guardado") } else { t.check(false, "i2 state: \(String(describing: states5["i2"]))") }
+
+        // Ticking a discarded one backwards: its bytes come from Descartados (no download, works offline); it leaves
+        // Descartados only once saved. Without its bytes and offline, it stays there.
+        fake.failDownloads = true
+        let downloadsBefore = fake.downloads.count
+        guard let bannerItem = engine.discardedStore.list().first(where: { $0.attachmentId == "i2" }) else { t.check(false, "banner discarded"); return }
+        let r9 = try await engine.saveAttachments(for: t5, account: account, mode: .confirmed(["i2"]), provider: fake)
+        t.eq(r9.saved.map(\.name), ["image.png"], "ticked discarded one saved offline from Descartados")
+        t.eq(fake.downloads.count, downloadsBefore, "no download for it")
+        t.check(engine.discardedStore.item(id: bannerItem.id) == nil, "it left Descartados after saving")
+        let t6 = msg("t6", 2, body: "Otra foto.")
+        fake.extra.append(t6)
+        fake.failDownloads = false
+        fake.files["t6"] = [(AttachmentInfo(id: "q", name: "IMG_3000.jpg", mimeType: "image/jpeg", size: photo2.count), photo2 + Data([9]))]
+        _ = try engine.addMailMessages([t6], account: account, threadKey: nil, projectSlug: acme.slug)
+        _ = try await engine.saveAttachments(for: t6, account: account, mode: .automatic, provider: fake, claudeTriage: dropAll)
+        if let qItem = engine.discardedStore.list().first(where: { $0.attachmentId == "q" }) {
+            try? fm.removeItem(at: engine.discardedStore.fileURL(of: qItem))
+            fake.failDownloads = true
+            let r10 = try await engine.saveAttachments(for: t6, account: account, mode: .confirmed(["q"]), provider: fake)
+            t.eq(r10.failed, ["IMG_3000.jpg"], "offline, no local bytes → failed")
+            t.check(engine.discardedStore.item(id: qItem.id) != nil, "a failed download leaves it in Descartados")
+            fake.failDownloads = false
+            engine.deleteDiscarded(id: qItem.id)
+        } else {
+            t.check(false, "t6 photo discarded")
+        }
 
         // Descartados: rescue (back into its thread, as if saved), delete, 30-day expiry.
         let store = engine.discardedStore
         let before = store.list().count
         guard let photoItem = store.list().first(where: { $0.reason == .claude("Foto genérica") }) else { t.check(false, "photo discarded"); return }
-        let rescued = try engine.rescueDiscarded(id: photoItem.id)
+        let rescued = try await engine.rescueDiscarded(id: photoItem.id)
         t.eq(rescued?.kind, .image, "rescued as an image source")
         t.check(rescued?.rawPath?.contains("/attachments/") == true && rescued?.parentSourceId != nil, "rescued back into its thread")
         t.eq(store.list().count, before - 1, "rescued item left Descartados")
         if let r = rescued, let k = r.threadKey {
             t.check(engine.vault.threadInfo(key: k)?.attachments.contains { $0.sourceId == r.id } == true, "rescue recorded in _thread.json")
         }
-        if let userItem = store.list().first(where: { $0.reason == .user }) {
+        // A rescue that can't write the file leaves the item in Descartados (try again later).
+        if let contractItem = store.list().first(where: { $0.reason == .duplicate }), let parent = contractItem.messageSourceId.flatMap(engine.source),
+           let raw = parent.rawPath {
+            let attachDir = engine.vault.url(for: (raw as NSString).deletingLastPathComponent + "/attachments/"
+                                             + ((raw as NSString).lastPathComponent as NSString).deletingPathExtension)
+            try? fm.createDirectory(at: attachDir, withIntermediateDirectories: true)
+            try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: attachDir.path)
+            do {
+                _ = try await engine.rescueDiscarded(id: contractItem.id)
+                t.check(false, "rescue into a read-only folder must fail")
+            } catch {
+                t.check(store.item(id: contractItem.id) != nil && fm.fileExists(atPath: store.fileURL(of: contractItem).path),
+                        "failed rescue: still in Descartados with its file")
+            }
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: attachDir.path)
+        } else {
+            t.check(false, "duplicate contract discarded")
+        }
+        if let userItem = store.list().first {
             engine.deleteDiscarded(id: userItem.id)
             t.check(store.item(id: userItem.id) == nil && !fm.fileExists(atPath: store.folder(of: userItem.id).path), "Eliminar ya")
         }
@@ -378,6 +458,24 @@ private final class FakeAttachProvider: MailCalendarProvider, @unchecked Sendabl
         t.eq(store.expire(now: Date().addingTimeInterval(29 * 86_400)), 0, "nothing expires before 30 days")
         t.eq(store.expire(now: Date().addingTimeInterval(31 * 86_400)), remaining, "everything expires after 30 days")
         t.eq(store.list().count, 0, "Descartados empty")
+
+        // File names: at most 200 bytes of UTF-8 (APFS: 255), the extension kept.
+        let cjk = String(repeating: "合同", count: 60) + ".jpg"
+        let safe = DiscardedStore.safeName(cjk)
+        t.check(safe.utf8.count <= 200 && safe.hasSuffix(".jpg") && safe.hasPrefix("合同"), "long CJK name cut by bytes: \(safe.utf8.count) B")
+        t.check(DiscardedStore.safeName("a." + String(repeating: "x", count: 300)).utf8.count <= 200, "a huge 'extension' is cut too")
+        let cjkItem = try store.add(DiscardedItem(name: cjk, size: 3, reason: .user), data: Data("abc".utf8))
+        t.check(fm.fileExists(atPath: store.fileURL(of: cjkItem).path), "long CJK name stored in Descartados")
+        store.delete(id: cjkItem.id)
+
+        // Staging folders left by a quit while Claude was looking are swept (older than an hour).
+        let staging = engine.paths.root.appendingPathComponent(BrainEngine.attachmentStagingFolder)
+        let old = staging.appendingPathComponent("old"), fresh = staging.appendingPathComponent("fresh")
+        try fm.createDirectory(at: old, withIntermediateDirectories: true)
+        try fm.createDirectory(at: fresh, withIntermediateDirectories: true)
+        try fm.setAttributes([.modificationDate: Date().addingTimeInterval(-7_200)], ofItemAtPath: old.path)
+        BrainEngine.sweepAttachmentStaging(dataRoot: engine.paths.root)
+        t.check(!fm.fileExists(atPath: old.path) && fm.fileExists(atPath: fresh.path), "stale staging swept, fresh kept")
 
         // Sin asignar: attachments wait with their thread (no classify of their own) and move with it.
         let m06 = try await demo.fetchMessage(id: "demo-m06")

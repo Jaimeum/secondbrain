@@ -17,6 +17,8 @@ public struct DiscardedItem: Codable, Identifiable, Hashable, Sendable {
     public var project: String?
     public var reason: DiscardReason
     public var discardedAt: Date
+    /// The provider's attachment id (two attachments of one email may share a name).
+    public var attachmentId: String? = nil
     public init(id: String = UUID().uuidString.lowercased(), name: String, size: Int, mimeType: String? = nil,
                 from: String? = nil, threadKey: String? = nil, messageSourceId: String? = nil, project: String? = nil,
                 reason: DiscardReason, discardedAt: Date = Date()) {
@@ -130,16 +132,22 @@ public final class DiscardedStore: @unchecked Sendable {
         return try? JSONDecoder.sb.decode(DiscardedItem.self, from: data)
     }
 
-    /// A file name without path separators or a leading dot ("adjunto" when nothing is left).
-    public static func safeName(_ name: String) -> String {
+    /// A file name without path separators or a leading dot ("adjunto" when nothing is left), at most `maxBytes` bytes
+    /// of UTF-8 (APFS allows 255; CJK and emoji take 3–4 bytes a character). The extension survives the cut unless it is
+    /// too long to be one.
+    public static func safeName(_ name: String, maxBytes: Int = 200) -> String {
         var s = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: "\0", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
         while s.hasPrefix(".") { s.removeFirst() }
-        if s.count > 120 {
-            let ext = (s as NSString).pathExtension
-            let stem = String((s as NSString).deletingPathExtension.prefix(110))
+        if s.utf8.count > maxBytes {
+            var ext = (s as NSString).pathExtension
+            if ext.utf8.count > 16 { ext = "" }
+            var stem = ext.isEmpty ? s : (s as NSString).deletingPathExtension
+            let room = maxBytes - (ext.isEmpty ? 0 : ext.utf8.count + 1)
+            while stem.utf8.count > room, !stem.isEmpty { stem.removeLast() }   // whole characters: valid UTF-8
+            stem = stem.trimmingCharacters(in: .whitespaces)
             s = ext.isEmpty ? stem : "\(stem).\(ext)"
         }
-        return s.isEmpty ? "adjunto" : s
+        return s.isEmpty || s.hasPrefix(".") ? "adjunto" + s : s
     }
 }

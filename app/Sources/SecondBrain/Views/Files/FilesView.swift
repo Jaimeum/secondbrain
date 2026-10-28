@@ -301,7 +301,7 @@ struct FilesView: View {
         Task {
             defer { busy.remove(item.id) }
             do {
-                _ = try state.engine.rescueDiscarded(id: item.id)
+                _ = try await state.engine.rescueDiscarded(id: item.id)
                 state.bumpVault()
                 await model.refresh(state: state, force: true)
             } catch {

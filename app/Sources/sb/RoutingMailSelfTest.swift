@@ -124,14 +124,23 @@ import Foundation
         }
 
         report = await run()
-        let expected = contoso.count - 1 - 1   // minus the manual one and the one of the first cycle
-        t.eq(report.total, expected, "second cycle adds the rest")
+        // v0.7 (§17.5): a later message of a conversation already in the brain joins it without a rule.
+        let inSavedThread = { (m: MailMessageSummary) in contoso.contains { $0.threadId == m.threadId && $0.date < m.date } }
+        // minus the manual one, the one of the first cycle and the ones that follow a saved conversation
+        let expected = contoso.count - 1 - 1 - contoso.filter(inSavedThread).count
+        t.eq(report.sourceIds.count, expected, "second cycle adds the rest by rule")
         t.check(!report.reachedCap, "below the cap")
         let added = contoso.compactMap { engine.emailSource(externalId: ext($0.id)) }
         t.eq(added.count, contoso.count, "every contoso.com message is in the brain once")
         t.check(engine.sources.filter { $0.externalId == ext(manual.id) }.count == 1, "the manual one wasn't duplicated")
         let fromNorte = all.filter { $0.from.email?.hasSuffix("@estudionorte.mx") == true }
-        t.check(fromNorte.allSatisfy { engine.emailSource(externalId: ext($0.id)) == nil }, "a plain (non-auto) rule never adds")
+        // demo-m05 (Mariana's answer to Laura's kickoff) and Laura's reply after the owner's in the contract thread; the
+        // rest of Norte's mail waits for a rule.
+        t.eq(report.followedSourceIds.compactMap { engine.source($0)?.externalId }, all.filter(inSavedThread).sorted { $0.date < $1.date }.map { ext($0.id) },
+             "second cycle follows the saved conversations, no rule")
+        t.check(fromNorte.contains(where: inSavedThread), "demo: a Norte reply in a saved conversation")
+        t.check(fromNorte.filter { !inSavedThread($0) }.allSatisfy { engine.emailSource(externalId: ext($0.id)) == nil },
+                "a plain (non-auto) rule never adds")
         // Destination: the rule's project, except a conversation already in a project keeps it (§14.2 step 2).
         for m in contoso where m.id != manual.id {
             guard let src = engine.emailSource(externalId: ext(m.id)) else { continue }
@@ -153,13 +162,18 @@ import Foundation
         autoNorte.autoAddMail = true
         try engine.routing.remove(id: plain.id)
         try engine.routing.add(autoNorte)
-        let atCursor = fromNorte.filter { $0.date >= (newest ?? now) }.count   // the cursor's own minute is listed again
+        let pending = fromNorte.filter { !inSavedThread($0) }   // the followed one is already in
+        let atCursor = pending.filter { $0.date >= (newest ?? now) }.count   // the cursor's own minute is listed again
         report = await run()
         t.eq(report.total, atCursor, "behind the cursor: not re-scanned")
         // Forgetting the cursor (e.g. a new account) scans the window again and only adds the new rule's mail.
         try engine.routing.setMailSyncCursor(nil, for: account.id)
+        // …and, v0.7, the earlier messages of saved conversations (the contract Sofía sent before the owner's reply).
+        let storedThreads = Set(all.filter { engine.emailSource(externalId: ext($0.id)) != nil }.map(\.threadId))
+        let unsavedInSaved = all.filter { engine.emailSource(externalId: ext($0.id)) == nil && storedThreads.contains($0.threadId) }
         report = await run()
-        t.eq(report.total, fromNorte.count - atCursor, "new auto rule after a cursor reset")
+        t.eq(report.sourceIds.count, pending.count - atCursor, "new auto rule after a cursor reset")
+        t.eq(report.followedSourceIds.count, unsavedInSaved.count, "cursor reset: earlier messages of saved conversations join them")
         for m in fromNorte {
             // A reply in a conversation that is already in the brain joins it (demo-m05 answers Laura's thread in Acme).
             let stored = contoso.first { $0.threadId == m.threadId }.flatMap { engine.emailSource(externalId: ext($0.id)) }

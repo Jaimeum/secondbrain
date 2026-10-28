@@ -3,7 +3,7 @@ import Foundation
 /// Invented but believable mail and calendar (es/en) for snapshots and UX review without real accounts
 /// (`SB_DEMO_ACCOUNTS=1`, CONTRACT §12.3). Dates are relative to when the provider is created.
 ///
-/// Microsoft account (ana@contoso.com): 12 emails over the last 10 days from 5 people (two threads) and 8 events from
+/// Microsoft account (ana@contoso.com): 14 emails over the last 10 days from 5 people (three threads) and 8 events from
 /// yesterday to +7 days, one of them in progress (started 10 min ago, ends in 50 min, Teams link).
 /// Google account (demo@gmail.com): a few personal emails and two events.
 public final class DemoProvider: MailCalendarProvider {
@@ -346,6 +346,38 @@ private struct DemoData {
 
                 Diego
                 """), at: Self.ago(now, days: 0, hours: 1.5), read: false)
+        // MARK: v0.7 replies (§17.5) — the contract thread (demo-m11) goes on after it is saved: the owner's own reply
+        // (sent mail, with a promise and an answer to Sofía's request) and Laura's.
+        let d11 = Self.ago(now, days: 0, hours: 5)
+        let d13 = Self.ago(now, days: 0, hours: 3)
+        let b13 = l.t("""
+            Gracias, Sofía.
+
+            Lo reviso con Laura hoy y te confirmo antes de la llamada de mañana. Te mando los datos de facturación el viernes.
+
+            Ana
+            """, """
+            Thanks, Sofía.
+
+            I'll go over it with Laura today and confirm before tomorrow's call. I'll send you the billing details on Friday.
+
+            Ana
+            """)
+        mail(account, id: "demo-m13", thread: "demo-m11", from: me, to: [sofia], cc: [laura],
+             subject: l.t("RE: Contrato actualizado — Acme Logistics", "RE: Updated contract — Acme Logistics"),
+             body: b13 + "\n\n" + Self.quoteHeader(l, d11, sofia) + "\n" + Self.quoted(l.t("Ana, adjunto el contrato…", "Ana, attached is the contract…")),
+             at: d13)
+        mail(account, id: "demo-m14", thread: "demo-m11", from: laura, to: [me, sofia],
+             subject: l.t("RE: Contrato actualizado — Acme Logistics", "RE: Updated contract — Acme Logistics"),
+             body: l.t("""
+                Ya lo revisé: de mi lado todo bien. Solo pediría que la penalización por retraso quede en 2% y no en 5%.
+
+                Laura
+                """, """
+                I went through it: all good on my side. I'd only ask for the late-delivery penalty to be 2%, not 5%.
+
+                Laura
+                """) + "\n\n" + Self.quoteHeader(l, d13, me) + "\n" + Self.quoted(b13), at: Self.ago(now, days: 0, hours: 2.5), read: false)
 
         // Calendar (8 events: yesterday … +7 days).
         let acc = account.id

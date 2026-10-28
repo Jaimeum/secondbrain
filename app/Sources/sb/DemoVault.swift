@@ -656,6 +656,7 @@ enum DemoVault {
         if scale > 0 { try addSynthetic(root: root, projects: created, scale: scale, today: today) }
 
         let rules = try addSampleRules(root: root, projects: created, today: today)
+        try DemoFiles.add(root: root)   // v0.7 files (§17.2)
 
         return "Created \(root.path): \(created.count) projects, \(pageCount) project pages, \(people.count) people, \(orgs.count) companies, \(rules) routing rules"
             + (scale > 0 ? ", plus \(scale) synthetic meetings per project" : "")

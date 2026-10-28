@@ -23,6 +23,8 @@ struct EntityView: View {
     /// The page's own `##` headings: an automatic section Claude's page already has (its "Proyectos", "En
     /// reuniones"…) isn't repeated under it.
     @ViewState private var pageHeadings: [String] = []
+    /// v0.7 (§17.2): the files this ficha lists (Archivos section).
+    @ViewState private var files: [FileEntry] = []
 
     private var entity: Entity? { snapshot.entity(path) }
 
@@ -47,7 +49,7 @@ struct EntityView: View {
                         appendix: loaded ? EntityMarkdown.sections(
                             EntityMarkdown.withoutDuplicates(snapshot.sections(for: path, projectSlug: filterSlug),
                                                              pageHeadings: pageHeadings),
-                            snapshot: snapshot) : nil) { next in
+                            snapshot: snapshot) + FilesFicha.section(files, pageHeadings: pageHeadings) : nil) { next in
                 follow(next)
             }
         }
@@ -58,8 +60,12 @@ struct EntityView: View {
             let snap = await EntityIndex.snapshot(vaultRoot: vault.root)
             let headings = await Task.detached { EntityMarkdown.headings(in: (try? vault.read(page)) ?? "") }.value
             guard !Task.isCancelled else { return }
+            await FilesModel.shared.refresh(state: state)   // v0.7 (§17.2)
+            guard !Task.isCancelled else { return }
             snapshot = snap
             pageHeadings = headings
+            files = FilesFicha.files(for: page, snapshot: snap)
+                .filter { filterSlug == nil || $0.projectSlug == filterSlug }
             loaded = true
         }
     }
@@ -161,6 +167,10 @@ struct EntityView: View {
     /// The single click rule (§16.4): a project row goes to that project's Resumen, a task to its row in Pendientes,
     /// a page to the host (push) or the router.
     private func follow(_ target: String) {
+        if let file = FilesFicha.filePath(fromLink: target) {   // v0.7 (§17.2): a row of Archivos
+            FilesModel.reveal(file, scope: scope, state: state)
+            return
+        }
         switch EntityMarkdown.decode(target) {
         case .project(let slug):
             state.navigate(to: .projectTab(slug, .summary))

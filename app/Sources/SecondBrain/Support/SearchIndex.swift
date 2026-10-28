@@ -11,6 +11,7 @@ import Observation
 
 enum SearchGroup: String, CaseIterable, Hashable {
     case today, recent, people, orgs, topics, decisions, meetings, mail, notes, questions, repos, tasks, projects, actions
+    case files   // v0.7 (§17.2): Archivos
 
     var title: String {
         switch self {
@@ -28,12 +29,13 @@ enum SearchGroup: String, CaseIterable, Hashable {
         case .tasks: L("search.group.tasks")
         case .projects: L("search.group.projects")
         case .actions: L("search.group.actions")
+        case .files: L("search.group.files")
         }
     }
 
     /// Order of the groups for a query (§16.7).
-    static let resultOrder: [SearchGroup] = [.people, .orgs, .topics, .decisions, .meetings, .mail, .notes, .questions,
-                                             .repos, .tasks, .projects, .actions]
+    static let resultOrder: [SearchGroup] = [.people, .orgs, .topics, .decisions, .meetings, .mail, .notes, .files,
+                                             .questions, .repos, .tasks, .projects, .actions]
 
     /// Where a wiki page goes, and its icon.
     static func of(_ kind: SearchPageKind) -> (group: SearchGroup, symbol: String) {
@@ -100,6 +102,8 @@ enum SearchTarget: Hashable {
     case projectTasks(String)
     case task(String)
     case action(SearchAction)
+    /// v0.7 (§17.2): a file of Archivos (vault-relative path), opened there with its panel.
+    case file(String)
 
     var encoded: String {
         switch self {
@@ -110,6 +114,7 @@ enum SearchTarget: Hashable {
         case .projectTasks(let s): "tasks:" + s
         case .task(let id): "task:" + id
         case .action(let a): "action:" + a.rawValue
+        case .file(let p): "file:" + p
         }
     }
 
@@ -124,6 +129,7 @@ enum SearchTarget: Hashable {
         case "tasks": self = .projectTasks(value)
         case "task": self = .task(value)
         case "action": guard let a = SearchAction(rawValue: value) else { return nil }; self = .action(a)
+        case "file": self = .file(value)
         default: return nil
         }
     }
@@ -264,6 +270,23 @@ final class SearchIndex {
         }
         var covered = Set<String>()   // lowercased paths a source row already stands for
 
+        // v0.7 (§17.2): Archivos — every file, found by its name, its thread and the text of its summary page.
+        let sources = engine.sources, root = engine.vault.root
+        let files = await Task.detached(priority: .userInitiated) {
+            FileIndex.shared(vaultRoot: root).refresh(sources: sources)
+        }.value
+        let fileSources = Set(files.compactMap(\.sourceId))
+        for file in files {
+            var sub = projectLabel(file.projectSlug)
+            if let subject = file.threadSubject { sub += " · ✉️ " + subject }
+            sub += " · " + Fmt.dayTime(file.date)
+            out.append(SearchItem(group: .files, title: file.name, subtitle: sub, symbol: file.type.symbol, date: file.date,
+                                  target: .file(file.path),
+                                  extra: [file.summaryTitle, file.threadSubject, file.sender?.display].compactMap { $0 }
+                                      .joined(separator: " "),
+                                  uid: file.path, docPath: file.summaryPath))
+        }
+
         // Sources: meetings, notes/documents/links, and one row per email thread (its newest message).
         var threads: [String: SourceRecord] = [:]
         var threadCounts: [String: Int] = [:]
@@ -285,8 +308,10 @@ final class SearchIndex {
                 out.append(sourceItem(source, group: .meetings, symbol: "waveform"))
             case .inPerson:   // v0.7 (§17.3)
                 out.append(sourceItem(source, group: .meetings, symbol: source.kind.symbol))
-            case .note, .document, .url, .image:   // v0.7: images join notes until files adds its Archivos group
+            case .note, .document, .url:
                 out.append(sourceItem(source, group: .notes, symbol: source.kind.symbol))
+            case .image:   // v0.7 (§17.2): an image is a file; its Archivos row stands for it (below)
+                if !fileSources.contains(source.id) { out.append(sourceItem(source, group: .files, symbol: source.kind.symbol)) }
             case .email:
                 let key = source.threadKey ?? source.id
                 threadCounts[key, default: 0] += 1
@@ -481,6 +506,7 @@ final class SearchIndex {
             // Still open in the index (a recent of a task done since then would highlight nothing).
             shared.items.isEmpty || shared.items.contains { $0.uid == id }
         case .event, .action: true
+        case .file(let path): FileManager.default.fileExists(atPath: state.engine.vault.url(for: path).path)
         }
     }
 
@@ -506,6 +532,8 @@ final class SearchIndex {
             state.navigate(to: .task(id))
         case .action(let action):
             perform(action, state: state)
+        case .file(let path):
+            FilesModel.reveal(path, state: state)
         }
     }
 

@@ -546,5 +546,38 @@
 			<string>%ld selected</string>
 		</dict>
 	</dict>
+	<!-- v0.7 files -->
+	<key>files.count</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld file</string>
+			<key>other</key>
+			<string>%ld files</string>
+		</dict>
+	</dict>
+	<key>files.discarded.daysLeft</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Deleted tomorrow</string>
+			<key>other</key>
+			<string>Deleted in %ld days</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

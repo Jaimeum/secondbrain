@@ -327,6 +327,11 @@ enum DebugSnapshots {
             items.append(("project-ask-thread", .project(project.slug), .ask))   // MARK: v0.6 ask — list + inspector
         }
         items.append(("ask-thread", .ask, nil))   // MARK: v0.6 ask
+        // v0.7 files (§17.8): Archivos with a file's panel (global and project) and Descartados.
+        items.append(("files-panel", .files, nil))
+        items.append(("files-discarded", .files, nil))
+        if let project = state.projects.first { items.append(("project-files-panel", .project(project.slug), .files)) }
+        await FilesSnapshots.prepare(state: state)
         // ⌘K over Inicio (the palette inside the real window, with its query).
         items.append(("search", .home, nil))
         // MARK: v0.6 entity — fichas (§16.13): a person's global ficha (Personas), the same person filtered to the
@@ -372,6 +377,7 @@ enum DebugSnapshots {
                         AskSnapshots.seed(state: state, scope: entry.tab == nil ? .brain : Scope(projectSlug: state.currentProjectSlug))
                     }
                     TaskFilterStore.shared.filter = entry.name == "tasks-filtered" ? snapshotTaskFilter(state) : TaskFilter()
+                    FilesSnapshots.preset(entry.name, state: state)   // v0.7 files
                     let file = "window-\(entry.name)-\(sizeName)-\(dark ? "dark" : "light").png"
                     let view = entry.name == "search"
                         ? AnyView(ZStack { MainView(); SearchPalette(initialQuery: "comi") })

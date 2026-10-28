@@ -13,7 +13,8 @@ struct MenuBarView: View {
 
     var body: some View {
         @Bindable var state = state
-        VStack(alignment: .leading, spacing: 12) {
+        // No rules between the parts (§15.1 calm surfaces): spacing groups them.
+        VStack(alignment: .leading, spacing: 16) {
             BrandLogo(size: 18)
                 .help(state.config.hotkeyEnabled ? L("record.hotkeyHint") : "")
 
@@ -24,8 +25,6 @@ struct MenuBarView: View {
                     .onAppear { capture.refreshDestination() }
                     .onChange(of: state.engineStarted) { capture.refreshDestination() }
                     .onChange(of: state.projects.map(\.slug)) { capture.refreshDestination() }
-
-                Rectangle().fill(Brand.color.line).frame(height: 1)
 
                 RecordControl(placement: .menuBar)
 
@@ -86,8 +85,6 @@ struct MenuBarView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-
             HStack {
                 Button(L("menu.open"), action: openMain)
                 Spacer()
@@ -116,7 +113,7 @@ struct MenuBarView: View {
 
     private func fieldLabel(_ text: String) -> some View {
         Text(text)
-            .font(Brand.caption)
+            .font(Brand.font(12, .medium))
             .foregroundStyle(Brand.color.text2)
             .lineLimit(1)
             .gridColumnAlignment(.trailing)

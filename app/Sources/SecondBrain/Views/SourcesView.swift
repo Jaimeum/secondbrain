@@ -363,7 +363,7 @@ struct SourceRow: View {
             Menu {
                 SourceMenuItems(source: source, onOpen: onOpen, actions: $actions)
             } label: {
-                BrandMoreMenuLabel()
+                BrandMoreLabel()
             }
             .menuStyle(.button)
             .menuIndicator(.hidden)
@@ -667,7 +667,7 @@ struct ImportFilesSheet: View {
                                       selection: $useFileDate, minSegmentWidth: 120, height: 26)
                     .fixedSize()
                 if !useFileDate {
-                    BrandDateField(selection: $when)
+                    BrandDateField(date: $when)
                 }
                 Text(L("import.dateHint"))
                     .font(Brand.caption)

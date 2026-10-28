@@ -30,14 +30,16 @@ struct MailAttachmentsList: View {
                 .font(Brand.callout)
                 .foregroundStyle(Brand.color.text2)
             if let attachments {
+                let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
                 VStack(spacing: 0) {
                     ForEach(Array(attachments.enumerated()), id: \.element.id) { i, a in
-                        if i > 0 { Rectangle().fill(Brand.color.line).frame(height: 1) }
+                        // Quiet separators inset past the file icon (§15.1).
+                        if i > 0 { Rectangle().fill(Brand.color.lineSoft).frame(height: 1).padding(.leading, 36) }
                         row(a)
                     }
                 }
-                .background(Brand.color.surface, in: RoundedRectangle(cornerRadius: Brand.radius.control))
-                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control).stroke(Brand.color.line, lineWidth: 1))
+                .background(Brand.color.card, in: shape)
+                .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
                 if source == nil, attachments.contains(where: { if case .notSaved = states[$0.id] { true } else { false } }) {
                     Text(L("attach.saveEmailFirst")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                         .fixedSize(horizontal: false, vertical: true)

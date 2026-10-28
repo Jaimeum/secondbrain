@@ -56,7 +56,8 @@ struct ProjectDropBox: View {
             }
         }
         .padding(.horizontal, Brand.spacing.l)
-        .padding(.vertical, Brand.spacing.m)
+        .padding(.top, Brand.spacing.m)
+        .padding(.bottom, Brand.spacing.m + Brand.spacing.s)
         .background(Brand.color.surface)
         .task(id: reloadKey) { reload() }
     }
@@ -394,8 +395,8 @@ struct DumpRow: View {
             }
         }
         .padding(Brand.spacing.s)
-        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.lineSoft))
+        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous).strokeBorder(Brand.color.lineSoft))
     }
 
     /// The text's first line, else the files' names.

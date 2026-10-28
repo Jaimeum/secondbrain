@@ -236,7 +236,7 @@ struct TemplatesView: View {
                     Button(L("sources.delete"), role: .destructive) { pendingDelete = t }
                 }
             } label: {
-                BrandMoreMenuLabel()
+                BrandMoreLabel()
             }
             .menuStyle(.button)
             .menuIndicator(.hidden)

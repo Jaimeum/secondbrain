@@ -287,8 +287,8 @@ private struct ConversationRow: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.lineSoft))
+        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous).strokeBorder(Brand.color.lineSoft))
     }
 }
 

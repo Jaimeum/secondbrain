@@ -208,7 +208,7 @@ private struct HistoryRow: View {
                         Menu {
                             Button(L("activity.undo"), role: .destructive, action: onUndo)
                         } label: {
-                            BrandMoreMenuLabel()
+                            BrandMoreLabel()
                         }
                         .menuStyle(.button)
                         .menuIndicator(.hidden)

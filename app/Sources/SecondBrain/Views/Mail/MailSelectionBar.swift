@@ -45,8 +45,9 @@ struct MailSelectionBar: View {
         .padding(.horizontal, Brand.spacing.m)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Brand.color.card)
-        .overlay(alignment: .top) { Rectangle().fill(Brand.color.line).frame(height: 1) }
+        // The list's own `surface`, with the list fading into it (§15.1: no hairline, no tone jump).
+        .background(Brand.color.surface)
+        .overlay(alignment: .top) { BrandEdgeFade().offset(y: -16) }
     }
 
     private var count: some View {
@@ -105,7 +106,7 @@ struct BatchSplitButton<MenuContent: View>: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+        let shape = Capsule(style: .continuous)
         HStack(spacing: 0) {
             Button(action: action) {
                 Text(title)
@@ -113,7 +114,7 @@ struct BatchSplitButton<MenuContent: View>: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundStyle(Brand.color.onAccent)
-                    .padding(.leading, 12)
+                    .padding(.leading, 14)
                     .padding(.trailing, 10)
                     .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
                     .contentShape(Rectangle())
@@ -125,7 +126,8 @@ struct BatchSplitButton<MenuContent: View>: View {
                 Image(systemName: "chevron.down")
                     .font(Brand.font(10, .semibold))
                     .foregroundStyle(Brand.color.onAccent)
-                    .frame(width: 26, height: 28)
+                    .frame(width: 28, height: 28)
+                    .padding(.trailing, 2)
                     .contentShape(Rectangle())
             }
             .menuStyle(.button)
@@ -147,10 +149,7 @@ struct MailRowCheckbox: View {
 
     var body: some View {
         Button(action: toggle) {
-            Image(systemName: checked ? "checkmark.square.fill" : "square")
-                .font(Brand.font(14))
-                .foregroundStyle(checked ? Brand.color.accent : Brand.color.text3)
-                .frame(width: 16, height: 16)
+            BrandCheckboxMark(isOn: checked)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

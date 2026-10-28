@@ -268,7 +268,7 @@ struct RulesPanel: View {
                 Divider()
                 Button(L("rules.delete"), role: .destructive) { delete(rule) }
             } label: {
-                BrandMoreMenuLabel()
+                BrandMoreLabel()
             }
             .menuStyle(.button)
             .menuIndicator(.hidden)

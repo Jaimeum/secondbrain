@@ -344,7 +344,7 @@ private struct RepoCard: View {
             Divider()
             Button(role: .destructive, action: onRemove) { Label(L("repos.remove"), systemImage: "minus.circle") }
         } label: {
-            BrandMoreMenuLabel()
+            BrandMoreLabel()
         }
         .menuStyle(.button)
         .menuIndicator(.hidden)

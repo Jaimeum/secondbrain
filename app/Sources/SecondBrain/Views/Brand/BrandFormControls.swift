@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 // Shared controls for sheets, forms and Settings (CONTRACT §15.1 "calm surfaces"): brand pull-downs instead of the
@@ -7,39 +6,7 @@ import SwiftUI
 
 // MARK: Menu label
 
-/// The label of a brand pull-down ("Usar por defecto ▾", "📁 Acme ▾"): a quiet `cardAlt` tone with no border, the
-/// `hover` veil under the pointer and a faint `text3` chevron (the same language as `AddControlLabel`). Use inside
-/// `Menu { … } label: { BrandMenuLabel(…) }.menuStyle(.button).menuIndicator(.hidden).buttonStyle(.plain).fixedSize()`,
-/// or through `BrandMenuPicker`. `maxWidth` truncates a long title (project names) instead of growing the row.
-struct BrandMenuLabel: View {
-    let title: String
-    var symbol: String? = nil
-    var maxWidth: CGFloat? = nil
-    @ViewState private var hovering = false
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-        HStack(spacing: 6) {
-            if let symbol { Image(systemName: symbol).imageScale(.small).foregroundStyle(Brand.color.text2) }
-            Text(title)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: maxWidth, alignment: .leading)
-            Image(systemName: "chevron.down")
-                .font(Brand.font(9, .semibold))
-                .foregroundStyle(Brand.color.text3)
-        }
-        .font(Brand.callout)
-        .foregroundStyle(Brand.color.text)
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .background(shape.fill(Brand.color.cardAlt))
-        .overlay { if hovering { shape.fill(Brand.color.hover) } }
-        .contentShape(shape)
-        .onHover { hovering = $0 }
-        .animation(Brand.motion.fast, value: hovering)
-    }
-}
+// The label itself is `BrandMenuLabel` in BrandMenuControls.swift (one look for every brand pop-up).
 
 // MARK: Menu picker
 
@@ -98,23 +65,7 @@ struct BrandProjectMenu: View {
 
 // MARK: More menu
 
-/// The "⋯" of a row's overflow menu: a plain `ellipsis` in `text2` inside a 26 pt circle that fills with `hover`
-/// under the pointer. Use with `.menuStyle(.button).menuIndicator(.hidden).buttonStyle(.plain).fixedSize()`.
-struct BrandMoreMenuLabel: View {
-    @ViewState private var hovering = false
-
-    var body: some View {
-        Image(systemName: "ellipsis")
-            .font(Brand.font(12, .semibold))
-            .foregroundStyle(Brand.color.text2)
-            .frame(width: 26, height: 26)
-            .background(Circle().fill(hovering ? Brand.color.hover : .clear))
-            .contentShape(Circle())
-            .onHover { hovering = $0 }
-            .animation(Brand.motion.fast, value: hovering)
-            .accessibilityLabel(L("project.more"))
-    }
-}
+// The ⋯ of an overflow menu is `BrandMoreLabel` in BrandMenuControls.swift.
 
 // MARK: Icon button
 
@@ -122,53 +73,7 @@ struct BrandMoreMenuLabel: View {
 
 // MARK: Checkbox
 
-/// The brand checkbox: a 16 pt continuously rounded square (radius 5); off = `card` with a `line` edge, on = `accent`
-/// with an `onAccent` checkmark; the `hover` veil under the pointer, an `easeOut` change. The AppKit checkbox fills
-/// with the system accent (blue) and draws a hard white square; this one stays in the brand.
-struct BrandCheckboxToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        BrandCheckbox(configuration: configuration)
-    }
-
-    private struct BrandCheckbox: View {
-        let configuration: Configuration
-        @Environment(\.isEnabled) private var isEnabled
-        @ViewState private var hovering = false
-
-        var body: some View {
-            let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
-            Button {
-                withAnimation(Brand.motion.fast) { configuration.isOn.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    ZStack {
-                        shape.fill(configuration.isOn ? Brand.color.accent : Brand.color.card)
-                        shape.strokeBorder(configuration.isOn ? Color.clear : (hovering ? Brand.color.focusBorder : Brand.color.line),
-                                           lineWidth: 1)
-                        if configuration.isOn {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(Brand.color.onAccent)
-                        }
-                    }
-                    .frame(width: 16, height: 16)
-                    configuration.label
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .opacity(isEnabled ? 1 : 0.45)
-            .onHover { hovering = $0 }
-            .animation(Brand.motion.fast, value: hovering)
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(configuration.isOn ? [.isSelected] : [])
-        }
-    }
-}
-
-extension ToggleStyle where Self == BrandCheckboxToggleStyle {
-    static var brandCheckbox: BrandCheckboxToggleStyle { BrandCheckboxToggleStyle() }
-}
+// `.toggleStyle(.brandCheckbox)` is `BrandCheckboxToggleStyle` in BrandMenuControls.swift.
 
 // MARK: Text area
 
@@ -269,61 +174,4 @@ struct BrandSheetFooter<Content: View>: View {
 
 // MARK: Date field
 
-/// A date (and time) you type into, in the `brandField` look: the same keyboard-editable AppKit date field as
-/// `DatePicker(.field)`, but without its square white bezel, stepper box and system focus ring, set on `card` with a
-/// `lineSoft` edge, radius `field`. `upTo` caps the date (e.g. no further than a year from now).
-struct BrandDateField: View {
-    @Binding var selection: Date
-    var upTo: Date? = nil
-    var showsTime = true
-    @ViewState private var hovering = false
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
-        BareDatePicker(selection: $selection, upTo: upTo, showsTime: showsTime)
-            .fixedSize()
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(shape.fill(Brand.color.card))
-            .overlay(shape.strokeBorder(hovering ? Brand.color.line : Brand.color.lineSoft, lineWidth: 1))
-            .onHover { hovering = $0 }
-            .animation(Brand.motion.fast, value: hovering)
-    }
-
-    /// `NSDatePicker` in its text-field style with no border, bezel, background or focus ring.
-    private struct BareDatePicker: NSViewRepresentable {
-        @Binding var selection: Date
-        var upTo: Date?
-        var showsTime: Bool
-
-        func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
-
-        func makeNSView(context: Context) -> NSDatePicker {
-            let picker = NSDatePicker()
-            picker.datePickerStyle = .textField
-            picker.datePickerMode = .single
-            picker.isBordered = false
-            picker.isBezeled = false
-            picker.drawsBackground = false
-            picker.focusRingType = .none
-            picker.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
-            picker.target = context.coordinator
-            picker.action = #selector(Coordinator.changed(_:))
-            return picker
-        }
-
-        func updateNSView(_ picker: NSDatePicker, context: Context) {
-            context.coordinator.selection = $selection
-            picker.datePickerElements = showsTime ? [.yearMonthDay, .hourMinute] : [.yearMonthDay]
-            picker.maxDate = upTo
-            if picker.dateValue != selection { picker.dateValue = selection }
-            picker.textColor = NSColor(Brand.color.text)
-        }
-
-        final class Coordinator: NSObject {
-            var selection: Binding<Date>
-            init(selection: Binding<Date>) { self.selection = selection }
-            @MainActor @objc func changed(_ sender: NSDatePicker) { selection.wrappedValue = sender.dateValue }
-        }
-    }
-}
+// `BrandDateField` (keyboard-editable date without the system bezel) lives in BrandMenuControls.swift.

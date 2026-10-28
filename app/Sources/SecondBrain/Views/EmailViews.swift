@@ -38,6 +38,7 @@ struct AddEmailSheet: View {
     @ViewState private var routedByDefault = false
     @ViewState private var ruleOffer = RuleOffer()
     @ViewState private var saved = false
+    @FocusState private var pasteFocused: Bool
 
     private var fixedThread: EmailThread? {
         guard let key = request.threadKey else { return nil }
@@ -77,6 +78,7 @@ struct AddEmailSheet: View {
             .frame(maxHeight: .infinity)
 
             footer
+                .padding(.top, 14)
         }
         .font(Brand.body)
         .background(Brand.color.surface)
@@ -166,6 +168,8 @@ struct AddEmailSheet: View {
                 TextEditor(text: $text)
                     .font(Brand.body)
                     .foregroundStyle(Brand.color.text)
+                    .focused($pasteFocused)
+                    .focusEffectDisabled()
                     .scrollContentBackground(.hidden)
                     .scrollIndicators(.never)   // no legacy scroller strip inside the box (light bar in dark mode)
                     .padding(8)
@@ -177,9 +181,10 @@ struct AddEmailSheet: View {
                         .allowsHitTesting(false)
                 }
             }
-            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
-                .strokeBorder(Brand.color.lineSoft, lineWidth: 1))
+            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
+                .strokeBorder(pasteFocused ? Brand.color.focusBorder : Brand.color.lineSoft, lineWidth: 1))
+            .brandFocusHalo(pasteFocused)
         }
     }
 
@@ -225,8 +230,10 @@ struct AddEmailSheet: View {
             .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
     }
 
+    /// A field's label in the grid: 12 medium `text2`, as `BrandFieldLabel` in Nuevo proyecto.
     private func gridLabel(_ text: String) -> some View {
         Text(text)
+            .font(Brand.font(12, .medium))
             .foregroundStyle(Brand.color.text2)
             .lineLimit(1)
             .frame(width: Self.labelWidth, alignment: .leading)
@@ -261,7 +268,8 @@ struct AddEmailSheet: View {
                 GridRow {
                     gridLabel(L("email.date"))
                     VStack(alignment: .leading, spacing: 4) {
-                        BrandDateField(selection: Binding(get: { date }, set: { date = $0; hasDate = true }))
+                        BrandDateField(date: Binding(get: { date }, set: { date = $0; hasDate = true }), stepper: true)
+                            .accessibilityLabel(L("email.date"))
                         if !hasDate {
                             Label(L("email.noDate"), systemImage: "exclamationmark.triangle")
                                 .font(Brand.caption)
@@ -394,10 +402,7 @@ struct AddEmailSheet: View {
                 }
             }
         } label: {
-            Text(joined ? L("email.changeThread") : L("email.joinOther"))
-                .font(Brand.callout)
-                .foregroundStyle(Brand.color.accent)
-                .lineLimit(1)
+            BrandInlineMenuLabel(title: joined ? L("email.changeThread") : L("email.joinOther"))
         }
         .menuStyle(.button)
         .menuIndicator(.hidden)

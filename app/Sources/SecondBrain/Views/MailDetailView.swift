@@ -31,8 +31,9 @@ struct MailDetailView: View {
                                 .transition(.opacity)
                         }
                     }
-                    Rectangle().fill(Brand.color.line).frame(height: 1)
+                    // No hairline over the bar (§15.1): the message fades into it.
                     actionBar(detail)
+                        .overlay(alignment: .top) { BrandEdgeFade().offset(y: -16) }
                         .disabled(model.isStale)
                 }
                 .opacity(model.isStale ? 0.6 : 1)
@@ -50,7 +51,8 @@ struct MailDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Brand.color.card)
+        // The same `surface` as the list beside it and the toolbar above (§15.1: no tone jump between columns).
+        .background(Brand.color.surface)
         .animation(Brand.motion.animation(reduceMotion: reduceMotion), value: model.toast)
         .animation(Brand.motion.animation(reduceMotion: reduceMotion), value: model.ruleOffer.current)
         .sheet(item: Binding(get: { model.attachmentReview }, set: { model.attachmentReview = $0 })) { review in
@@ -109,7 +111,7 @@ struct MailDetailView: View {
             if s.hasAttachments, let account = model.account {   // v0.7 attach (§17.1)
                 MailAttachmentsList(message: detail.message, account: account, source: model.source(for: s.id)).id(s.id)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            Rectangle().fill(Brand.color.lineSoft).frame(height: 1)
             Text(detail.parsed.body.isEmpty ? L("mail.onlyQuoted") : detail.parsed.body)
                 .font(Brand.body)
                 .foregroundStyle(Brand.color.text)
@@ -205,9 +207,11 @@ struct MailDetailView: View {
         Menu {
             projectChoices
         } label: {
-            Text(L("inbox.choose")).font(Brand.callout).foregroundStyle(Brand.color.accent).lineLimit(1)
+            BrandInlineMenuLabel(title: L("inbox.choose"))
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()   // a short, fixed label
         .help(L("mail.changeProject"))
     }
@@ -289,10 +293,11 @@ struct MailDetailView: View {
                     Button("\(project.emoji) \(project.name)") { model.assign(source, to: project.slug) }
                 }
             } label: {
-                Text(suggestion == nil ? L("inbox.choose") : L("inbox.other"))
-                    .font(Brand.callout).foregroundStyle(Brand.color.accent).lineLimit(1)
+                BrandInlineMenuLabel(title: suggestion == nil ? L("inbox.choose") : L("inbox.other"))
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
             .fixedSize()   // a short, fixed label
             .disabled(state.projects.isEmpty)
         }

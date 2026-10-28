@@ -24,8 +24,9 @@ struct WhenField: View {
                     .foregroundStyle(Brand.color.text)
                     .lineLimit(1)
                 if expanded || initiallyExpanded {
-                    BrandDateField(selection: $date, upTo: Date().addingTimeInterval(366 * 86400))
+                    BrandDateField(date: $date, maxDate: Date().addingTimeInterval(366 * 86400))
                         .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                        .accessibilityLabel(L("when.title"))
                     if !Calendar.current.isDateInToday(date) {
                         Text(Fmt.relativeDay(date))
                             .font(Brand.caption)
@@ -66,9 +67,13 @@ struct TemplatePicker: View {
     /// false where the row already has its own label column (the menu bar's details grid).
     var showsLabel = true
 
+    @Environment(\.labelsVisibility) private var labelsVisibility
+
+    /// A brand pop-up (never the system one with its accent chevron box), with its label in front unless the caller
+    /// hides labels.
     var body: some View {
         HStack(spacing: Brand.spacing.s) {
-            if showsLabel {
+            if showsLabel && labelsVisibility != .hidden {
                 Text(label)
                     .foregroundStyle(Brand.color.text)
                     .lineLimit(1)
@@ -138,8 +143,9 @@ struct ChangeDateSheet: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
                 GridRow {
                     Text(source.eventLabel).foregroundStyle(Brand.color.text2).gridColumnAlignment(.trailing)
-                    BrandDateField(selection: $date)
+                    BrandDateField(date: $date)
                         .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                        .accessibilityLabel(source.eventLabel)
                 }
                 GridRow {
                     Text(source.addedLabel).foregroundStyle(Brand.color.text2)

@@ -216,8 +216,8 @@ struct ClaudeConnectView: View {
                     Text(L("claude.pasteTitle")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                     HStack(spacing: 8) {
                         SecureField(text: $model.pastedToken) { Text(verbatim: "sk-ant-oat…") }
-                            .textFieldStyle(.roundedBorder)
                             .onSubmit { model.submitPasted(config: state.config) }
+                            .brandField()
                         Button(L("claude.pasteSave")) { model.submitPasted(config: state.config) }
                             .buttonStyle(.brandSecondary)
                             .disabled(model.pastedToken.isEmpty)

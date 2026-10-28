@@ -76,7 +76,6 @@ struct AddEmailSheet: View {
             .padding(.horizontal, 22)
             .frame(maxHeight: .infinity)
 
-            Rectangle().fill(Brand.color.line).frame(height: 1).padding(.top, 14)
             footer
         }
         .font(Brand.body)
@@ -122,7 +121,7 @@ struct AddEmailSheet: View {
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
                     Button(L("common.cancel")) { dismiss() }
-                        .buttonStyle(.brandSecondary)
+                        .buttonStyle(.brandGhost)
                         .keyboardShortcut(.cancelAction)
                     Button(L("email.save"), action: save)
                         .buttonStyle(.brandPrimary)
@@ -131,7 +130,9 @@ struct AddEmailSheet: View {
                 }
             }
         }
-        .padding(16)
+        .padding(.horizontal, 22)
+        .padding(.top, 16)
+        .padding(.bottom, 20)
         .animation(Brand.motion.animation(), value: ruleOffer.current)
     }
 
@@ -150,11 +151,15 @@ struct AddEmailSheet: View {
                     if let s = NSPasteboard.general.string(forType: .string) { text = s; fromClipboard = true }
                 } label: {
                     Label(L("email.pasteAgain"), systemImage: "doc.on.clipboard")
+                        .font(Brand.font(11, .medium))
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(1)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Brand.color.cardAlt))
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .font(Brand.callout)
-                .foregroundStyle(Brand.color.accent)
-                .lineLimit(1)
                 .layoutPriority(1)
             }
             ZStack(alignment: .topLeading) {
@@ -172,9 +177,9 @@ struct AddEmailSheet: View {
                         .allowsHitTesting(false)
                 }
             }
-            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-                .strokeBorder(Brand.color.line, lineWidth: 1))
+            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
+                .strokeBorder(Brand.color.lineSoft, lineWidth: 1))
         }
     }
 
@@ -217,7 +222,7 @@ struct AddEmailSheet: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Brand.color.card, in: shape)
-            .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
+            .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
     }
 
     private func gridLabel(_ text: String) -> some View {
@@ -243,7 +248,7 @@ struct AddEmailSheet: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 8) {
                 GridRow {
                     gridLabel(L("email.subject"))
-                    TextField("", text: $subject).textFieldStyle(.roundedBorder)
+                    TextField("", text: $subject).brandField()
                 }
                 GridRow {
                     gridLabel(L("email.from"))
@@ -256,10 +261,7 @@ struct AddEmailSheet: View {
                 GridRow {
                     gridLabel(L("email.date"))
                     VStack(alignment: .leading, spacing: 4) {
-                        DatePicker("", selection: Binding(get: { date }, set: { date = $0; hasDate = true }),
-                                   displayedComponents: [.date, .hourAndMinute])
-                            .labelsHidden()
-                            .fixedSize()   // a system control of fixed width, alone in its cell
+                        BrandDateField(selection: Binding(get: { date }, set: { date = $0; hasDate = true }))
                         if !hasDate {
                             Label(L("email.noDate"), systemImage: "exclamationmark.triangle")
                                 .font(Brand.caption)
@@ -277,7 +279,7 @@ struct AddEmailSheet: View {
     @ViewBuilder private var fromCell: some View {
         let address = Self.address(from)
         if editingFrom || address.name == nil || address.email == nil {
-            TextField("", text: $from).textFieldStyle(.roundedBorder)
+            TextField("", text: $from).brandField()
         } else {
             HStack(alignment: .top, spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -308,7 +310,7 @@ struct AddEmailSheet: View {
             }
             .filter { !$0.isEmpty }
         if editingTo || names.isEmpty {
-            TextField("", text: $to).textFieldStyle(.roundedBorder)
+            TextField("", text: $to).brandField()
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(names.joined(separator: ", "))
@@ -397,7 +399,9 @@ struct AddEmailSheet: View {
                 .foregroundStyle(Brand.color.accent)
                 .lineLimit(1)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()   // a short, fixed label
         .disabled(allThreads.isEmpty && best == nil && !joined)
     }
@@ -456,19 +460,12 @@ struct AddEmailSheet: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 2) {
-                        Picker("", selection: Binding(get: { projectSlug }, set: {
+                        BrandProjectMenu(selection: Binding(get: { projectSlug }, set: {
                             projectSlug = $0
                             projectPicked = true
                             routedRule = nil
                             routedByDefault = false
-                        })) {
-                            Text(L("inbox.title")).tag(String?.none)
-                            Divider()
-                            ForEach(state.projects) { project in
-                                Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
-                            }
-                        }
-                        .labelsHidden()
+                        }), maxWidth: 200)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         if let rule = routedRule {
                             Text(L("rules.mail.byRule", ruleLabel(rule)))
@@ -724,7 +721,6 @@ struct ThreadSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if !loaded {
                 BrandLoader(size: 24).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if messages.isEmpty {
@@ -736,11 +732,13 @@ struct ThreadSheet: View {
                             MessageCard(content: .init(message), startExpanded: index == messages.count - 1)
                         }
                     }
-                    .padding(Brand.spacing.content)
+                    .padding(.horizontal, Brand.spacing.content)
+                    .padding(.vertical, 6)
                 }
+                .brandScrollEdgeFade(.top)
+                .brandScrollEdgeFade(.bottom)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack(spacing: 8) {
+            BrandSheetFooter(horizontalPadding: Brand.spacing.content) {
                 Button {
                     dismiss()
                     // Let this sheet close before the email sheet opens.
@@ -753,10 +751,9 @@ struct ThreadSheet: View {
                 .buttonStyle(.brandSecondary)
                 Spacer(minLength: 8)
                 Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandPrimary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
-            .padding(14)
         }
         .font(Brand.body)
         .background(Brand.color.surface)
@@ -987,7 +984,7 @@ struct MessageCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Brand.color.card, in: shape)
-        .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
+        .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
     }
 }
 

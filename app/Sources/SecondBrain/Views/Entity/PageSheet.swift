@@ -22,7 +22,6 @@ struct PageSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             WikiWebView(vault: state.engine.vault, path: shown) { next in
                 if next != shown { stack.append(next) }
             }
@@ -42,8 +41,7 @@ struct PageSheet: View {
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(Brand.color.text2)
+            .buttonStyle(.brandIcon)
             .keyboardShortcut("[", modifiers: .command)
             .disabled(stack.isEmpty)
             .opacity(stack.isEmpty ? 0 : 1)   // keeps its 22 pt: the title never shifts
@@ -90,7 +88,7 @@ struct PageSheet: View {
                 open.labelStyle(.iconOnly)
             }
             Button(L("common.close")) { dismiss() }
-                .buttonStyle(.brandPrimary)
+                .buttonStyle(.brandGhost)
                 .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, Brand.spacing.l)

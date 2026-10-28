@@ -42,25 +42,19 @@ struct MenuBarView: View {
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                         GridRow {
                             fieldLabel(L("menu.project"))
-                            Picker(L("menu.project"), selection: $state.recordingProjectSlug) {
-                                Text(L("inbox.title")).tag(String?.none)
-                                Divider()
-                                ForEach(state.projects) { project in
-                                    Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
-                                }
-                            }
-                            .labelsHidden()
+                            BrandProjectMenu(selection: $state.recordingProjectSlug, maxWidth: 170)
+                                .accessibilityLabel(L("menu.project"))
                         }
                         GridRow {
                             fieldLabel(L("tpl.pickerShort"))
                             TemplatePicker(scope: .meeting, selection: $state.recordingTemplateId,
-                                           projectSlug: state.recordingProjectSlug, label: L("tpl.pickerShort"))
-                                .labelsHidden()
+                                           projectSlug: state.recordingProjectSlug, label: L("tpl.pickerShort"),
+                                           showsLabel: false)
                         }
                         GridRow {
                             fieldLabel(L("menu.titleLabel"))
                             TextField(L("menu.titlePlaceholder"), text: $state.recordingTitle)
-                                .textFieldStyle(.roundedBorder)
+                                .brandField()
                         }
                     }
                     .padding(.top, 8)

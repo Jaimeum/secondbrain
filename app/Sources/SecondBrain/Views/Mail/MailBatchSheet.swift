@@ -16,10 +16,8 @@ struct MailBatchSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             footer
         }
         .frame(minWidth: 520, idealWidth: 620, minHeight: 380, idealHeight: 520)
@@ -44,8 +42,8 @@ struct MailBatchSheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Brand.spacing.contentWide)
-        .padding(.top, 20)
-        .padding(.bottom, 14)
+        .padding(.top, 24)
+        .padding(.bottom, 8)
     }
 
     private var title: String {
@@ -119,7 +117,9 @@ struct MailBatchSheet: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(model.conversations) { conversation in
                     ConversationRow(model: model, conversation: conversation)
-                    Rectangle().fill(Brand.color.line).frame(height: 1)
+                    if conversation.id != model.conversations.last?.id {
+                        Rectangle().fill(Brand.color.lineSoft).frame(height: 1).padding(.leading, 26)
+                    }
                 }
                 if model.phase == .loading {
                     BrandLoader(size: 18)
@@ -129,19 +129,21 @@ struct MailBatchSheet: View {
             }
             .padding(.horizontal, Brand.spacing.contentWide)
         }
+        .brandScrollEdgeFade(.top)
+        .brandScrollEdgeFade(.bottom)
     }
 
     // MARK: Footer
 
     private var footer: some View {
-        HStack(spacing: 8) {
+        BrandSheetFooter(horizontalPadding: Brand.spacing.contentWide) {
             Text(summary)
                 .font(Brand.caption)
                 .foregroundStyle(Brand.color.text2)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(L("common.cancel")) { dismiss() }
-                .buttonStyle(.brandSecondary)
+                .buttonStyle(.brandGhost)
                 .keyboardShortcut(.cancelAction)
             Button(model.messagesToSave > 0 ? L("batch.save", model.messagesToSave) : L("batch.saveNothing")) {
                 model.save()
@@ -151,7 +153,6 @@ struct MailBatchSheet: View {
             .keyboardShortcut(.defaultAction)
             .disabled(model.messagesToSave == 0 || model.isBusy)
         }
-        .padding(12)
     }
 
     /// "2 adjuntos · 1 hilo ya guardado" — or the read-only promise when there is nothing else to say.
@@ -180,7 +181,7 @@ private struct ConversationRow: View {
         HStack(alignment: .top, spacing: 10) {
             Toggle("", isOn: Binding(get: { included && !conversation.isFullySaved },
                                      set: { _ in model.toggle(conversation: conversation.id) }))
-                .toggleStyle(.checkbox)
+                .toggleStyle(.brandCheckbox)
                 .labelsHidden()
                 .disabled(conversation.isFullySaved)
                 .accessibilityLabel(conversation.subject)
@@ -287,7 +288,7 @@ private struct ConversationRow: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.lineSoft))
     }
 }
 
@@ -301,7 +302,7 @@ private struct AttachmentCheckRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Toggle("", isOn: Binding(get: { checked }, set: { _ in toggle() }))
-                .toggleStyle(.checkbox)
+                .toggleStyle(.brandCheckbox)
                 .labelsHidden()
                 .disabled(!enabled)
                 .accessibilityLabel(item.info.name)

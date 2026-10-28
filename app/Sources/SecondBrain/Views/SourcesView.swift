@@ -345,9 +345,8 @@ struct SourceRow: View {
                             .foregroundStyle(Brand.color.danger)
                             .lineLimit(2)
                         Button(L("sources.retry")) { state.engine.retry(sourceId: source.id) }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.settingsLink)
                             .font(Brand.font(11, .medium))
-                            .foregroundStyle(Brand.color.accent)
                             .lineLimit(1)
                     }
                 }
@@ -364,11 +363,11 @@ struct SourceRow: View {
             Menu {
                 SourceMenuItems(source: source, onOpen: onOpen, actions: $actions)
             } label: {
-                Image(systemName: "ellipsis")
-                    .foregroundStyle(Brand.color.text2)
+                BrandMoreMenuLabel()
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
             .menuIndicator(.hidden)
+            .buttonStyle(.plain)
             .fixedSize()
             .help(L("project.more"))
         }
@@ -481,20 +480,16 @@ struct NoteSheet: View {
                 .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
             TextField(L("note.titlePlaceholder"), text: $title)
-                .brandTextField()
+                .brandField()
             TextEditor(text: $text)
-                .font(Brand.body)
-                .scrollContentBackground(.hidden)
-                .padding(Brand.spacing.s)
                 .frame(minHeight: 140, maxHeight: .infinity)
-                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                .brandTextArea()
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
                         Text(L("content.notePlaceholder"))
                             .font(Brand.body)
                             .foregroundStyle(Brand.color.text3)
-                            .padding(.horizontal, 13)
+                            .padding(.horizontal, 12)
                             .padding(.vertical, Brand.spacing.s)
                             .allowsHitTesting(false)
                     }
@@ -506,7 +501,7 @@ struct NoteSheet: View {
             HStack(spacing: Brand.spacing.s) {
                 Spacer()
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("note.save"), action: save)
                     .buttonStyle(.brandPrimary)
@@ -514,7 +509,9 @@ struct NoteSheet: View {
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(Brand.spacing.xxl)
+        .padding(.horizontal, 28)
+        .padding(.top, 28)
+        .padding(.bottom, 22)
         .frame(minWidth: 480, idealWidth: 560, minHeight: 420, idealHeight: 500)
         .background(Brand.color.surface)
     }
@@ -553,8 +550,8 @@ struct PasteLinkSheet: View {
                 .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
             TextField(L("sources.linkPlaceholder"), text: $linkText)
-                .brandTextField()
                 .onSubmit(add)
+                .brandField()
             if let error {
                 Text(error)
                     .font(Brand.body)
@@ -566,7 +563,7 @@ struct PasteLinkSheet: View {
                 if busy { BrandLoader(size: 16) }
                 Spacer()
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("sources.addLink"), action: add)
                     .buttonStyle(.brandPrimary)
@@ -574,7 +571,9 @@ struct PasteLinkSheet: View {
                     .disabled(busy || linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(Brand.spacing.xxl)
+        .padding(.horizontal, 28)
+        .padding(.top, 28)
+        .padding(.bottom, 22)
         .frame(minWidth: 420, idealWidth: 480, maxHeight: 520)
         .background(Brand.color.surface)
     }
@@ -621,12 +620,12 @@ struct ImportFilesSheet: View {
         VStack(spacing: 0) {
             ScrollView {
                 form
-                    .padding(Brand.spacing.xxl)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 28)
+                    .padding(.bottom, 12)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .brandScrollEdgeFade(.bottom)
             buttons
-                .padding(.horizontal, Brand.spacing.xxl)
-                .padding(.vertical, Brand.spacing.l)
         }
         .frame(minWidth: 460, idealWidth: 520, minHeight: 320, idealHeight: 460)
         .background(Brand.color.surface)
@@ -659,21 +658,16 @@ struct ImportFilesSheet: View {
                 }
             }
             .padding(Brand.spacing.m)
-            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.lineSoft))
 
             VStack(alignment: .leading, spacing: Brand.spacing.s) {
                 Text(L("when.title")).font(Brand.section).foregroundStyle(Brand.color.text)
-                Picker("", selection: $useFileDate) {
-                    Text(L("import.fileDate")).tag(true)
-                    Text(L("import.otherDate")).tag(false)
-                }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
+                BrandSegmentedControl(options: [(true, L("import.fileDate")), (false, L("import.otherDate"))],
+                                      selection: $useFileDate, minSegmentWidth: 120, height: 26)
+                    .fixedSize()
                 if !useFileDate {
-                    DatePicker("", selection: $when, displayedComponents: [.date, .hourAndMinute])
-                        .labelsHidden()
-                        .padding(.leading, 20)
+                    BrandDateField(selection: $when)
                 }
                 Text(L("import.dateHint"))
                     .font(Brand.caption)
@@ -695,11 +689,11 @@ struct ImportFilesSheet: View {
     }
 
     private var buttons: some View {
-        HStack(spacing: Brand.spacing.s) {
+        BrandSheetFooter {
             if busy { BrandLoader(size: 16) }
             Spacer()
             Button(L("common.cancel")) { dismiss() }
-                .buttonStyle(.brandSecondary)
+                .buttonStyle(.brandGhost)
                 .keyboardShortcut(.cancelAction)
             Button(L("import.go"), action: run)
                 .buttonStyle(.brandPrimary)
@@ -752,18 +746,5 @@ struct ImportFilesSheet: View {
                 error = lines.joined(separator: "\n")
             }
         }
-    }
-}
-
-private extension View {
-    /// A one-line field in the brand style (card fill, hairline, control radius), like the chat input: never the
-    /// AppKit bezel next to a brand-styled editor.
-    func brandTextField() -> some View {
-        textFieldStyle(.plain)
-            .font(Brand.body)
-            .padding(.horizontal, 12)
-            .frame(height: 32)
-            .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
     }
 }

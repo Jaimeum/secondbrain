@@ -24,10 +24,8 @@ struct WhenField: View {
                     .foregroundStyle(Brand.color.text)
                     .lineLimit(1)
                 if expanded || initiallyExpanded {
-                    DatePicker("", selection: $date, in: ...Date().addingTimeInterval(366 * 86400),
-                               displayedComponents: [.date, .hourAndMinute])
-                        .labelsHidden()
-                        .datePickerStyle(.field)
+                    BrandDateField(selection: $date, upTo: Date().addingTimeInterval(366 * 86400))
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
                     if !Calendar.current.isDateInToday(date) {
                         Text(Fmt.relativeDay(date))
                             .font(Brand.caption)
@@ -65,14 +63,25 @@ struct TemplatePicker: View {
     @Binding var selection: String?
     var projectSlug: String?
     var label: String = L("tpl.picker")
+    /// false where the row already has its own label column (the menu bar's details grid).
+    var showsLabel = true
 
     var body: some View {
-        Picker(label, selection: $selection) {
-            Text(defaultTitle).tag(String?.none)
-            Divider()
-            ForEach(state.templates(for: scope)) { template in
-                Text(template.name).tag(Optional(template.id))
+        HStack(spacing: Brand.spacing.s) {
+            if showsLabel {
+                Text(label)
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(1)
+                    .fixedSize()
             }
+            BrandMenuPicker(title: state.template(selection)?.name ?? defaultTitle, selection: $selection, maxWidth: 240) {
+                Text(defaultTitle).tag(String?.none)
+                Divider()
+                ForEach(state.templates(for: scope)) { template in
+                    Text(template.name).tag(Optional(template.id))
+                }
+            }
+            .accessibilityLabel(label)
         }
         .onAppear { state.reloadTemplates() }
     }
@@ -129,9 +138,8 @@ struct ChangeDateSheet: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
                 GridRow {
                     Text(source.eventLabel).foregroundStyle(Brand.color.text2).gridColumnAlignment(.trailing)
-                    DatePicker("", selection: $date, displayedComponents: [.date, .hourAndMinute])
-                        .labelsHidden()
-                        .datePickerStyle(.field)
+                    BrandDateField(selection: $date)
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
                 }
                 GridRow {
                     Text(source.addedLabel).foregroundStyle(Brand.color.text2)
@@ -152,7 +160,7 @@ struct ChangeDateSheet: View {
             HStack(spacing: Brand.spacing.s) {
                 Spacer(minLength: 0)
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("dates.changeSave"), action: save)
                     .buttonStyle(.brandPrimary)
@@ -187,12 +195,15 @@ struct ReformatSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Brand.spacing.l) {
             SheetTitleBlock(title: L("reformat.title"), subtitle: source.title, symbol: source.symbol)
-            Picker(L("tpl.picker"), selection: $templateId) {
-                ForEach(state.templates(for: TemplateScope(kind: source.kind) ?? .meeting)) { template in
-                    Text(template.name).tag(Optional(template.id))
+            HStack(spacing: Brand.spacing.s) {
+                Text(L("tpl.picker")).foregroundStyle(Brand.color.text).lineLimit(1).fixedSize()
+                BrandMenuPicker(title: state.template(templateId)?.name ?? "", selection: $templateId, maxWidth: 260) {
+                    ForEach(state.templates(for: TemplateScope(kind: source.kind) ?? .meeting)) { template in
+                        Text(template.name).tag(Optional(template.id))
+                    }
                 }
+                .accessibilityLabel(L("tpl.picker"))
             }
-            .frame(maxWidth: 360, alignment: .leading)
             if let template = state.template(templateId), !template.description.isEmpty {
                 Text(template.description)
                     .font(Brand.body)
@@ -208,7 +219,7 @@ struct ReformatSheet: View {
             HStack(spacing: Brand.spacing.s) {
                 Spacer(minLength: 0)
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("reformat.go")) {
                     if let templateId { state.engine.reformat(sourceId: source.id, templateId: templateId) }

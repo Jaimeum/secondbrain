@@ -500,7 +500,7 @@ struct ProviderBadge: View {
         .foregroundStyle(Brand.avatar.initials)
         .frame(width: size, height: size)
         .background(onFill ? Brand.color.card : Brand.avatar.background, in: Circle())
-        .overlay { if onFill { Circle().strokeBorder(Brand.color.line, lineWidth: 1) } }
+        .overlay { if onFill { Circle().strokeBorder(Brand.color.lineSoft, lineWidth: 1) } }
         .accessibilityLabel(provider == .local ? L("accounts.macCalendar") : provider.displayName)
     }
 }
@@ -539,8 +539,8 @@ struct AdvancedOAuthFields: View {
             Group {
                 if secure { SecureField("", text: text) } else { TextField("", text: text) }
             }
-            .textFieldStyle(.roundedBorder)
             .font(Brand.mono)
+            .brandField()
         }
     }
 

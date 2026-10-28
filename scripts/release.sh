@@ -88,11 +88,10 @@ persona, empresa y tema. El audio nunca sale de tu computadora; lo único que se
 que Claude lee con tu propia cuenta.
 
 ### Novedades
-- **Un diseño más tranquilo.** Menos líneas y cambios bruscos de color, esquinas redondeadas y tonos suaves en toda la app, en claro y en oscuro. La barra de arriba se funde con el contenido y la selección de la barra lateral ya no sale en el azul del sistema.
-- **"Agregar" más discreto.** Una cápsula suave con un "+" en lugar del botón gris con flecha azul (en la barra lateral y en los proyectos).
-- **Cualquier emoji como ícono de proyecto.** Escribe o pega el que quieras, o abre "Más emojis…"; siguen las sugerencias.
-- **Formularios más limpios.** Campos con borde suave y un halo tenue al escribir (sin bordes negros), selectores, casillas y menús con el estilo de la app.
-- Incluye todo lo de 0.7: adjuntos de correo, Archivos, "Agregar al proyecto", hilos de correo como unidad, tus respuestas y "Abrir el original".
+- **Grabar ya no te silencia en la llamada.** Al empezar a grabar, la gente de tu reunión (Discord, Zoom, Meet, Teams) dejaba de escucharte hasta que salías y volvías a entrar. La causa era la cancelación de eco de macOS que SecondBrain activaba en el micrófono: reconfiguraba el micrófono compartido y rompía el de la app de la llamada. Ya no se usa; tu micrófono se graba tal cual y nadie más se entera.
+- **Si tu micrófono se cae durante una grabación, te avisa** y lo vuelve a intentar solo; antes la pista quedaba en silencio sin decir nada.
+- Ten en cuenta: con bocinas (no audífonos) las voces de los demás se cuelan un poco en tu pista de micrófono; la transcripción quita la mayoría de esos ecos. Con audífonos no pasa.
+- Incluye todo lo de 0.7.1: el diseño más tranquilo, "Agregar" discreto, cualquier emoji como ícono y formularios más limpios.
 
 ### Instalar
 1. Descarga **SecondBrain-$VERSION.dmg** (abajo, en *Assets*), ábrelo y arrastra **SecondBrain** a la
@@ -119,11 +118,10 @@ meetings (transcribed **on your Mac**). Claude keeps a per-project wiki with a p
 company and topic. Audio never leaves your computer.
 
 ### What's new
-- **A calmer design.** Fewer lines and abrupt color changes, rounded corners and soft tones across the app, in light and dark. The top bar blends into the content and the sidebar selection no longer uses the system blue.
-- **A quieter "Add".** A soft capsule with a "+" instead of the grey button with a blue arrow (in the sidebar and in projects).
-- **Any emoji as a project icon.** Type or paste the one you want, or open "More emoji…"; suggestions are still there.
-- **Cleaner forms.** Fields with a soft border and a faint halo while typing (no black borders); pickers, checkboxes and menus in the app's style.
-- Includes everything from 0.7: mail attachments, Files, "Add to project", mail threads as a unit, your replies and "Open the original".
+- **Recording no longer mutes you in your call.** When you started recording, people in your meeting (Discord, Zoom, Meet, Teams) stopped hearing you until you left and rejoined. The cause was the macOS echo cancellation SecondBrain turned on for the mic: it reconfigured the shared microphone and broke the meeting app's input. It's gone; your mic is recorded as is and no other app notices.
+- **If your mic drops during a recording, you get a warning** and it retries on its own; before, the track went silent without a word.
+- Good to know: on speakers (not headphones) other people's voices leak a little into your mic track; transcription removes most of that echo. Headphones avoid it.
+- Includes everything from 0.7.1: the calmer design, quieter "Add", any emoji as a project icon and cleaner forms.
 
 ### Install
 1. Download **SecondBrain-$VERSION.dmg** (under *Assets*), open it and drag **SecondBrain** to

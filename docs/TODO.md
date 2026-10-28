@@ -75,6 +75,30 @@ Las capturas no cubren lo que depende de AppKit, de macOS o de Claude. Con la ap
       Contenido y ⌘K.
 - [ ] Correo automático: una regla nueva guarda sola los correos entrantes y avisa.
 
+## 3b. Probar la v0.7 en vivo
+
+Las capturas no cubren lo que depende de AppKit, de macOS, de las cuentas reales o de Claude. Con la app compilada:
+
+- [ ] **Descarga real de adjuntos** con Outlook (Graph) y con Gmail: un correo nuevo con PDF y con logo en la firma; se
+      guarda el PDF, el logo va a Descartados y se rescata.
+- [ ] **Seguir un hilo real** con una respuesta enviada desde Outlook y otra desde Gmail: se agrega al hilo y lo que
+      prometes llega a Pendientes con enlace al correo enviado.
+- [ ] **"Abrir en…"** en cuentas reales: Outlook, Gmail y Google Calendar, desde correos, hilos, eventos y archivos.
+- [ ] **Vista previa (QuickLook) en Archivos** con Espacio; no se ve en las capturas offscreen.
+- [ ] **Traer anteriores** contra un buzón real: la regla nueva ofrece los últimos 90 días y la hoja marca los que quizá
+      sobran.
+- [ ] **Agregar al proyecto desde la app** (file-dump): una corrida por CLI el 2026-10-28 funcionó (archivó una visita
+      presencial como reunión + decisión + pendientes); falta verla de punta a punta en la app.
+- [ ] **Triage de adjuntos con Claude** (triage-attachments): una corrida por CLI el 2026-10-28 guardó la foto de un
+      pizarrón y descartó un logo; falta verla con correos reales.
+
+Limitaciones conocidas:
+
+- La hoja "¿Qué adjuntos guardo?" aparece justo después de guardar un correo.
+- "Traer anteriores" puede incluir de más (la hoja lo marca).
+- En hilos viejos de Outlook, "Abrir en Outlook" puede tardar unos segundos la primera vez.
+- La captura rápida no pasa por el clasificador de Agregar al proyecto.
+
 ## 4. Diferido de v0.5
 
 - Oferta de regla en Correo: el dominio sigue en negritas y queda un comentario viejo sobre el contraste de `text2` (`RuleOfferBar.swift`).

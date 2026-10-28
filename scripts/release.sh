@@ -88,15 +88,15 @@ persona, empresa y tema. El audio nunca sale de tu computadora; lo único que se
 que Claude lee con tu propia cuenta.
 
 ### Novedades
-- **El lugar fija el ámbito.** Dentro de un proyecto, Preguntar, Grafo y Pendientes son solo de ese proyecto; los globales tienen su lugar en la barra lateral (Inicio · Preguntar · Grafo · Pendientes · Personas · Correo · Reuniones · Sin asignar). Se acabó el interruptor "Este proyecto | Todo el cerebro".
-- **Proyectos con pestañas** Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas; en Personas agregas o quitas gente a mano.
-- **Fichas:** cualquier persona, empresa, tema, decisión o reunión tiene una ficha con lo que sabemos, sus reuniones, correos, decisiones, pendientes y relacionados, filtrada al proyecto cuando la abres dentro de uno. **⌘K** ahora busca en el texto completo.
-- **Preguntar guarda tus conversaciones;** las citas se abren al lado sin perder el hilo, y cada respuesta se puede **Guardar como página**.
-- **Corrige el cerebro a mano:** edita una página, revisa los cambios que propongo en las demás páginas que decían lo mismo, y queda como hecho confirmado (\`facts.md\`) que no vuelvo a contradecir.
-- **Captura del día a día:** **⌥⌘N** abre la captura rápida (nota, enlace, correo o archivo) desde cualquier app (puedes cambiar el atajo en Ajustes); la barra de menús abre primero la captura; los correos que caen en una regla se guardan solos; y **+ Agregar** vive en la barra lateral. Los permisos de grabación se piden la primera vez que grabas.
-- **Empresas** como fichas globales (\`orgs/\`), y el **Grafo** abre la ficha en un panel al lado.
-- Ten en cuenta: las conversaciones guardadas son por cerebro, y **⌥⌘N** reemplaza "Nueva carpeta inteligente" del Finder mientras secondbrain está abierta.
-- Incluye todo lo de 0.5.x, con el arreglo de permisos de 0.5.3 (grabar sigue funcionando al actualizar; si no, **Reparar permiso** bajo *Grabar*).
+- **Adjuntos de correo.** Los de correos nuevos se guardan solos; logos, firmas e imágenes decorativas se descartan (Claude decide lo dudoso: guarda la foto del pizarrón y descarta el logo del cliente). Lo descartado queda 30 días en **Descartados** para rescatarlo. Al guardar correos anteriores eliges qué adjuntos con casillas; más de 25 MB no se baja solo. Word, Excel y PowerPoint se leen también.
+- **Archivos.** Nuevo en la barra lateral y como pestaña de cada proyecto: todos los PDFs, documentos, hojas y fotos con búsqueda, filtros por tipo, origen y persona, vista previa (Espacio) y de dónde vino cada uno.
+- **Agregar al proyecto.** En el Resumen del proyecto, una caja donde tiras archivos o escribes lo que pasó (p. ej. una visita presencial) y lo archivo donde va: reunión presencial, decisión, pendientes, documento… y te digo cómo lo archivé.
+- **Hilos de correo como unidad.** Una fila por hilo, la conversación completa en orden con tus correos marcados "Tú", y un solo nodo en el **Grafo**.
+- **Tus respuestas.** Todo hilo guardado se sigue solo; tus respuestas y las de los demás se agregan, y lo que prometes queda en tus pendientes con enlace al correo que enviaste.
+- **Abrir el original.** "Abrir en Outlook / Gmail / Google Calendar" en correos, hilos, eventos y archivos que vinieron de un correo.
+- **Hacia atrás.** Selecciona varios correos y guárdalos juntos; al crear una regla te ofrezco traer los correos anteriores que habría capturado (últimos 90 días) para que elijas.
+- Ten en cuenta: la hoja "¿Qué adjuntos guardo?" aparece justo después de guardar un correo; "Traer anteriores" puede incluir de más (la hoja lo marca); en hilos viejos de Outlook el botón "Abrir en Outlook" puede tardar unos segundos la primera vez.
+- Incluye todo lo de 0.6: el lugar fija el ámbito, fichas, corregir el cerebro y captura rápida con **⌥⌘N**.
 
 ### Instalar
 1. Descarga **SecondBrain-$VERSION.dmg** (abajo, en *Assets*), ábrelo y arrastra **SecondBrain** a la
@@ -123,15 +123,15 @@ meetings (transcribed **on your Mac**). Claude keeps a per-project wiki with a p
 company and topic. Audio never leaves your computer.
 
 ### What's new
-- **Place sets the scope.** Inside a project, Ask, Graph and Tasks are about that project only; the global ones live in the sidebar (Home · Ask · Graph · Tasks · People · Mail · Meetings · Unassigned). The "This project | Whole brain" switch is gone.
-- **Projects with tabs:** Summary · Content · Ask · Graph · Tasks · People; add or remove people by hand under People.
-- **Entity pages:** any person, company, topic, decision or meeting has a page with what we know, its meetings, mail, decisions, tasks and related items, filtered to the project when opened inside one. **⌘K** now searches full text.
-- **Ask keeps your conversations;** citations open alongside without losing your place, and any answer can be **Saved as a page**.
-- **Correct the brain by hand:** edit a page, review the changes I propose on other pages that said the same thing, and it becomes a confirmed fact (\`facts.md\`) I won't contradict again.
-- **Everyday capture:** **⌥⌘N** opens quick capture (note, link, email or file) from any app (rebind it in Settings); the menu bar opens capture first; mail matching a rule is saved automatically; and **+ Add** lives in the sidebar. Recording permissions are asked the first time you record.
-- **Companies** as global pages (\`orgs/\`), and the **Graph** opens the entity page in a side panel.
-- Good to know: saved conversations are per brain, and **⌥⌘N** replaces Finder's "New Smart Folder" while secondbrain is running.
-- Includes everything from 0.5.x, with the 0.5.3 permission fix (recording keeps working across updates; if not, **Fix permission** under *Record*).
+- **Mail attachments.** Those on new mail are saved automatically; logos, signatures and decorative images are dropped (Claude decides the doubtful ones: it keeps the whiteboard photo and drops the client's logo). Anything dropped stays 30 days in **Descartados** (Discarded) so you can rescue it. When saving older mail you pick which attachments with checkboxes; anything over 25 MB isn't downloaded on its own. Word, Excel and PowerPoint files are read too.
+- **Files.** New in the sidebar and as a tab in every project: all PDFs, documents, sheets and photos with search, filters by type, source and person, preview (Space) and where each one came from.
+- **Add to project.** On the project Summary, a box where you drop files or type what happened (say, an in-person visit) and I file it where it belongs: in-person meeting, decision, tasks, document… and tell you how I filed it.
+- **Mail threads as a unit.** One row per thread, the whole conversation in order with your own messages marked "You", and a single node in the **Graph**.
+- **Your replies.** Every saved thread is followed automatically; your replies and everyone else's are added, and what you promise lands in your tasks with a link to the email you sent.
+- **Open the original.** "Open in Outlook / Gmail / Google Calendar" on mail, threads, events and files that came from an email.
+- **Looking back.** Select several emails and save them together; when you create a rule I offer to bring in the earlier mail it would have captured (last 90 days) so you can choose.
+- Good to know: the "Which attachments do I keep?" sheet appears right after you save an email; "Bring earlier" may include too much (the sheet flags it); on old Outlook threads "Open in Outlook" can take a few seconds the first time.
+- Includes everything from 0.6: place sets the scope, entity pages, correcting the brain and quick capture with **⌥⌘N**.
 
 ### Install
 1. Download **SecondBrain-$VERSION.dmg** (under *Assets*), open it and drag **SecondBrain** to

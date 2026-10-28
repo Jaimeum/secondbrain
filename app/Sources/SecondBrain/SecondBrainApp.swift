@@ -47,7 +47,7 @@ struct SecondBrainApp: App {
                 Button(L("menu.search")) { state.searchPresented.toggle() }
                     .keyboardShortcut("k")
                     .disabled(!state.config.onboardingComplete || state.showNewProject || state.emailRequest != nil
-                              || state.noteRequest != nil)
+                              || state.noteRequest != nil || state.dumpRequest != nil)
             }
             CommandGroup(after: .pasteboard) {
                 Divider()

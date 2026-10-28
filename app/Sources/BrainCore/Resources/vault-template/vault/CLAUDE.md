@@ -43,8 +43,9 @@ projects/<slug>/
   CLAUDE.md               project goal, spelling fixes, project rules
   raw/meetings/           transcripts  YYYY-MM-DD-HHmm-<slug>.md
   raw/emails/<thread>/    pasted emails, one file per message + _thread.json (§12)
-  raw/docs/ raw/notes/    documents (md, pdf, txt…), notes, saved URLs
-  raw/assets/             images and attachments
+  raw/docs/ raw/notes/    documents (md, pdf, txt…), notes, saved URLs; `raw/notes/<date>-dump-<slug>.md` = text the
+                          owner dropped in "Agregar al proyecto" (filed by the file-dump command, §8.1)
+  raw/assets/             images (photos, screenshots, scans) dropped or saved from emails
   raw/github/<owner>-<repo>/   GitHub syncs of the repositories the project follows (§8.10)
   wiki/index.md           catalog of every page of the project (read it first, always)
   wiki/log.md             project append-only log
@@ -52,7 +53,8 @@ projects/<slug>/
   wiki/tasks.md           ALL commitments of the project, consolidated (the only checklist)
   wiki/timeline.md        what happened when, by event date (§8.9)
   wiki/health.md          lint report
-  wiki/meetings/          one page per meeting       (same name as the raw transcript)
+  wiki/meetings/          one page per meeting       (same name as the raw transcript; in-person meetings:
+                          `<YYYY-MM-DD>-presencial-<slug>.md`, §8.1)
   wiki/emails/            one page per email thread  (same name as the thread folder)
   wiki/sources/           one page per doc/note/url  (same name as the raw file, without extension)
   wiki/topics/            subjects, workstreams, systems, clients, products, concepts
@@ -328,12 +330,39 @@ updated: 2026-10-26
 A meeting added days later shows it in the date line:
 `**Fecha:** 2026-10-01 09:00 · **Duración:** 30 min · **Agregada:** 2026-10-26 · **Participantes:** …`
 
+**In-person meeting** (reunión presencial) — a meeting, visit, call or conversation the owner did
+not record but wrote down in "Agregar al proyecto" (a raw note `raw/notes/<date>-dump-<slug>.md`).
+Its page is `wiki/meetings/<YYYY-MM-DD>-presencial-<slug>.md`: the day it happened (stated or
+implied by the text, else the day it was written) and exactly the `<slug>` of the note's file name.
+The app shows it as a meeting with its own icon. Same structure as any meeting (§8.1, template
+`estandar` unless the project's default says otherwise), with these differences:
+
+```yaml
+type: meeting
+meeting_kind: in-person
+title: "Visita a la planta de Monterrey"
+date: 2026-10-26
+time: "10:00"                 # only if the text says it
+event_date: "2026-10-26"      # day (and time, quoted with offset, only if known)
+added: "2026-10-27T18:02:11-06:00"
+sources: ["projects/xfiles/raw/notes/2026-10-27-dump-visita-planta.md"]
+people: ["[[jaime-ruiz]]", "[[luis-perez]]"]
+```
+
+- No `duration`, no `speakers`, no timestamps: cite the note (`([[2026-10-27-dump-visita-planta|nota]])`).
+- Date line: `**Fecha:** 2026-10-26 · **Presencial** · **Participantes:** [[jaime-ruiz|Jaime]] (yo), [[luis-perez|Luis Pérez]]`
+  — participants are the people the text names (the owner wrote it, so they were there).
+- Everything the owner wrote is their own account: what others said is reported as the owner
+  wrote it ("según tu nota, Luis dijo…"), never as a quote. Acuerdos (§10) and `tasks.md` as usual.
+- Timeline line with 🤝: `- 2026-10-26 · 🤝 [[2026-10-26-presencial-visita-planta|Visita a la planta]] — …`;
+  index line under `## Reuniones`.
+
 ### 8.2 Source (document / note / URL) — `wiki/sources/<source-key>.md`
 
 ```markdown
 ---
 type: source
-source_type: document   # document | note | url
+source_type: document   # document | note | url | image
 title: "Propuesta comercial v2"
 project: xfiles
 date: 2026-10-20        # event date: raw date: (local day)
@@ -367,6 +396,8 @@ updated: 2026-10-26
 ```
 
 A short note (a few lines) still gets a source page, but keep it to "En breve" + "Puntos clave".
+An image (`raw/assets/`, `source_type: image`) gets a short page: what it shows and why it matters,
+its `## Fuente` linking the image file; never invent what you cannot see.
 A note or document with commitments of the owner or others still feeds `tasks.md` (§10).
 
 ### 8.3 Topic — `wiki/topics/<slug>.md`
@@ -563,7 +594,8 @@ past entries. Exact entry format:
 - Conflicto: fecha de lanzamiento (ver [[plan-de-lanzamiento]])
 ```
 
-Operations: `create` (written by the app), `ingest`, `reformat`, `answer` (save-answer), `lint`.
+Operations: `create` (written by the app), `ingest`, `dump` (file-dump: what the owner dropped in
+"Agregar al proyecto"), `reformat`, `answer` (save-answer), `lint`.
 The date in the heading is today's date (when the operation ran: the log is the record of your
 work). When the source's event date is a different day, add it to the title:
 `## [2026-11-02] ingest | Planeación inicial (reunión del 2026-10-01)`,
@@ -652,7 +684,7 @@ updated: 2026-10-26
 
 # X-Files — línea de tiempo
 
-Lo que pasó en el proyecto, por la fecha en que pasó (no por cuándo se agregó). 🎙️ reunión · ✉️ correo · 📄 documento · 📝 nota · 🔗 página web · ⚖️ decisión · 🚩 hito · 📅 fecha límite
+Lo que pasó en el proyecto, por la fecha en que pasó (no por cuándo se agregó). 🎙️ reunión · 🤝 reunión presencial · ✉️ correo · 📄 documento · 🖼️ imagen · 📝 nota · 🔗 página web · ⚖️ decisión · 🚩 hito · 📅 fecha límite
 
 ## Octubre 2026
 - 2026-10-01 09:00 · 🎙️ [[2026-10-01-0900-planeacion|Planeación inicial]] — se planteó lanzar el 1 de diciembre · agregada 2026-10-26

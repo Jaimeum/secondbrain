@@ -150,7 +150,7 @@ struct HomeRecentItem: Identifiable {
 
     @MainActor init(entry: TimelineEntry) {
         id = "entry:" + entry.id
-        symbol = entry.kind.symbol
+        symbol = entry.symbol(engine: AppState.shared.engine)   // v0.7: in-person meetings
         kindLabel = entry.kind.label
         title = entry.title
         projectSlug = entry.projectSlug

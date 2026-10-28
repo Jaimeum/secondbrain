@@ -176,12 +176,14 @@ enum DebugSnapshots {
             }
             shots += await RulesSnapshots.shots(state: state)   // MARK: v0.4 rules
             shots += CorrectionsModel.snapshotShots(state: state)   // MARK: v0.6 facts — editor + "Revisar cambios"
+            shots += DumpSnapshots.shots(state: state)   // v0.7 dump
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
             // v0.5 shell: these also render dark ("<name>-dark").
             var darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "search-text", "record-control", "record-control-plain",
                                         "record-control-recording", "record-control-error", "menubar", "new-project",
                                         "content-by-date", "content-by-topic", "capture", "capture-email"]
             darkToo.formUnion(CorrectionsModel.snapshotDarkNames)   // MARK: v0.6 facts
+            darkToo.formUnion(DumpSnapshots.darkNames)   // v0.7 dump
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
                 for dark in darkToo.contains(name) ? [false, true] : [false] {
                     let file = dir.appendingPathComponent(name + (dark ? "-dark" : "") + ".png")
@@ -305,6 +307,7 @@ enum DebugSnapshots {
     /// Every sidebar item inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer), and the
     /// project on each tab (`window-project-<tab>-…`), all through the router. `min` = the minimum window.
     private static func renderWindows(state: AppState, dir: URL) async {
+        DumpSnapshots.seed(state: state)   // v0.7 dump: past drops in Resumen's box
         var items: [(name: String, item: SidebarItem, tab: ProjectTab?)] = [
             ("home", .home, nil), ("ask", .ask, nil), ("graph", .graph, nil), ("tasks", .tasks, nil),
             ("people", .people, nil), ("files", .files, nil), ("mail", .mail, nil), ("meetings", .meetings, nil), ("unassigned", .unassigned, nil),

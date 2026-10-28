@@ -20,6 +20,7 @@ struct SB: AsyncParsableCommand {
                       + [EntityCmd.self]  // MARK: v0.6 entity
                       + [ChatCmd.self]  // MARK: v0.6 ask
                       + [SearchCmd.self]  // MARK: v0.6 search
+                      + [DumpCmd.self]  // MARK: v0.7 dump
     )
 }
 

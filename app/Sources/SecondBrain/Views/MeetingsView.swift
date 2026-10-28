@@ -89,7 +89,7 @@ struct MeetingsView: View {
         .onAppear { consumePendingEvent() }
         .onChange(of: state.pendingEventId) { consumePendingEvent() }
         .onChange(of: model.loadedOnce) { consumePendingEvent() }
-        .sheet(item: $pageSheet) { VaultPageSheet(path: $0.path) }
+        .sheet(item: $pageSheet) { PageSheet(path: $0.path) }
     }
 
     // MARK: Layout

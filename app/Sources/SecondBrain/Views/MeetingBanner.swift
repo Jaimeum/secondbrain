@@ -341,9 +341,7 @@ struct RecordControl: View {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
-        state.pendingEventPrepare = false
-        state.pendingEventId = event.id
-        state.selection = .meetings
+        state.navigate(to: .event(event.id, prepare: false))
     }
 }
 

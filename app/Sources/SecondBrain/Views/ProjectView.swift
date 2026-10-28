@@ -2,25 +2,29 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// A project's sections (CONTRACT §15.2): Contenido · Pendientes · Preguntar · Grafo.
-enum ProjectTab: Hashable {
-    case content, tasks, ask, graph
+/// A project's tabs (CONTRACT §16.2): Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas.
+enum ProjectTab: Hashable, CaseIterable {
+    case summary, content, ask, graph, tasks, people
 
     var title: String {
         switch self {
+        case .summary: L("project.tab.summary")
         case .content: L("tabs.content")
-        case .tasks: L("tab.tasks")
         case .ask: L("tab.ask")
         case .graph: L("tab.graph")
+        case .tasks: L("tab.tasks")
+        case .people: L("sidebar.people")
         }
     }
 
     var symbol: String {
         switch self {
+        case .summary: "text.alignleft"
         case .content: "doc.text"
-        case .tasks: "checklist"
         case .ask: "bubble.left.and.text.bubble.right"
         case .graph: "point.3.connected.trianglepath.dotted"
+        case .tasks: "checklist"
+        case .people: "person.2"
         }
     }
 }
@@ -34,15 +38,20 @@ struct ProjectView: View {
     @ViewState private var graphFocus: String?
     @ViewState private var sheet: ProjectSheet?
     @ViewState private var error: String?
+    /// Pages of somewhere else (a person, an org, another project) opened from inside this project: pushed as fichas
+    /// filtered to this project over the current tab, with Atrás (§16.4). Empty = the tab shows.
+    @ViewState private var fichas: [String] = []
 
-    init(project: Project, initialTab: ProjectTab = .content) {
+    private var scope: Scope { .project(project.slug) }
+
+    init(project: Project, initialTab: ProjectTab = .summary) {
         self.project = project
         _tab = ViewState(initialValue: initialTab)
     }
 
     var body: some View {
         content
-            .tabBar(TabPicker(tabs: [.content, .tasks, .ask, .graph], selection: $tab))
+            .tabBar(TabPicker(tabs: ProjectTab.allCases, selection: $tab))
             .navigationTitle("\(project.emoji) \(project.name)")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -60,10 +69,10 @@ struct ProjectView: View {
             .onChange(of: state.pendingPage) { consumePending() }
             .onChange(of: state.pendingGraphFocus) { consumePending() }
             .onChange(of: state.pendingProjectTab) { consumePending() }
-            .onChange(of: state.pendingQuestion) { consumePending() }
             .onChange(of: tab) { old, _ in
                 // "Ver en el grafo" centers the graph once; the next visit from the tab bar starts from the overview.
                 if old == .graph { graphFocus = nil }
+                fichas = []
             }
             .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button(L("common.ok")) { error = nil }
@@ -86,6 +95,12 @@ struct ProjectView: View {
                     .background(Brand.color.surface)
                     .contentShape(Rectangle())
             }
+            if !fichas.isEmpty {
+                EntityStackView(stack: $fichas, scope: scope, onBackFromRoot: { fichas = [] }, onElsewhere: openPage)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Brand.color.surface)
+                    .contentShape(Rectangle())
+            }
         }
     }
 
@@ -93,21 +108,31 @@ struct ProjectView: View {
         switch tab {
         case .content:
             EmptyView()
+        case .summary:
+            ProjectSummaryView(project: project, onOpen: openPage)
         case .tasks:
-            ProjectTasksView(project: project, onOpen: openPage)
+            TasksView(scope: scope, onOpenPage: openPage)
         case .ask:
-            // Owned by AppState, so the conversation survives leaving the project and coming back.
-            ChatView(model: state.projectChat(for: project.slug), projectSlug: project.slug, onOpenPage: openPage)
+            AskView(scope: scope)
         case .graph:
-            GraphView(scope: .project(project.slug), focus: graphFocus, onOpen: openPage)
+            GraphView(scope: scope, focus: graphFocus, onOpen: openPage)
+        case .people:
+            ProjectPeopleView(project: project, onOpen: openPage)
         }
     }
 
     // MARK: Toolbar
 
-    /// "+ Agregar": every way to add something to this project.
+    /// "+ Agregar" (§16.2): Nota · Archivo… · Enlace… · Pegar correo · Grabar aquí (recording last).
     private var addMenu: some View {
         Menu {
+            Button { sheet = .note } label: { Label(L("add.note"), systemImage: "square.and.pencil") }
+            Button(action: addFiles) { Label(L("add.file"), systemImage: "doc.badge.plus") }
+            Button { sheet = .link } label: { Label(L("add.link"), systemImage: "link") }
+            Button { state.requestEmail(projectSlug: project.slug) } label: {
+                Label(L("add.email"), systemImage: "envelope")
+            }
+            Divider()
             Button {
                 state.recordingProjectSlug = project.slug
                 state.toggleRecording()
@@ -115,15 +140,6 @@ struct ProjectView: View {
                 Label(L("project.addRecordHere"), systemImage: "record.circle")
             }
             .disabled(state.isRecording)
-            Button { state.requestEmail(projectSlug: project.slug) } label: {
-                Label(L("search.action.pasteMail"), systemImage: "envelope")
-            }
-            Button { sheet = .note } label: { Label(L("sources.newNote"), systemImage: "square.and.pencil") }
-            Divider()
-            Button(action: addFiles) {
-                Label(L("project.addFiles"), systemImage: "doc.badge.plus")
-            }
-            Button { sheet = .link } label: { Label(L("project.pasteLink"), systemImage: "link") }
         } label: {
             Label(L("project.add"), systemImage: "plus")
                 .labelStyle(.titleAndIcon)
@@ -141,12 +157,19 @@ struct ProjectView: View {
                 } label: {
                     if project.defaultTemplate == nil { Label(L("tpl.standard"), systemImage: "checkmark") } else { Text(L("tpl.standard")) }
                 }
-                Divider()
-                ForEach(state.templates(for: .meeting).filter { $0.id != TemplateInfo.standardId }) { t in
-                    Button {
-                        setDefault(t.id)
-                    } label: {
-                        if project.defaultTemplate == t.id { Label(t.name, systemImage: "checkmark") } else { Text(t.name) }
+                // v0.6 (§16.2): the formats of every scope, under their scope's name.
+                ForEach(TemplateScope.allCases, id: \.self) { scope in
+                    let list = state.templates.filter { $0.scope == scope && $0.id != TemplateInfo.standardId }
+                    if !list.isEmpty {
+                        Section(scope.label) {
+                            ForEach(list) { t in
+                                Button {
+                                    setDefault(t.id)
+                                } label: {
+                                    if project.defaultTemplate == t.id { Label(t.name, systemImage: "checkmark") } else { Text(t.name) }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -204,29 +227,45 @@ struct ProjectView: View {
 
     // MARK: Navigation
 
-    /// Requests from elsewhere (Inicio, ⌘K, Pendientes, "Ver en el grafo"): a page, a tab, a question. Only this
-    /// project's pages are taken; a person or global page waits for the screen it belongs to.
+    /// Requests left by `AppState.navigate(to:)` for this project (it selected this project, so they are all ours):
+    /// a page, a graph focus, a tab. Preguntar's `pendingChat` and Pendientes' `pendingTaskId` are consumed by
+    /// AskView / TasksView once their tab shows.
     private func consumePending() {
-        if let path = state.pendingPage, path.hasPrefix("projects/\(project.slug)/") {
+        guard state.selection == .project(project.slug) else { return }
+        // The tab first: the page decides last (the project's overview opens Resumen, a foreign page a ficha).
+        // A requested tab is shown even when it is the current one: a ficha pushed over it would otherwise stay on
+        // top (onChange(of: tab) doesn't fire) and hide the graph focus or the highlighted task.
+        if let requested = state.pendingProjectTab {
+            state.pendingProjectTab = nil
+            fichas = []
+            tab = requested
+        }
+        if let path = state.pendingPage {
             state.pendingPage = nil
             openPage(path)
         }
-        if let focus = state.pendingGraphFocus, focus.hasPrefix("projects/\(project.slug)/") {
+        if let focus = state.pendingGraphFocus {
             state.pendingGraphFocus = nil
             graphFocus = focus
+            fichas = []
             tab = .graph
         }
-        if let requested = state.pendingProjectTab {
-            state.pendingProjectTab = nil
-            tab = requested
-        }
-        // ChatView sends the question when it appears (and clears it).
-        if state.pendingQuestion != nil { tab = .ask }
     }
 
+    /// One rule for every link inside the project (§16.4): this project's pages open in Contenido; anything else is
+    /// shown as a ficha in this project's context.
     private func openPage(_ path: String) {
-        page = path
-        tab = .content
+        if path == "projects/\(project.slug)/wiki/overview.md" {
+            // The project's own ficha is its Resumen (§16.2).
+            fichas = []
+            tab = .summary
+        } else if Scope.projectSlug(ofPath: path) == project.slug {
+            fichas = []
+            page = path
+            tab = .content
+        } else if fichas.last != path {
+            fichas.append(path)
+        }
     }
 }
 
@@ -271,68 +310,6 @@ private struct ReposSheet: View {
     }
 }
 
-/// Deprecated in v0.5 (`SidebarItem.brain` maps to Inicio): the whole brain's pages, questions and graph.
-struct BrainView: View {
-    @Environment(AppState.self) private var state
-    @ViewState private var tab: ProjectTab = .content
-    @ViewState private var wikiPage: String?
-    @ViewState private var graphFocus: String?
-    @ViewState private var chat = ChatModel()
-
-    var body: some View {
-        Group {
-            switch tab {
-            case .content, .tasks: WikiBrowser(scope: .global, selection: $wikiPage)
-            case .graph: GraphView(scope: .global, focus: graphFocus, onOpen: openAnywhere)
-            case .ask: ChatView(model: chat, projectSlug: nil, onOpenPage: openAnywhere)
-            }
-        }
-        .tabBar(TabPicker(tabs: [.content, .ask, .graph], selection: $tab))
-        .navigationTitle(L("sidebar.brain"))
-        .onAppear(perform: consumePendingGraphFocus)
-        .onChange(of: state.pendingGraphFocus) { consumePendingGraphFocus() }
-    }
-
-    /// A page of a project opens inside that project; global pages and people open here.
-    private func openAnywhere(_ path: String) {
-        let parts = path.split(separator: "/")
-        if parts.count > 2, parts[0] == "projects" {
-            state.pendingPage = path
-            state.selection = .project(String(parts[1]))
-        } else {
-            wikiPage = path
-            tab = .content
-        }
-    }
-
-    /// "Ver en el grafo" from a global or people page.
-    private func consumePendingGraphFocus() {
-        guard let page = state.pendingGraphFocus, !page.hasPrefix("projects/") else { return }
-        state.pendingGraphFocus = nil
-        graphFocus = page
-        tab = .graph
-    }
-}
-
-struct PeopleView: View {
-    @Environment(AppState.self) private var state
-    @ViewState private var page: String?
-
-    var body: some View {
-        WikiBrowser(scope: .people, selection: $page)
-            .navigationTitle(L("sidebar.people"))
-            .onAppear(perform: consumePending)
-            .onChange(of: state.pendingPage) { consumePending() }
-    }
-
-    /// A person opened from elsewhere (`AppState.open(path:)`, ⌘K, a wikilink): select it and clear the request.
-    private func consumePending() {
-        guard let path = state.pendingPage, path.hasPrefix("people/") else { return }
-        state.pendingPage = nil
-        page = path
-    }
-}
-
 /// The section switcher: the brand segmented control (the same as Por fecha | Por tema under it) while it fits, a
 /// pop-up menu when it doesn't (never wider than its bar). No `fixedSize` (§15.2): ViewThatFits measures the
 /// control's ideal width (equal 104 pt minimum segments, so labels never shift), then the chosen one fills the bar.
@@ -343,7 +320,7 @@ struct TabPicker: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             BrandSegmentedControl(options: tabs.map { ($0, $0.title) }, selection: $selection,
-                                  minSegmentWidth: 104, height: 26)
+                                  minSegmentWidth: 92, height: 26)
             Picker("", selection: $selection) {
                 ForEach(tabs, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
             }
@@ -355,12 +332,12 @@ struct TabPicker: View {
 }
 
 extension View {
-    /// The section switcher in a slim bar above the content (centered, at most 480 pt, 16 pt from the edges).
+    /// The section switcher in a slim bar above the content (centered, at most 600 pt, 16 pt from the edges).
     func tabBar(_ picker: TabPicker) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 picker
-                    .frame(maxWidth: 480)
+                    .frame(maxWidth: 600)
                     .padding(.horizontal, Brand.spacing.l)
                     .padding(.vertical, Brand.spacing.s)
                     .frame(maxWidth: .infinity)

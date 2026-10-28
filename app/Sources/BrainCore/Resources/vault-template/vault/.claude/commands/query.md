@@ -18,13 +18,20 @@ what you have.
 ## Steps
 
 1. Parse the scope and the question. If the scope is missing or unknown, treat it as `global`.
+   Read `facts.md` (vault root): facts the owner confirmed. They are true even if a page or
+   source says otherwise — never answer against them (CLAUDE.md §17).
 2. Start from the index:
-   - scope = a project slug → Read `projects/<slug>/wiki/index.md`, then
+   - scope = a project slug → **prioritize the project**: read `projects/<slug>/**` (its wiki
+     first, its raw sources when needed) plus the global pages it links to: `people/`, `orgs/`
+     and `facts.md`. **Never read other projects** (`projects/<other>/…`), even if a person or
+     org page mentions them: answer about this project only, and if the answer is clearly in
+     another project, say so in one sentence without its content ("Eso parece estar en otro
+     proyecto; pregúntalo desde Inicio."). Read `projects/<slug>/wiki/index.md`, then
      `projects/<slug>/wiki/overview.md`.
-   - scope = `global` → Read `index.md`, then the `wiki/index.md` of the projects that look
-     relevant (if unsure, of all projects).
+   - scope = `global` → the whole cerebro: Read `index.md`, then the `wiki/index.md` of the
+     projects that look relevant (if unsure, of all projects).
 3. Open the pages the index points to (topics, decisions, meetings, email threads, people,
-   `tasks.md`, `timeline.md`). Grep the wiki for names, terms and synonyms in both Spanish and
+   `tasks.md`, `timeline.md`). Grep the wiki (within the scope) for names, terms and synonyms in both Spanish and
    English when the index isn't enough. For people questions, read `people/<name>.md`.
    - **"¿Qué me toca?" / "what do I have to do?"**: the owner's tasks are the `### Yo — …` /
      `### Me — …` group of `## Abiertas` in each `tasks.md` (global scope: every project's

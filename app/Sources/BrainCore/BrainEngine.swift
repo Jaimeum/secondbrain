@@ -461,8 +461,30 @@ private final class ConfigBox: @unchecked Sendable {
         return "\n\nrepos:\n" + lines.joined(separator: "\n")
     }
 
+    /// An answer filed by Claude (`/save-answer`) in the folder of `projectSlug`'s scope (the project's
+    /// `wiki/questions/`, or the global `questions/` when nil): never re-filed into another scope.
     public func saveAnswer(question: String, answer: String, projectSlug: String?) {
-        enqueue(Job(kind: .saveAnswer, projectSlug: projectSlug, payload: ["question": question, "answer": answer]))
+        enqueue(Job(kind: .saveAnswer, projectSlug: projectSlug,
+                    payload: ["question": question, "answer": answer, "scope": projectSlug == nil ? "brain" : "project"]))
+    }
+
+    /// "Guardar como página" (§16.3): the page is written at once in `scope`'s folder (one undoable Historial entry,
+    /// so it shows in Contenido and ⌘K right away), then `/save-answer` links it from the indexes, the logs and the
+    /// related pages (its own Historial entry). Returns the page's path. Refused with `EngineError.busy` while Claude is
+    /// editing the brain (the running job's entry would swallow the page and its undo would delete it).
+    @discardableResult
+    public func saveAnswer(question: String, answer: String, scope: Scope) throws -> String {
+        guard !claudeIsEditing else { throw EngineError.busy }
+        let short = ChatStore.title(forQuestion: question)
+        let title = lang.t("Guardé una respuesta: «\(short)»", "Saved an answer: “\(short)”")
+        let path = SavedAnswers.newPath(question: question, scope: scope, vault: vault)
+        let entry = try history.recordManualEdit(title: title, projectSlug: scope.projectSlug, path: path, before: nil,
+                                                 after: SavedAnswers.page(question: question, answer: answer, scope: scope))
+        onEvent?(.historyAdded(entry))
+        enqueue(Job(kind: .saveAnswer, projectSlug: scope.projectSlug,
+                    payload: ["question": question, "answer": answer, "path": path,
+                              "scope": scope.projectSlug == nil ? "brain" : "project"]))
+        return path
     }
 
     public func lint(projectSlug: String?) {
@@ -942,8 +964,12 @@ private final class ConfigBox: @unchecked Sendable {
 
     private func runSaveAnswer(_ job: Job) async throws {
         let question = job.payload["question"] ?? ""
-        let body: [String: Any] = ["project": job.projectSlug ?? NSNull(), "question": question,
-                                   "answer": job.payload["answer"] ?? ""]
+        // The scope is explicit: the command files the page in that scope's folder only (§16.3). `path`: the page the
+        // app already wrote (it links it and cleans it up; it never creates a second one).
+        let path = job.payload["path"].flatMap { $0.isEmpty ? nil : $0 }
+        let body: [String: Any] = ["scope": job.payload["scope"] ?? (job.projectSlug == nil ? "brain" : "project"),
+                                   "project": job.projectSlug ?? NSNull(), "question": question,
+                                   "answer": job.payload["answer"] ?? "", "path": path ?? NSNull()]
         let args = String(decoding: try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys]), as: UTF8.self)
         _ = try await tracked(job, title: lang.savedAnswer(question), kind: .saveAnswer, sourceId: nil, projectSlug: job.projectSlug) {
             try await self.runClaude(job, command: "save-answer", arguments: args, mode: .edit, model: self.config.ingestModel)

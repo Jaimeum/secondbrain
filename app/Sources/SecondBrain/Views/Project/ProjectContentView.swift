@@ -2,9 +2,9 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// A project's "Contenido" tab (CONTRACT §15.2): a list on the left — *Por fecha* (newest first: the sources still
-/// being processed, then what is ahead, then what happened by month) or *Por tema* (the wiki groups), with the project
-/// summary pinned above both — and the page on the right. The whole tab accepts dropped files and links.
+/// A project's "Contenido" tab (CONTRACT §15.2, §16.2): a list on the left — *Por fecha* (newest first: the sources
+/// still being processed, then what is ahead, then what happened by month) or *Por tema* (the wiki groups) — and the
+/// page on the right. The project summary ("En breve") is not pinned here any more: it lives in Resumen. The whole tab accepts dropped files and links.
 /// `ProjectView` keeps this view alive across tab switches (`isActive` = the tab is showing), so the list, its scroll
 /// position and the page survive a visit to another tab.
 struct ProjectContentView: View {
@@ -56,14 +56,9 @@ struct ProjectContentView: View {
         return TimelineGroups.feed(entries.filter { $0.sourceId.map { !hidden.contains($0) } ?? true }, kinds: kinds)
     }
 
-    /// Por tema without the summary: it is pinned above both lists.
+    /// Por tema without the summary (it is the Resumen tab).
     private var topicGroups: [WikiGrouping.Group] {
         WikiGrouping.groups(for: pages, scope: .project(slug), projectName: project.name).filter { $0.key != "pinned" }
-    }
-
-    /// The project summary ("En breve"), pinned above the list in both modes.
-    private var overviewPath: String? {
-        pages.first { WikiGrouping.baseName($0.path) == "overview" && WikiGrouping.groupKey($0.path) == "general" }?.path
     }
 
     var body: some View {
@@ -120,12 +115,6 @@ struct ProjectContentView: View {
             VStack(alignment: .leading, spacing: Brand.spacing.s) {
                 BrandSegmentedControl(options: [(Mode.byDate, L("tabs.byDate")), (Mode.byTopic, L("tabs.byTopic"))],
                                       selection: $mode)
-                if let overview = overviewPath {
-                    ContentListRow(symbol: "sparkles", title: L("graph.overviewLabel"),
-                                   isSelected: selectedSourceId == nil && selection == overview) {
-                        openPath(overview)
-                    }
-                }
             }
             .padding(.horizontal, Brand.spacing.m)
             .padding(.top, Brand.spacing.m)
@@ -352,6 +341,16 @@ struct ProjectContentView: View {
         SourceOpener.openSummary(source, state: state) { path in selection = path }
     }
 
+    /// The single click rule (§16.4): this project's pages open here; anything else (a person, an org, another
+    /// project's page) as a ficha filtered to this project, through the router (ProjectView pushes it).
+    private func followLink(_ path: String) {
+        if Scope.projectSlug(ofPath: path) == slug, path != "projects/\(slug)/wiki/overview.md" {
+            openPath(path)
+        } else {
+            state.navigate(to: .entity(path, .project(slug)))
+        }
+    }
+
     private func openPath(_ path: String) {
         selectEntry(nil)
         selection = path
@@ -366,7 +365,8 @@ struct ProjectContentView: View {
                             onDelete: { actions.pendingDelete = source })
         } else if selection != nil {
             WikiPagePane(selection: $selection,
-                         title: WikiGrouping.title(of: selection, in: pages, projectName: project.name))
+                         title: WikiGrouping.title(of: selection, in: pages, projectName: project.name),
+                         onLink: followLink)
         } else if pagesLoaded {
             EmptyStateView(symbol: "book.closed", title: L("wiki.emptyTitle"), message: L("wiki.emptyMessage"))
         } else {
@@ -390,7 +390,8 @@ struct ProjectContentView: View {
             selection = nil
         }
         if selection == nil, selectedSourceId == nil {
-            selection = WikiGrouping.defaultPage(in: all)?.path
+            // The first page of the list (the summary is the Resumen tab, not a row here).
+            selection = topicGroups.first?.pages.first?.page.path ?? WikiGrouping.defaultPage(in: all)?.path
         }
     }
 

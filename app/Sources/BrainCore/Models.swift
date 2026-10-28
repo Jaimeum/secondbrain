@@ -27,6 +27,11 @@ public struct AppConfig: Codable, Equatable, Sendable {
     // MARK: v0.4 github
     /// Minutes between automatic GitHub syncs (CONTRACT §13.4); 0 = only by hand.
     public var githubSyncMinutes: Int = 60
+    // MARK: v0.6 capture
+    /// The global shortcut opens "Captura rápida" (CONTRACT §16.10).
+    public var captureHotkeyEnabled: Bool = true
+    /// Which shortcut (⌥⌘N unless the user recorded another one in Ajustes › General).
+    public var captureHotkey: CaptureHotKey = .default
 
     public static let `default` = AppConfig(
         vaultPath: "~/Documents/SecondBrain",
@@ -45,18 +50,20 @@ public struct AppConfig: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case vaultPath, dataPath, whisperModel, claudePath, ingestModel, queryModel, uiLanguage, captureMic, gitEnabled,
              hotkeyEnabled, onboardingComplete, appearance, oauth, lastMailProjectSlug,
-             githubSyncMinutes  // MARK: v0.4 github
+             githubSyncMinutes,  // MARK: v0.4 github
+             captureHotkeyEnabled, captureHotkey  // MARK: v0.6 capture
     }
 
     public init(vaultPath: String, dataPath: String, whisperModel: String, claudePath: String?, ingestModel: String,
                 queryModel: String, uiLanguage: String, captureMic: Bool, gitEnabled: Bool, hotkeyEnabled: Bool,
                 onboardingComplete: Bool, appearance: String = "system", oauth: OAuthAppRegistration = .empty,
-                lastMailProjectSlug: String? = nil, githubSyncMinutes: Int = 60) {
+                lastMailProjectSlug: String? = nil, githubSyncMinutes: Int = 60, captureHotkeyEnabled: Bool = true) {
         self.vaultPath = vaultPath; self.dataPath = dataPath; self.whisperModel = whisperModel; self.claudePath = claudePath
         self.ingestModel = ingestModel; self.queryModel = queryModel; self.uiLanguage = uiLanguage; self.captureMic = captureMic
         self.gitEnabled = gitEnabled; self.hotkeyEnabled = hotkeyEnabled; self.onboardingComplete = onboardingComplete
         self.appearance = appearance; self.oauth = oauth; self.lastMailProjectSlug = lastMailProjectSlug
         self.githubSyncMinutes = githubSyncMinutes   // MARK: v0.4 github
+        self.captureHotkeyEnabled = captureHotkeyEnabled   // MARK: v0.6 capture
     }
 
     /// v0.1 fields are required; everything added later falls back to its default when missing, so an older
@@ -88,6 +95,9 @@ public struct AppConfig: Codable, Equatable, Sendable {
         } else {
             githubSyncMinutes = 60
         }
+        // MARK: v0.6 capture
+        captureHotkeyEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .captureHotkeyEnabled)) ?? true
+        captureHotkey = (try? c.decodeIfPresent(CaptureHotKey.self, forKey: .captureHotkey)).flatMap { $0?.isValid == true ? $0 : nil } ?? .default
     }
 
     public static var configURL: URL {
@@ -112,6 +122,40 @@ public struct AppConfig: Codable, Equatable, Sendable {
 
     public var vaultURL: URL { URL(fileURLWithPath: (vaultPath as NSString).expandingTildeInPath) }
     public var dataURL: URL { URL(fileURLWithPath: (dataPath as NSString).expandingTildeInPath) }
+}
+
+/// A global shortcut as Carbon takes it (`RegisterEventHotKey`): a virtual key code and Carbon modifier flags
+/// (cmdKey 0x100, shiftKey 0x200, optionKey 0x800, controlKey 0x1000), plus the key's label as recorded ("N").
+public struct CaptureHotKey: Codable, Equatable, Hashable, Sendable {
+    public var keyCode: Int
+    public var modifiers: Int
+    public var key: String
+
+    public init(keyCode: Int, modifiers: Int, key: String) {
+        self.keyCode = keyCode; self.modifiers = modifiers; self.key = key
+    }
+
+    public static let command = 0x100, shift = 0x200, option = 0x800, control = 0x1000
+
+    /// ⌥⌘N. (⌃⌥Space, the v0.6 draft's default, is macOS's "Select next input source" for anyone with two keyboard
+    /// layouts.)
+    public static let `default` = CaptureHotKey(keyCode: 45, modifiers: option | command, key: "N")
+
+    /// ⌘ or ⌃, plus at least one other modifier (a single-modifier global shortcut would steal app shortcuts).
+    public var isValid: Bool {
+        let mods = [Self.command, Self.shift, Self.option, Self.control].filter { modifiers & $0 != 0 }.count
+        return (modifiers & Self.command != 0 || modifiers & Self.control != 0) && mods >= 2 && !key.isEmpty
+    }
+
+    /// "⌥⌘N", in macOS's modifier order (⌃⌥⇧⌘).
+    public var symbols: String {
+        var s = ""
+        if modifiers & Self.control != 0 { s += "⌃" }
+        if modifiers & Self.option != 0 { s += "⌥" }
+        if modifiers & Self.shift != 0 { s += "⇧" }
+        if modifiers & Self.command != 0 { s += "⌘" }
+        return s + key
+    }
 }
 
 public struct DataPaths: Sendable {
@@ -339,9 +383,24 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var emoji: String
     public var createdAt: Date
     public var defaultTemplate: String?   // v0.2: template id for meetings/emails of this project
+    public var people: ProjectPeople?     // v0.6: people added/removed by hand in Personas (§16.2)
     public var id: String { slug }
     public init(slug: String, name: String, description: String, emoji: String, createdAt: Date = Date()) {
         self.slug = slug; self.name = name; self.description = description; self.emoji = emoji; self.createdAt = createdAt
+    }
+
+    enum CodingKeys: String, CodingKey { case slug, name, description, emoji, createdAt, defaultTemplate, people }
+
+    /// A malformed optional field (`people` written by hand or by another Mac) is dropped, never the whole project.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        slug = try c.decode(String.self, forKey: .slug)
+        name = try c.decode(String.self, forKey: .name)
+        description = try c.decode(String.self, forKey: .description)
+        emoji = try c.decode(String.self, forKey: .emoji)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        defaultTemplate = try? c.decodeIfPresent(String.self, forKey: .defaultTemplate)
+        people = try? c.decodeIfPresent(ProjectPeople.self, forKey: .people)
     }
 }
 

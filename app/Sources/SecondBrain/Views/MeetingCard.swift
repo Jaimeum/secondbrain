@@ -552,9 +552,15 @@ struct PastMeetingRow: View {
                 HStack(spacing: 6) {
                     BrandChip(text: state.projectName(projectSlug), symbol: projectSlug == nil ? "tray" : nil)
                     let mine = MeetingsModel.shared.myOpenTaskCount(item)
-                    if mine > 0 {
-                        BrandChip(text: L("meetings.past.myTasks", mine), symbol: "checklist")
-                            .help(L("meetings.past.myTasksHelp"))
+                    if mine > 0, let key = MeetingsModel.shared.taskKey(item) {
+                        // §16.8: Pendientes › Míos of this meeting (the same n tasks).
+                        Button {
+                            TaskFilterStore.shared.open(.origin(key), state: state)
+                        } label: {
+                            BrandChip(text: L("meetings.past.myTasks", mine), symbol: "checklist")
+                        }
+                        .buttonStyle(.plain)
+                        .help(L("meetings.past.myTasksOpen"))
                     }
                     if let source, source.status.isInProgress || source.status == .needsProject {
                         StatusPill(status: source.status, progress: source.progress)
@@ -659,60 +665,6 @@ struct PastMeetingRow: View {
             assignError = (error as? EngineError)?.errorDescription ?? L("sources.moveFailed")
         }
     }
-}
-
-/// A vault page (people page, meeting summary) read without leaving Reuniones. Links stay in the sheet; a project page
-/// offers "Abrir en el proyecto". Sized per §15.3.
-struct VaultPageSheet: View {
-    @Environment(AppState.self) private var state
-    @Environment(\.dismiss) private var dismiss
-    let path: String
-    @ViewState private var current: String?
-
-    private var shown: String { current ?? path }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text(state.engine.vault.title(of: shown))
-                    .font(Brand.section)
-                    .foregroundStyle(Brand.color.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 8)
-                if shown.hasPrefix("projects/") {
-                    let open = Button {
-                        let target = shown
-                        dismiss()
-                        state.openProjectPage(target)
-                    } label: {
-                        Label(L("meetings.openInProject"), systemImage: "arrow.up.forward.square")
-                    }
-                    .buttonStyle(.brandSecondary)
-                    .help(L("meetings.openInProject"))
-                    ViewThatFits(in: .horizontal) {
-                        open.fixedSize()
-                        open.labelStyle(.iconOnly).fixedSize()
-                    }
-                }
-                Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(.horizontal, Brand.spacing.l)
-            .padding(.vertical, Brand.spacing.m)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            WikiWebView(vault: state.engine.vault, path: shown) { next in current = next }
-        }
-        .background(Brand.color.surface)
-        .frame(minWidth: 560, idealWidth: 680, maxWidth: .infinity, minHeight: 420, idealHeight: 520, maxHeight: .infinity)
-    }
-}
-
-/// `.sheet(item:)` wrapper for a vault path.
-struct VaultPageItem: Identifiable, Equatable {
-    let path: String
-    var id: String { path }
 }
 
 /// Notes of an invitation as text with clickable links.

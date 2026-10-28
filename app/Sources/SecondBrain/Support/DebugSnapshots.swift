@@ -32,11 +32,11 @@ enum DebugSnapshots {
             let email = (ProcessInfo.processInfo.environment["SB_SNAPSHOT_EMAIL"]).flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }
             var shots: [(String, CGSize, AnyView)] = []
             if let project {
-                shots.append(("tasks", CGSize(width: 900, height: 560), AnyView(ProjectTasksView(project: project, onOpen: { _ in }))))
+                shots.append(("tasks", CGSize(width: 900, height: 560), AnyView(TasksView(scope: .project(project.slug), onOpenPage: { _ in }))))
                 shots.append(("timeline", CGSize(width: 900, height: 700), AnyView(BrainTimelineView(projectSlug: slug) { _, _ in })))
                 shots.append(("sources", CGSize(width: 900, height: 560), AnyView(SourcesView(projectSlug: slug, onOpen: { _ in }))))
             }
-            shots.append(("mytasks", CGSize(width: 900, height: 560), AnyView(MyTasksView())))
+            shots.append(("mytasks", CGSize(width: 900, height: 560), AnyView(TasksView(scope: .brain))))
             shots.append(("timeline-all", CGSize(width: 900, height: 700), AnyView(BrainTimelineView(projectSlug: nil) { _, _ in })))
             // Sheets at their declared ideal size and at their minimum (CONTRACT §15.3).
             shots.append(("email", CGSize(width: 760, height: 520),
@@ -53,11 +53,33 @@ enum DebugSnapshots {
                 shots.append(("thread-min", CGSize(width: 560, height: 420), AnyView(ThreadSheet(threadKey: thread.key))))
             }
             shots.append(("note", CGSize(width: 560, height: 520), AnyView(NoteSheet(projectSlug: slug))))
-            shots.append(("menubar", CGSize(width: 320, height: 440), AnyView(MenuBarView())))
+            shots.append(("menubar", CGSize(width: 360, height: 600), AnyView(MenuBarView())))
+            // MARK: v0.6 capture (§16.10): the quick capture panel empty, on a link, a pasted email and dropped files.
+            @MainActor func capture(_ text: String, files: [URL] = []) -> AnyView {
+                AnyView(QuickCaptureView(model: QuickCaptureModel(state: state, text: text, files: files))
+                    .frame(width: QuickCapturePanel.width).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxHeight: .infinity, alignment: .top))
+            }
+            shots.append(("capture", CGSize(width: 520, height: 250), capture("")))
+            shots.append(("capture-note", CGSize(width: 520, height: 250),
+                          capture("Llamar a Laura el jueves: quiere ver la propuesta con el descuento por volumen antes del comité.")))
+            shots.append(("capture-link", CGSize(width: 520, height: 250), capture("https://www.contoso.com/blog/2026/plan-de-migracion")))
+            shots.append(("capture-email", CGSize(width: 520, height: 280), capture("""
+                De: Laura Méndez <laura@acmelogistics.com>
+                Enviado: martes, 27 de octubre de 2026 10:14
+                Para: Jaime <jaime@dive.ai>
+                Asunto: Propuesta de rutas
+
+                Hola Jaime, te mando los números que pediste.
+                """)))
+            shots.append(("capture-files", CGSize(width: 520, height: 320), capture("", files: [
+                URL(fileURLWithPath: "/tmp/Propuesta Acme Logistics v3 (final, con descuentos por volumen).pdf"),
+                URL(fileURLWithPath: "/tmp/Llamada con Laura.m4a"), URL(fileURLWithPath: "/tmp/notas.txt"),
+                URL(fileURLWithPath: "/tmp/presupuesto.xlsx")])))
             // v0.3 (CONTRACT §12.6); run with SB_DEMO_ACCOUNTS=1 for mail/meetings with data.
             shots.append(("graph", CGSize(width: 1000, height: 680),
-                          AnyView(GraphView(scope: project.map { .project($0.slug) } ?? .global, focus: nil, onOpen: { _ in }))))
-            shots.append(("graph-all", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: nil, onOpen: { _ in }))))
+                          AnyView(GraphView(scope: Scope(projectSlug: project?.slug), onOpen: { _ in }))))
+            shots.append(("graph-all", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .brain, onOpen: { _ in }))))
             shots.append(("mail", CGSize(width: 1000, height: 640), AnyView(MailView())))
             shots.append(("meetings", CGSize(width: 1000, height: 640), AnyView(MeetingsView())))
             shots.append(("meetings-week", CGSize(width: 1000, height: 640), AnyView(MeetingsView(initialSegment: .week))))   // MARK: v0.3 meetings
@@ -112,20 +134,26 @@ enum DebugSnapshots {
             shots.append(("home-empty", CGSize(width: 900, height: 620), AnyView(HomeView(previewEmpty: true))))
             shots.append(("search", CGSize(width: 760, height: 600), AnyView(SearchPalette(initialQuery: "comi"))))
             shots.append(("search-empty", CGSize(width: 760, height: 420), AnyView(SearchPalette())))
+            // v0.6 search: full text (rows found by their page's text carry a snippet; "Ver n más").
+            shots.append(("search-text", CGSize(width: 760, height: 620), AnyView(SearchPalette(initialQuery: "presupuesto"))))
+            shots.append(("search-narrow", CGSize(width: 480, height: 600), AnyView(SearchPalette(initialQuery: "presupuesto"))))
             // The sidebar footer at its default width (220): the meeting card, a plain "Grabar", recording, an error.
+            // When Grabar takes the footer (a meeting on, recording), "+ Agregar" sits under it as a secondary button
+            // (§16.1), as in SidebarFooter.
             func footer(_ preview: RecordControlPreview?) -> AnyView {
                 AnyView(VStack(alignment: .leading, spacing: 4) {
                     RecordControl(placement: .sidebar, preview: preview)
+                    if preview != .plain { AddControl(secondary: true) }
                     QueueStatusLine(showsProgressBar: false)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .background(Brand.color.bg))
             }
-            shots.append(("record-control", CGSize(width: 220, height: 130), footer(nil)))
-            shots.append(("record-control-280", CGSize(width: 280, height: 130), footer(nil)))
+            shots.append(("record-control", CGSize(width: 220, height: 170), footer(nil)))
+            shots.append(("record-control-280", CGSize(width: 280, height: 170), footer(nil)))
             shots.append(("record-control-plain", CGSize(width: 220, height: 130), footer(.plain)))
-            shots.append(("record-control-recording", CGSize(width: 220, height: 130), footer(.recording)))
+            shots.append(("record-control-recording", CGSize(width: 220, height: 170), footer(.recording)))
             shots.append(("record-control-error", CGSize(width: 220, height: 170), footer(.plain)))
             shots.append(("new-project", CGSize(width: 480, height: 440), AnyView(NewProjectSheet())))
             if let project {
@@ -133,18 +161,27 @@ enum DebugSnapshots {
             }
             // MARK: v0.3 graph — focused graph + web views need a run loop and WKWebView.takeSnapshot.
             if let topic = await state.engine.graph(projectSlug: nil).nodes.filter({ $0.kind == .topic }).max(by: { $0.links < $1.links }) {
-                shots.append(("graph-focus", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: topic.id, onOpen: { _ in }))))
+                shots.append(("graph-focus", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .brain, focus: topic.id, onOpen: { _ in }))))
+                // v0.6 graph (§16.5): a project's graph with a global person selected and its ficha panel, at the
+                // 700 pt minimum detail width.
+                if let slug = topic.projectSlug,
+                   let person = await state.engine.graph(projectSlug: slug).nodes.filter({ $0.kind == .person }).max(by: { $0.links < $1.links }) {
+                    shots.append(("graph-project-focus", CGSize(width: 700, height: 600),
+                                  AnyView(GraphView(scope: .project(slug), focus: person.id, onOpen: { _ in }))))
+                }
                 if let slug = topic.projectSlug {   // the wiki page header with "Ver en el grafo"
                     shots.append(("graph-wiki", CGSize(width: 1000, height: 400),
                                   AnyView(WikiBrowser(scope: .project(slug), selection: .constant(topic.id)))))
                 }
             }
             shots += await RulesSnapshots.shots(state: state)   // MARK: v0.4 rules
+            shots += CorrectionsModel.snapshotShots(state: state)   // MARK: v0.6 facts — editor + "Revisar cambios"
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
             // v0.5 shell: these also render dark ("<name>-dark").
-            let darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "record-control", "record-control-plain",
+            var darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "search-text", "record-control", "record-control-plain",
                                         "record-control-recording", "record-control-error", "menubar", "new-project",
-                                        "content-by-date", "content-by-topic"]
+                                        "content-by-date", "content-by-topic", "capture", "capture-email"]
+            darkToo.formUnion(CorrectionsModel.snapshotDarkNames)   // MARK: v0.6 facts
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
                 for dark in darkToo.contains(name) ? [false, true] : [false] {
                     let file = dir.appendingPathComponent(name + (dark ? "-dark" : "") + ".png")
@@ -230,8 +267,8 @@ enum DebugSnapshots {
         // ⌘K finds meetings by their page's title, also without a source record on this Mac (§15.2).
         await SearchIndex.shared.rebuild(state: state)
         let found = SearchIndex.shared.results(for: "comi")
-        let meetings = found.first { $0.0 == .meetings }?.1.map(\.title) ?? []
-        log("search comi → \(found.map { "\($0.0.rawValue)=\($0.1.map(\.title))" }.joined(separator: " "))")
+        let meetings = found.first { $0.group == .meetings }?.items.map(\.title) ?? []
+        log("search comi → \(found.map { "\($0.group.rawValue)=\($0.items.map(\.title))" }.joined(separator: " "))")
         log("search comi meetings \(meetings.contains("Comité de la alianza") ? "PASS" : "FAIL")")
         let ids = SearchIndex.shared.items.map(\.id)
         log("search ids unique \(Set(ids).count == ids.count ? "PASS" : "FAIL (\(ids.count - Set(ids).count) dup)")")
@@ -265,27 +302,60 @@ enum DebugSnapshots {
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
     }
 
-    /// Every top-level screen inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer), and
-    /// the project on each tab (`window-project-<tab>-…`, through `pendingProjectTab`). `min` = the minimum window.
+    /// Every sidebar item inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer), and the
+    /// project on each tab (`window-project-<tab>-…`), all through the router. `min` = the minimum window.
     private static func renderWindows(state: AppState, dir: URL) async {
         var items: [(name: String, item: SidebarItem, tab: ProjectTab?)] = [
-            ("home", .home, nil), ("meetings", .meetings, nil), ("mail", .mail, nil), ("tasks", .tasks, nil),
-            ("people", .people, nil),
+            ("home", .home, nil), ("ask", .ask, nil), ("graph", .graph, nil), ("tasks", .tasks, nil),
+            ("people", .people, nil), ("mail", .mail, nil), ("meetings", .meetings, nil), ("unassigned", .unassigned, nil),
         ]
         if let project = state.projects.first {
             items.append(("project", .project(project.slug), nil))
-            let tabs: [(String, ProjectTab)] = [("content", .content), ("tasks", .tasks), ("ask", .ask), ("graph", .graph)]
+            let tabs: [(String, ProjectTab)] = [("summary", .summary), ("content", .content), ("ask", .ask), ("graph", .graph),
+                                                ("tasks", .tasks), ("people", .people)]
             for (tabName, tab) in tabs { items.append(("project-\(tabName)", .project(project.slug), tab)) }
+            items.append(("project-ask-thread", .project(project.slug), .ask))   // MARK: v0.6 ask — list + inspector
         }
+        items.append(("ask-thread", .ask, nil))   // MARK: v0.6 ask
         // ⌘K over Inicio (the palette inside the real window, with its query).
         items.append(("search", .home, nil))
+        // MARK: v0.6 entity — fichas (§16.13): a person's global ficha (Personas), the same person filtered to the
+        // first project (pushed over its Resumen), and a global page's ficha in Inicio.
+        var fichas: [String: Destination] = [:]
+        if let project = state.projects.first {
+            let snap = EntityIndex.shared(vaultRoot: state.engine.vault.root).refresh()
+            if let person = snap.people(ofProject: project.slug).first {
+                fichas["entity-global"] = .entity(person.path, .brain)
+                fichas["entity-filtered"] = .entity(person.path, .project(project.slug))
+                items.append(("entity-global", .people, nil))
+                items.append(("entity-filtered", .project(project.slug), nil))
+            }
+            if snap.entity("index.md") != nil {
+                fichas["entity-home"] = .entity("index.md", .brain)
+                items.append(("entity-home", .home, nil))
+            }
+        }
+        // v0.6 tasks: Pendientes with Proyecto / Persona / Buscar set (§16.13 "Pendientes con filtros").
+        items.append(("tasks-filtered", .tasks, nil))
         let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""
         for entry in items where only.isEmpty || entry.name.hasPrefix(only) {
             for (sizeName, size) in [("1100", CGSize(width: 1100, height: 720)), ("min", CGSize(width: 920, height: 620))] {
                 for dark in [false, true] {
-                    state.selection = entry.item
-                    state.pendingProjectTab = entry.tab
+                    if let destination = fichas[entry.name] {
+                        if entry.name == "entity-filtered", case .project(let slug) = entry.item {
+                            state.navigate(to: .projectTab(slug, .summary))
+                        }
+                        state.navigate(to: destination)
+                    } else if case .project(let slug) = entry.item, let tab = entry.tab {
+                        state.navigate(to: .projectTab(slug, tab))
+                    } else {
+                        state.navigate(to: .sidebar(entry.item))
+                    }
                     state.searchPresented = false   // "search" lays its own palette (with a query) over the window
+                    if entry.name.hasSuffix("ask-thread") {   // MARK: v0.6 ask
+                        AskSnapshots.seed(state: state, scope: entry.tab == nil ? .brain : Scope(projectSlug: state.currentProjectSlug))
+                    }
+                    TaskFilterStore.shared.filter = entry.name == "tasks-filtered" ? snapshotTaskFilter(state) : TaskFilter()
                     let file = "window-\(entry.name)-\(sizeName)-\(dark ? "dark" : "light").png"
                     let view = entry.name == "search"
                         ? AnyView(ZStack { MainView(); SearchPalette(initialQuery: "comi") })
@@ -294,6 +364,12 @@ enum DebugSnapshots {
                 }
             }
         }
+    }
+
+    /// Two projects and "Lo que me debe Elena" (a demo-vault person with tasks in two projects): the filter bar set.
+    private static func snapshotTaskFilter(_ state: AppState) -> TaskFilter {
+        TaskFilter(projects: Set(state.projects.prefix(2).map(\.slug)),
+                   person: TaskPerson(slug: "elena-castro", name: "Elena Castro"), relation: .owesMe)
     }
 
     private static func renderWindow(_ view: some View, size: CGSize, dark: Bool, to url: URL) async {

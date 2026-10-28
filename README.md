@@ -1,21 +1,21 @@
 # secondbrain
 
-Tu segundo cerebro por proyecto, 100% en tu Mac. Graba tus reuniones (audio de la computadora + tu micrófono, aunque uses audífonos), las transcribe localmente y Claude —con **tu propia cuenta**, sin API key— mantiene un wiki ordenado de cada proyecto: resúmenes, decisiones, pendientes, personas y temas. Basado en la idea *LLM Wiki* de Andrej Karpathy.
+Tu segundo cerebro por proyecto, 100% en tu Mac. Junta lo que pasa en tu día —correos, notas, documentos, enlaces, repos de GitHub y reuniones (graba el audio de la computadora + tu micrófono y lo transcribe localmente)— y Claude —con **tu propia cuenta**, sin API key— mantiene un wiki ordenado de cada proyecto: resúmenes, decisiones, pendientes, personas y temas. Basado en la idea *LLM Wiki* de Andrej Karpathy.
 
-![Inicio de secondbrain: la reunión de ahora, lo que falta por ordenar y tus pendientes de hoy](docs/screenshots/home.png)
+![Inicio de secondbrain: lo último que aprendí, tus pendientes de hoy y la agenda](docs/screenshots/home.png)
 
-## Novedades 0.5.0
+## Novedades 0.6.0
 
-Esta versión responde a tres quejas: *las cosas se salen de lugar*, *está medio compleja* y *cuesta encontrar reuniones y notas*.
+El lugar fija el ámbito, todo tiene una ficha y capturar es tan fácil como grabar.
 
-- **Nada se sale de lugar.** Todas las pantallas se revisaron a 920×620 (el nuevo tamaño mínimo de la ventana) y a 1100×720: sin textos cortados letra por letra, sin botones que empujan la barra lateral. Lo que no cabe se pliega en un menú **⋯** o pasa a una sola columna.
-- **Menos conceptos.** La barra lateral queda en **Inicio · Reuniones · Correo · Pendientes · Personas** y tus proyectos. *Todo el cerebro*, *Sin asignar* y *Formatos* ya no son secciones: lo que falta por ordenar está en Inicio y los formatos en Ajustes. Cada proyecto tiene cuatro pestañas (**Contenido · Pendientes · Preguntar · Grafo**); los repositorios de GitHub están en su menú **⋯**. Hay **un solo botón de grabar**, abajo en la barra lateral (y el mismo en la barra de menús).
-- **Encontrar sin pensar.** **⌘K** busca en reuniones, notas, correos, páginas, personas, pendientes y proyectos, y si no encuentra nada te deja preguntar. **Reuniones → Anteriores** lista todas tus reuniones grabadas, con o sin calendario. En cada proyecto, **Contenido → Por fecha** muestra todo lo que entró, lo más nuevo primero.
-- **Inicio** reúne lo de hoy: la reunión de ahora o la siguiente, lo que falta por ordenar, los pendientes que vencen y lo reciente.
-- **Pendientes** es una sola vista (en la barra lateral y dentro de cada proyecto) que muestra el **título** de la reunión o el correo de origen, nunca un nombre de archivo.
-- **Correo:** "Guardar en 🚀 Proyecto" en un clic; un solo aviso a la vez, y la oferta de regla aparece después, dentro del lector.
-- **Nueva identidad:** la marca es **secondbrain**, en minúsculas; nuevo símbolo e ícono, tipografía Inter, colores cálidos (marfil, olivo y un solo rojo, apagado, para grabar) y tema claro u oscuro cuidado en todas las pantallas. Animación breve de arranque y un indicador calmado mientras procesa.
-- **Ajustes** en pestañas: General · Cuentas · GitHub · Reglas · Formatos · Avanzado.
+- **El lugar fija el ámbito.** Dentro de un proyecto, Preguntar, Grafo y Pendientes son solo del proyecto; fuera, son de todo tu cerebro. Ya no hay interruptor "Este proyecto | Todo el cerebro". La barra lateral es **Inicio · Preguntar · Grafo · Pendientes · Personas**, **Correo · Reuniones · Sin asignar** y tus proyectos.
+- **Proyectos con seis pestañas:** Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas (agrega o quita personas a mano).
+- **Fichas.** Cualquier persona, empresa, tema, decisión o reunión tiene una ficha con lo que sabemos, sus reuniones, correos, decisiones, pendientes y relacionados. **⌘K** busca en el texto completo.
+- **Preguntar guarda tus conversaciones**, abre las citas al lado y puede **Guardar como página**.
+- **Corregir el cerebro:** edita una página y revisa los cambios propuestos en las demás; queda como hecho confirmado.
+- **Captura rápida** con **⌥⌘N** desde cualquier app, y **+ Agregar** en la barra lateral.
+- **Empresas** (`orgs/`) como fichas globales, y el Grafo muestra la ficha en un panel al lado.
+- Las conversaciones guardadas son por cerebro; **⌥⌘N** reemplaza "Nueva carpeta inteligente" del Finder mientras secondbrain está abierta.
 
 ## Instalar
 
@@ -25,9 +25,8 @@ Esta versión responde a tres quejas: *las cosas se salen de lugar*, *está medi
 2. Ábrelo y arrastra **SecondBrain** a la carpeta **Aplicaciones** (el atajo está en la misma ventana). En el Dock y en la barra de menús se llama **secondbrain**.
 3. Abre SecondBrain desde Aplicaciones. La primera vez macOS dirá que *no puede verificar* la app (no está notarizada por Apple). Pulsa **Listo**, ve a **Ajustes del Sistema → Privacidad y seguridad**, baja hasta el aviso de SecondBrain y pulsa **Abrir de todos modos** (te pedirá tu contraseña). Solo se hace una vez.
 4. Sigue la bienvenida:
-   - **Permisos:** *Audio de la computadora* (macOS lo llama "Grabación de pantalla y audio del sistema"; no se graba tu pantalla) y *Micrófono*.
    - **Conectar Claude:** si no tienes Claude Code, secondbrain lo instala; luego se abre el navegador para que inicies sesión con tu cuenta.
-   - **Modelos:** descarga el modelo de transcripción (~3 GB, una sola vez; de 2 a 10 minutos según tu internet). Puedes seguir mientras se descarga.
+   - **Permisos y modelo:** se piden la primera vez que pulsas **Grabar**: *Audio de la computadora* (macOS lo llama "Grabación de pantalla y audio del sistema"; no se graba tu pantalla), *Micrófono* y la descarga del modelo de transcripción (~3 GB, una sola vez; de 2 a 10 minutos según tu internet).
 
 ## Si algo no funciona
 
@@ -60,22 +59,28 @@ Esta versión responde a tres quejas: *las cosas se salen de lugar*, *está medi
 
 ## Usar
 
-La barra lateral tiene cinco lugares fijos y tus proyectos. **⌘1–⌘5** saltan entre ellos y **⌘K** busca en todo.
+El lugar fija el ámbito: fuera de un proyecto todo es de tu cerebro completo; dentro de un proyecto, todo es de ese proyecto. La barra lateral va **Inicio · Preguntar · Grafo · Pendientes · Personas** (**⌘1–⌘5**), luego **Correo · Reuniones** (**⌘6**, **⌘7**), **Sin asignar** (solo si hay algo, con contador) y tus proyectos. **⌘K** busca en todo.
 
-- **Inicio (⌘1):** lo de hoy, en una columna: la reunión de ahora o la siguiente (con su botón **Grabar** o **Unirme**), el resto de la agenda de hoy, **Por ordenar** (lo que llegó sin proyecto, con la sugerencia de Claude), **Pendientes para hoy**, **Recientes** y *Explorar cómo se conecta todo* (el grafo de todo tu cerebro). **Historial** (arriba a la derecha) muestra qué cambió Claude y permite **deshacer**. Arrastra un archivo a Inicio y queda en *Sin asignar*.
-- **Buscar o preguntar (⌘K):** escribe parte de un título, nombre o proyecto (sin preocuparte por acentos ni mayúsculas). Resultados por grupo: Reuniones · Notas y documentos · Correos · Páginas · Personas · Pendientes · Proyectos · Acciones. ↑↓ para moverte, ↩ para abrir, esc para cerrar; la última fila siempre es **Preguntar: «…»** (⌘↩).
-- **Reuniones (⌘2):** **Hoy · Próximas · Anteriores** (ver abajo).
-- **Correo (⌘3):** tus mensajes recientes; **Guardar en 🚀 Proyecto ▾** los agrega al proyecto (ver abajo).
-- **Pendientes (⌘4):** todos tus pendientes en una vista: **Míos · De otros · Sin dueño · Hechos**, filtro **Origen ▾** y **Exportar**. Cada pendiente muestra de qué reunión o correo salió; clic para verlo sin perder la lista.
-- **Personas (⌘5):** con quién has hablado y en qué proyectos.
-- **Proyecto:** cuatro pestañas.
-  - **Contenido:** a la izquierda la lista **Por fecha** (todo lo que entró, lo más nuevo primero, agrupado por mes; lo que se está procesando arriba) o **Por tema** (reuniones, correos, documentos, temas, decisiones, código, personas); a la derecha la página. El resumen del proyecto va siempre arriba.
-  - **Pendientes:** la misma vista de Pendientes, solo de ese proyecto.
-  - **Preguntar:** pregunta lo que sea sobre el proyecto; las respuestas citan sus fuentes.
-  - **Grafo:** el mapa del proyecto (ver abajo).
-  - En la barra de herramientas: **+ Agregar** (Grabar aquí · Pegar correo ⇧⌘V · Nueva nota · Agregar archivos… · Pegar enlace…), **Historial** y **⋯** (formato por defecto, **Repositorios…**, Mostrar en Finder). También puedes arrastrar PDFs, textos o enlaces a cualquier parte del proyecto. Clic derecho en un proyecto de la barra lateral → *Editar proyecto…*.
-- **Grabar:** hay **un solo control**, abajo en la barra lateral (y el mismo en el menú de la barra de menús): si hay una reunión en curso dice "Grabar «Kickoff…»", si no, "Grabar"; mientras graba, "Detener 12:04". Al detener se transcribe y Claude aprende de la reunión solo; la línea de abajo muestra "Procesando…" o "Transcribiendo… 42 %". Desde cualquier app: **⌥⌘R** (se activa o desactiva en Ajustes → General).
-- **Sin asignar:** si no eliges proyecto, la reunión aparece en Inicio → *Por ordenar* con una sugerencia de proyecto.
+- **Inicio (⌘1):** **Lo último que aprendí** (las últimas fuentes procesadas, de cualquier tipo), **Pendientes para hoy**, tu **Agenda** (si conectaste un calendario) y una línea "n por ordenar" si hay algo sin proyecto. **Historial** (arriba a la derecha) muestra qué cambió Claude y permite **deshacer**. Arrastra un archivo a Inicio y queda en *Sin asignar*.
+- **Preguntar (⌘2):** conversaciones guardadas a la izquierda, la conversación a la derecha. Las citas se abren en un panel al lado; **Guardar como página** deja la respuesta en tu cerebro.
+- **Grafo (⌘3), Pendientes (⌘4) y Personas (⌘5):** ver abajo y en cada proyecto.
+- **Buscar o preguntar (⌘K):** busca en el texto completo, sin preocuparte por acentos ni mayúsculas. Grupos: Personas · Empresas · Temas · Decisiones · Reuniones · Correos · Notas y documentos · Preguntas guardadas · Repos · Pendientes · Proyectos · Acciones. ↑↓ para moverte, ↩ para abrir, esc para cerrar; la última fila es **Preguntar a todo el cerebro: «…»** (⌘↩).
+- **Correo y Reuniones:** **Guardar en 🚀 Proyecto ▾** agrega un correo al proyecto; Reuniones es **Hoy · Próximas · Anteriores** (ver abajo).
+- **Pendientes:** **Míos · De otros · Sin dueño · Hechos**, **Origen ▾** y **Exportar**; fuera de un proyecto, además, filtros por proyecto y persona. Cada pendiente muestra de qué reunión o correo salió.
+- **Proyecto:** seis pestañas.
+  - **Resumen:** en breve, decisiones recientes, próximas fechas, personas, actividad y tus pendientes abiertos.
+  - **Contenido:** lista **Por fecha** (lo más nuevo primero, agrupado por mes) o **Por tema**; a la derecha la página.
+  - **Preguntar · Grafo · Pendientes:** las mismas vistas, solo de ese proyecto.
+  - **Personas:** quién aparece en el proyecto; **+ Agregar persona** o *Quitar del proyecto* (clic derecho).
+  - En la barra de herramientas: **+ Agregar** (Nota · Archivo… · Enlace… · Pegar correo ⇧⌘V · Grabar aquí), **Historial** y **⋯** (formato por defecto, **Repositorios…**, Mostrar en Finder). También puedes arrastrar PDFs, textos o enlaces al proyecto. Clic derecho en un proyecto de la barra lateral → *Editar proyecto…*.
+- **Fichas:** haz clic en cualquier nombre, enlace, cita o punto del grafo y se abre su ficha: la página que escribió Claude más lo que sabemos de esa persona, empresa, tema o decisión (reuniones, correos, documentos, decisiones, pendientes y relacionados). Dentro de un proyecto la ficha se filtra a ese proyecto ("En 🚀 Kickoff · Ver todo →"). **⌘[** vuelve atrás.
+
+  ![La ficha de una persona: rol, empresa, proyectos, compromisos y reuniones](docs/screenshots/entity.png)
+
+- **Corregir el cerebro:** **Editar** en cualquier página o ficha (⌘S guarda, esc cancela). Al guardar, Claude propone cambios en las demás páginas que decían lo mismo; los revisas en **Revisar cambios en el cerebro**, aplicas los que quieras y todo es deshacible desde el Historial. Lo corregido queda en **Hechos confirmados** (`facts.md`): Claude lo lee antes de cada tarea y no lo contradice; si una fuente nueva lo contradice, lo avisa en lugar de sobrescribirlo.
+- **Captura rápida:** **⌥⌘N** desde cualquier app abre un cuadro flotante: escribe o pega una nota, un enlace o un correo, o suelta un archivo; elige proyecto (o deja el sugerido), **⌘↩** guarda y esc cierra. Se puede cambiar o desactivar en Ajustes → General. La barra de menús abre primero el mismo cuadro, con Grabar debajo. **+ Agregar** (barra lateral) hace lo mismo con el mouse. Los correos que caen en una regla se guardan solos.
+- **Grabar:** una reunión en curso del calendario o una grabación activa toman el pie de la barra lateral ("Grabar «Kickoff…»", "Detener 12:04"); si no, **Grabar** está en **+ Agregar** y en la barra de menús. Al detener se transcribe y Claude aprende de la reunión solo. Desde cualquier app: **⌥⌘R** (Ajustes → General). La primera vez macOS pide los permisos de micrófono y grabación y se descarga el modelo de transcripción.
+- **Sin asignar:** si no eliges proyecto, lo que entra aparece en *Sin asignar* con una sugerencia de proyecto.
 
 ![Un proyecto en Contenido → Por fecha, con la página abierta a la derecha](docs/screenshots/project-content.png)
 
@@ -83,11 +88,11 @@ La barra lateral tiene cinco lugares fijos y tus proyectos. **⌘1–⌘5** salt
 
 ## Ver tu cerebro (Grafo)
 
-La pestaña **Grafo** de cada proyecto (y *Explorar cómo se conecta todo* en Inicio, para todo tu cerebro) dibuja lo que secondbrain sabe como un mapa: cada página es un punto y cada enlace una línea. En el grafo global los colores son tus proyectos; dentro de un proyecto, los colores son tipos (reuniones, correos, personas, decisiones…). Haz clic en un punto para explorar sus conexiones y abrir la página; pulsa reproducir para ver cómo creció tu cerebro con el tiempo.
+**Grafo** en la barra lateral dibuja todo tu cerebro como un mapa (cada página es un punto, cada enlace una línea; los colores son tus proyectos); la pestaña **Grafo** de un proyecto dibuja solo ese proyecto (colores por tipo: reuniones, correos, personas, decisiones…). Haz clic en un punto para resaltarlo y ver su ficha en un panel al lado; doble clic (o **Abrir**) va a la ficha completa. Pulsa reproducir para ver cómo creció tu cerebro con el tiempo.
 
 ## Reuniones
 
-La sección **Reuniones** tiene tres vistas: **Hoy** (con la reunión de ahora o la siguiente arriba), **Próximas** (desde mañana, por día) y **Anteriores** (todas las reuniones que grabaste, la más reciente primero, con su proyecto y *Ver resumen*; funciona aunque no conectes un calendario).
+La sección **Reuniones** (⌘7) tiene tres vistas: **Hoy** (con la reunión de ahora o la siguiente arriba), **Próximas** (desde mañana, por día) y **Anteriores** (todas las reuniones que grabaste, la más reciente primero, con su proyecto y *Ver resumen*; funciona aunque no conectes un calendario).
 
 - **Antes:** *Prepararme* te enseña quiénes van, qué quedó pendiente con ellos y qué preguntar; con *Preparar con Claude* obtienes agenda y preguntas sugeridas.
 - **Durante:** cuando la reunión empieza, el botón se vuelve **Grabar** (el mismo que en la barra lateral y en la barra de menús). Título, proyecto y asistentes ya van puestos.
@@ -126,7 +131,7 @@ En **Ajustes → GitHub** pulsa **Conectar GitHub** (código de dispositivo en t
 
 ## Reglas: cada correo y reunión a su proyecto
 
-Si todo te llega a una sola cuenta, las **Reglas** (Ajustes → Reglas, o *Reglas…* en el menú **⋯** de Correo y de Reuniones) deciden a qué proyecto va cada cosa: "lo que venga de @acme.com va a 🚀 Acme", "si el asunto dice Nubia va a 🤝 Alianza", "las reuniones que organiza ana@acme.com…". Gana la primera que coincide; lo que no coincide con ninguna cae en *Sin asignar* (o en el proyecto por defecto que elijas) y lo asignas a mano. Cada vez que asignas algo a mano, secondbrain te propone la regla con un clic ("¿Mandar siempre lo de @acme.com a 🚀 Acme? · Sí, siempre · Solo esta vez"). Las reglas se reordenan arrastrándolas. Una regla puede además **agregar automáticamente** los correos nuevos que coincidan, revisando tu correo cada 15 minutos.
+Si todo te llega a una sola cuenta, las **Reglas** (Ajustes → Reglas, o *Reglas…* en el menú **⋯** de Correo y de Reuniones) deciden a qué proyecto va cada cosa: "lo que venga de @acme.com va a 🚀 Acme", "si el asunto dice Nubia va a 🤝 Alianza", "las reuniones que organiza ana@acme.com…". Gana la primera que coincide; lo que no coincide con ninguna cae en *Sin asignar* (o en el proyecto por defecto que elijas) y lo asignas a mano. Cada vez que asignas algo a mano, secondbrain te propone la regla con un clic ("¿Mandar siempre lo de @acme.com a 🚀 Acme? · Sí, siempre · Solo esta vez"). Las reglas se reordenan arrastrándolas. Las reglas nuevas de correo **agregan automáticamente** los correos nuevos que coincidan (puedes apagarlo por regla), revisando tu correo cada 15 minutos.
 
 ## Apariencia
 
@@ -147,17 +152,19 @@ scripts/release.sh <versión>          # publica en GitHub Releases
 
 - **Arquitectura y contrato entre módulos:** `docs/CONTRACT.md`. Los módulos son `Recorder`, `Transcription` (WhisperKit + SpeakerKit), `BrainCore` (cola, Claude, historial, vault), `SecondBrain` (UI) y `sb` (CLI).
 - **El esquema del cerebro** está en `app/Sources/BrainCore/Resources/vault-template/`.
-- **Marca:** el kit está en `docs/brand/` y su uso en código en `docs/brand/USAGE.md`; todos los colores y fuentes salen de `app/Sources/SecondBrain/Support/Brand.swift` (y de las variables `:root` de `wiki.css`/`graph.css`). Reglas de UX y layout de la v0.5: `docs/CONTRACT.md` §15.
+- **Marca:** el kit está en `docs/brand/` y su uso en código en `docs/brand/USAGE.md`; todos los colores y fuentes salen de `app/Sources/SecondBrain/Support/Brand.swift` (y de las variables `:root` de `wiki.css`/`graph.css`). Reglas de UX y layout: `docs/CONTRACT.md` §15 (v0.5) y §16 (v0.6, vinculante).
 - **Nombre:** el ejecutable y el paquete siguen siendo `SecondBrain` / `SecondBrain.app`; lo que ve el usuario (`CFBundleName`, `CFBundleDisplayName`, textos) es `secondbrain`.
+- **Pruebas:** `sb selftest` (incluye ruteo y grafo), `sb github selftest`, `sb entity selftest` (índice y backlinks), `sb chat selftest` (conversaciones guardadas), `sb facts selftest` (ediciones propuestas y `facts.md`) y `sb search selftest` (texto completo). `sb chat list [--project]` lista conversaciones guardadas.
 - **Capturas para revisar la UI:** `SB_SNAPSHOT_DIR=<carpeta>` renderiza cada vista a PNG y sale; con `SB_SNAPSHOT_WINDOW=1` renderiza la ventana completa (1100×720 y 920×620, claro y oscuro); `SB_SNAPSHOT_ONLY=<prefijo>` limita cuáles; `SB_DEMO_ACCOUNTS=1` y `SB_DEMO_GITHUB=1` usan datos de ejemplo.
 
 ---
 
 **English:** secondbrain records your meetings locally (system audio + mic), transcribes them on-device, and uses your own Claude account (via Claude Code) to maintain a per-project markdown wiki.
 
-- **Install:** requires an Apple Silicon Mac on macOS 15+, ~5 GB free and a Claude Pro/Max plan. Open the `.dmg`, drag SecondBrain to Applications and open it. When macOS says it can't verify the app (not notarized), go to *System Settings → Privacy & Security* and click **Open Anyway** (*Abrir de todos modos*). Then grant *System Audio Recording* and *Microphone*, connect Claude (browser sign-in) and let it download the transcription model (~3 GB, once).
+- **Install:** requires an Apple Silicon Mac on macOS 15+, ~5 GB free and a Claude Pro/Max plan. Open the `.dmg`, drag SecondBrain to Applications and open it. When macOS says it can't verify the app (not notarized), go to *System Settings → Privacy & Security* and click **Open Anyway** (*Abrir de todos modos*). Then connect Claude (browser sign-in); the *System Audio Recording* and *Microphone* permissions and the transcription model download (~3 GB, once) happen the first time you click **Record**.
 - **Troubleshooting:** no other voices in the transcript → enable SecondBrain under *Privacy & Security → Screen & System Audio Recording* and reopen the app; already enabled but it still can't record (after updating from 0.5.2 or earlier, the switch stays on but belongs to the old build) → **Fix permission** under *Record*, or remove secondbrain from the list with **−** and reopen it (from 0.5.3 on, permissions survive updates); Claude errors → *secondbrain → Settings… (⌘,) → Accounts → Claude account → Reconnect Claude*; a failed model download resumes with *Retry*.
 - **Files:** wiki in `~/Documents/SecondBrain` (or the folder you chose); settings, pending audio, history and models in `~/Library/Application Support/SecondBrain`; the Claude token in the Keychain (`app.secondbrain.mac`).
-- **What's new in 0.5.0:** a lowercase **secondbrain** identity (new mark and icon, Inter, warm light and dark themes, one muted red for recording) and a simpler app. The sidebar is *Home · Meetings · Mail · Tasks · People* plus your projects; **⌘K** searches meetings, notes, mail, pages, people, tasks and projects (or asks); *Meetings* is *Today · Upcoming · Past* (Past lists every recorded meeting, calendar or not); a project has four tabs (*Content* by date or by topic, *Tasks*, *Ask*, *Graph*) with *+ Add*, *History* and *⋯ → Repositories…* in its toolbar; there is a single record control at the bottom of the sidebar; *Settings* has tabs (General · Accounts · GitHub · Rules · Formats · Advanced). Every screen fits a 920×620 window without clipping.
+- **What's new in 0.6.0:** place sets the scope (no more "This project | Whole brain" switch): the sidebar is *Home · Ask · Graph · Tasks · People*, then *Mail · Meetings · Unassigned* and your projects; a project has six tabs (*Summary · Content · Ask · Graph · Tasks · People*). Every person, company, topic or decision has an **entity page** (what we know, with its meetings, mail, decisions, tasks and related items); **⌘K** searches full text; *Ask* keeps saved conversations and can save an answer as a page. **Edit** any page and review the changes proposed on other pages: corrections become confirmed facts in `facts.md` that Claude won't contradict. **⌥⌘N** opens quick capture (note, link, email, file) from any app; recording permissions are asked the first time you record. Saved conversations are per brain; ⌥⌘N replaces Finder's "New Smart Folder" while secondbrain runs. Everything from 0.5.x is included.
+- **0.5.0:** a lowercase **secondbrain** identity (new mark and icon, Inter, warm light and dark themes, one muted red for recording), simpler navigation, **⌘K** search and screens that fit a 920×620 window.
 - **v0.3:** *Graph* tab (your brain as a map, colored by project or by type, with a time replay), *Meetings* (agenda from the Mac Calendar or a connected account; prepare with Claude, record with one click, open the summary), *Mail* (read recent messages from Microsoft 365 / Google and add them to a project; read-only), and Light/Dark/System appearance. If your organization blocks the sign-in, open **Trouble connecting a work account?** (Settings → Accounts) or **How do I enable it?** on the block notice for a ready-to-send message to IT and the exact admin steps (Microsoft: admin consent URL; Google: Admin console → Security → API controls → Manage Third-Party App Access → Trusted). Distributors must register an OAuth client per provider and put the ids in `OAuthDefaults` (or Settings → Advanced).
 - **Uninstall:** quit, delete the app, delete `~/Library/Application Support/SecondBrain`, and optionally your wiki folder (back it up first) and the `app.secondbrain.mac` Keychain item.

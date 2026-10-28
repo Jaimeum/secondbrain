@@ -7,7 +7,7 @@ struct ChatMessage: Identifiable {
     enum Role { case user, assistant }
     enum Failure: Equatable { case notConnected, rateLimited(Date?), other }
 
-    let id = UUID()
+    var id = UUID()
     let role: Role
     var text: String
     var question = ""
@@ -15,8 +15,10 @@ struct ChatMessage: Identifiable {
     var isStreaming = false
     var failure: Failure?
     var saved = false
+    /// v0.6: the page "Guardar como página" wrote (§16.3), opened from "Guardada · Ver".
+    var savedPath: String?
     /// The project an answer was asked in (nil = the whole brain): its [[links]] resolve from there and "Guardar"
-    /// files it there, even after the scope switch changes.
+    /// files it there.
     var projectSlug: String?
 
     /// The page an answer's [[links]] resolve from.
@@ -26,10 +28,16 @@ struct ChatMessage: Identifiable {
 @MainActor @Observable
 final class ChatModel {
     var messages: [ChatMessage] = []
-    var wholeBrain = false
     var draft = ""
     private(set) var isAsking = false
     @ObservationIgnored private var task: Task<Void, Never>?
+    // MARK: v0.6 ask — a saved conversation (§16.3). Unset for the meeting preparation's chats (not saved).
+    /// The saved conversation's id (`ChatThread.id`); nil until its first question is saved.
+    var threadId: String?
+    var title = ""
+    @ObservationIgnored var createdAt = Date()
+    /// Called after a question is asked and after its answer ends (done, failed or stopped): `Conversations` saves it.
+    @ObservationIgnored var onUpdate: ((ChatModel) -> Void)?
 
     func ask(engine: BrainEngine, projectSlug: String?) {
         let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,6 +47,7 @@ final class ChatModel {
         messages.append(ChatMessage(role: .assistant, text: "", question: question, isStreaming: true, projectSlug: projectSlug))
         let index = messages.count - 1
         isAsking = true
+        onUpdate?(self)
 
         task = Task {
             do {
@@ -76,14 +85,17 @@ final class ChatModel {
             guard !Task.isCancelled, messages.indices.contains(index) else { return }
             messages[index].isStreaming = false
             isAsking = false
+            onUpdate?(self)
         }
     }
 
     func stop() {
+        let wasAsking = isAsking
         task?.cancel()
         task = nil
         isAsking = false
         if let last = messages.indices.last { messages[last].isStreaming = false }
+        if wasAsking { onUpdate?(self) }
     }
 
     func clear() {
@@ -116,28 +128,36 @@ final class ChatModel {
     }
 }
 
-/// "Preguntar": ask the wiki questions, answers cite pages with clickable [[links]].
+/// "Preguntar": ask the wiki questions, answers cite pages with clickable [[links]]. The place fixes the scope
+/// (§16: no "Este proyecto | Todo el cerebro" switch): `projectSlug` nil = the whole brain. Hosted by `AskView`, which
+/// keeps the saved conversations, saves answers as pages and shows citations in its inspector (§16.3).
 struct ChatView: View {
     @Environment(AppState.self) private var state
     @Bindable var model: ChatModel
     let projectSlug: String?
     var onOpenPage: (String) -> Void
+    /// "Guardar como página" of an answer.
+    var onSave: (ChatMessage) -> Void
+    /// "Nueva conversación" (shown in the top bar while there is a conversation).
+    var onNew: () -> Void
 
     @ViewState private var showReconnect = false
 
-    private var effectiveScope: String? { model.wholeBrain ? nil : projectSlug }
-
     var body: some View {
         VStack(spacing: 0) {
-            topBar
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            // The conversation's title and "Nueva conversación": no empty band before the first question.
+            if !model.messages.isEmpty {
+                topBar
+                Rectangle().fill(Brand.color.line).frame(height: 1)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Brand.spacing.l) {
                         if model.messages.isEmpty { suggestions }
                         ForEach(model.messages) { message in
                             MessageView(message: message, baseRelPath: message.baseRelPath, onOpenPage: onOpenPage,
-                                        onSave: { save(message) }, onReconnect: { showReconnect = true })
+                                        onSave: { onSave(message) }, onReconnect: { showReconnect = true },
+                                        onOpenSaved: message.savedPath.map { path in { onOpenPage(path) } })
                                 .id(message.id)
                         }
                     }
@@ -148,6 +168,9 @@ struct ChatView: View {
                 .onChange(of: model.messages.last?.text) {
                     if let last = model.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
+                .onAppear {
+                    if let last = model.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
             }
             Rectangle().fill(Brand.color.line).frame(height: 1)
             inputBar
@@ -156,41 +179,26 @@ struct ChatView: View {
         .sheet(isPresented: $showReconnect) {
             ReconnectClaudeSheet()
         }
-        .onAppear(perform: sendPendingQuestion)
-        .onChange(of: state.pendingQuestion) { sendPendingQuestion() }
-    }
-
-    /// A question typed in the search palette (⌘K): asked as soon as this view shows.
-    private func sendPendingQuestion() {
-        guard let question = state.pendingQuestion?.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-        state.pendingQuestion = nil
-        guard !question.isEmpty else { return }
-        if model.isAsking { model.stop() }
-        // "Preguntar a 🚀 X" (⌘K, ⌥) promised this project: the scope switch must not send it to the whole brain.
-        if projectSlug != nil { model.wholeBrain = false }
-        model.draft = question
-        model.ask(engine: state.engine, projectSlug: effectiveScope)
     }
 
     private var topBar: some View {
         HStack(spacing: Brand.spacing.m) {
-            if projectSlug != nil {
-                BrandSegmentedControl(options: [(false, L("chat.scopeProject")), (true, L("chat.scopeBrain"))],
-                                      selection: $model.wholeBrain)
-                    .frame(maxWidth: 280)
-            }
+            Text(model.title.isEmpty ? L("ask.untitled") : model.title)
+                .font(Brand.section)
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(model.title)
             Spacer(minLength: Brand.spacing.s)
-            if !model.messages.isEmpty {
-                Button { model.clear() } label: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(Brand.color.text2)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .help(L("chat.clear"))
-                .accessibilityLabel(Text(L("chat.clear")))
+            Button(action: onNew) {
+                Image(systemName: "square.and.pencil")
+                    .foregroundStyle(Brand.color.text2)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.borderless)
+            .help(L("ask.new"))
+            .accessibilityLabel(Text(L("ask.new")))
         }
         .padding(.horizontal, Brand.spacing.l)
         .frame(height: 44)
@@ -201,14 +209,14 @@ struct ChatView: View {
             Text(L("chat.emptyTitle"))
                 .font(Brand.title)
                 .foregroundStyle(Brand.color.text)
-            Text(L("chat.emptyMessage"))
+            Text(L(projectSlug == nil ? "chat.emptyMessage" : "ask.emptyMessageProject"))
                 .font(Brand.body)
                 .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(["chat.suggestion1", "chat.suggestion2", "chat.suggestion3"], id: \.self) { key in
                 Button {
                     model.draft = L(key)
-                    model.ask(engine: state.engine, projectSlug: effectiveScope)
+                    model.ask(engine: state.engine, projectSlug: projectSlug)
                 } label: {
                     HStack(spacing: Brand.spacing.s) {
                         Image(systemName: "sparkle").foregroundStyle(Brand.color.accent)
@@ -237,7 +245,7 @@ struct ChatView: View {
                 .padding(.vertical, 9)
                 .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
-                .onSubmit { model.ask(engine: state.engine, projectSlug: effectiveScope) }
+                .onSubmit { model.ask(engine: state.engine, projectSlug: projectSlug) }
             if model.isAsking {
                 Button { model.stop() } label: {
                     Image(systemName: "stop.circle.fill").font(Brand.font(26))
@@ -246,7 +254,7 @@ struct ChatView: View {
                 .buttonStyle(.plain)
                 .help(L("chat.stop"))
             } else {
-                Button { model.ask(engine: state.engine, projectSlug: effectiveScope) } label: {
+                Button { model.ask(engine: state.engine, projectSlug: projectSlug) } label: {
                     Image(systemName: "arrow.up.circle.fill").font(Brand.font(26))
                         .foregroundStyle(Brand.color.accent)
                 }
@@ -259,11 +267,6 @@ struct ChatView: View {
         .padding(.horizontal, Brand.spacing.l)
         .padding(.vertical, Brand.spacing.m)
     }
-
-    private func save(_ message: ChatMessage) {
-        state.engine.saveAnswer(question: message.question, answer: message.text, projectSlug: message.projectSlug)
-        if let i = model.messages.firstIndex(where: { $0.id == message.id }) { model.messages[i].saved = true }
-    }
 }
 
 struct MessageView: View {   // v0.3: also used by MeetingPrepView
@@ -273,9 +276,13 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
     var onOpenPage: (String) -> Void
     var onSave: () -> Void
     var onReconnect: () -> Void
+    /// v0.6 (§16.3): set once the answer was saved as a page — "Guardada · Ver" opens it.
+    var onOpenSaved: (() -> Void)? = nil
 
     /// Citations that point at emails get an envelope symbol so it's clear the answer comes from a mail.
     @ViewState private var emailTargets: Set<String> = []
+    /// Page titles of the answer's unlabeled citations ("andres-silva" → "Andrés Silva").
+    @ViewState private var citationTitles: [String: String] = [:]
 
     var body: some View {
         switch message.role {
@@ -297,7 +304,7 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
                         .animation(Brand.motion.fast, value: message.steps.count)
                 }
                 if !message.text.isEmpty {
-                    MarkdownText(markdown: message.text, emailTargets: emailTargets)
+                    MarkdownText(markdown: message.text, emailTargets: emailTargets, titles: citationTitles)
                         .environment(\.openURL, OpenURLAction { url in
                             guard url.scheme == "sbwiki" else { return .systemAction }
                             let target = url.absoluteString.replacingOccurrences(of: "sbwiki://link/", with: "")
@@ -316,11 +323,18 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
                 if let failure = message.failure { failureView(failure) }
                 if !message.isStreaming, message.failure == nil, !message.text.isEmpty {
                     HStack(spacing: Brand.spacing.s) {
-                        Button(action: onSave) {
-                            Label(message.saved ? L("chat.saved") : L("chat.saveToWiki"),
-                                  systemImage: message.saved ? "checkmark" : "square.and.arrow.down")
+                        if let onOpenSaved {
+                            Button(action: onOpenSaved) {
+                                Label(L("ask.savedOpen"), systemImage: "checkmark")
+                            }
+                            .help(L("ask.savedOpenHelp"))
+                        } else {
+                            Button(action: onSave) {
+                                Label(message.saved ? L("ask.saved") : L("ask.saveAsPage"),
+                                      systemImage: message.saved ? "checkmark" : "doc.badge.plus")
+                            }
+                            .disabled(message.saved)
                         }
-                        .disabled(message.saved)
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(message.text, forType: .string)
@@ -344,8 +358,17 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
         guard !message.isStreaming, !message.text.isEmpty else { return }
         let targets = WikiWebView.Coordinator.wikilinkTargets(in: message.text)
         guard !targets.isEmpty else { return }
-        let resolved = await state.engine.vault.resolveWikilinksAsync(targets, from: baseRelPath)
+        let vault = state.engine.vault
+        let resolved = await vault.resolveWikilinksAsync(targets, from: baseRelPath)
         emailTargets = Set(resolved.filter { $0.value.contains("/emails/") }.keys)
+        citationTitles = await Task.detached {
+            var titles: [String: String] = [:]
+            for (target, path) in resolved {
+                let title = vault.title(of: path)
+                if !title.isEmpty, title != target { titles[target] = title }
+            }
+            return titles
+        }.value
     }
 
     @ViewBuilder private func failureView(_ failure: ChatMessage.Failure) -> some View {
@@ -376,6 +399,8 @@ struct MarkdownText: View {
     let markdown: String
     /// Wikilink targets that resolve to emails: shown with an envelope symbol.
     var emailTargets: Set<String> = []
+    /// Titles of resolved targets: an unlabeled `[[slug]]` reads as its page's title, never the bare slug.
+    var titles: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -462,21 +487,31 @@ struct MarkdownText: View {
         }
         let matches = text.matches(of: Self.wikilink)
         guard matches.contains(where: { Self.isEmail($0.output.1, emailTargets) }) else {
-            return parse(Self.linkifyWikilinks(text, emailTargets: emailTargets))
+            return parse(Self.linkifyWikilinks(text, titles: titles))
         }
         // Split around email citations so the symbol can sit inside the text (markdown can't carry images).
         var result = Text("")
         var cursor = text.startIndex
         for match in matches where Self.isEmail(match.output.1, emailTargets) {
             let before = String(text[cursor..<match.range.lowerBound])
-            if !before.isEmpty { result = result + parse(Self.linkifyWikilinks(before, emailTargets: emailTargets)) }
+            if !before.isEmpty { result = result + parse(Self.linkifyWikilinks(before, titles: titles)) }
             result = result + Text(Image(systemName: "envelope")).foregroundStyle(Brand.color.text2) + Text(" ")
-                + parse(Self.linkifyWikilinks(String(text[match.range]), emailTargets: emailTargets))
+                + parse(Self.linkifyWikilinks(String(text[match.range]), titles: titles))
             cursor = match.range.upperBound
         }
         let rest = String(text[cursor...])
-        if !rest.isEmpty { result = result + parse(Self.linkifyWikilinks(rest, emailTargets: emailTargets)) }
+        if !rest.isEmpty { result = result + parse(Self.linkifyWikilinks(rest, titles: titles)) }
         return result
+    }
+
+    /// A title inside `[label](…)`: brackets and markdown emphasis characters are escaped.
+    private static func escapeLabel(_ s: String) -> String {
+        var out = ""
+        for ch in s {
+            if "\\[]*_`".contains(ch) { out.append("\\") }
+            out.append(ch)
+        }
+        return out
     }
 
     private static func isEmail(_ rawTarget: Substring, _ emailTargets: Set<String>) -> Bool {
@@ -485,12 +520,13 @@ struct MarkdownText: View {
         return emailTargets.contains(target) || emailTargets.contains(raw) || target.contains("emails/")
     }
 
-    /// `[[target|label]]` → `[label](sbwiki://link/target)` (resolved on click). The envelope for email citations is
-    /// added by `inline`; `emailTargets` stays for source compatibility.
-    static func linkifyWikilinks(_ text: String, emailTargets: Set<String> = []) -> String {
+    /// `[[target|label]]` → `[label](sbwiki://link/target)` (resolved on click); `[[target]]` takes the page's title
+    /// from `titles`. The envelope for email citations is added by `inline`.
+    static func linkifyWikilinks(_ text: String, titles: [String: String] = [:]) -> String {
         text.replacing(wikilink) { match in
             let target = String(match.1).split(separator: "#").first.map(String.init) ?? String(match.1)
-            let label = match.2.map(String.init) ?? target
+            let key = target.trimmingCharacters(in: .whitespaces)
+            let label = match.2.map(String.init) ?? titles[key].map(escapeLabel) ?? target
             let encoded = target.trimmingCharacters(in: .whitespaces)
                 .addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? target
             return "[\(label)](sbwiki://link/\(encoded))"

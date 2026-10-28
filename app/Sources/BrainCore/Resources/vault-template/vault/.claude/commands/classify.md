@@ -14,6 +14,8 @@ file. Do not ask questions.
 
 ## Steps
 
+0. Read `facts.md` (vault root): facts the owner confirmed (e.g. who belongs to which team or
+   project). They win over anything else you read (CLAUDE.md §17).
 1. Glob `projects/*/project.json` and Read each one (name, description). If there are no
    projects, answer with `"project": null`.
 2. Read `index.md` (global) and each project's `projects/<slug>/wiki/overview.md` (skim: En breve,

@@ -177,6 +177,59 @@ public final class HistoryStore: @unchecked Sendable {
         return entry
     }
 
+    /// v0.6 (§16.6): several files edited by the app in one go (the owner's hand edit applied across the brain, plus
+    /// `facts.md`): writes each `after` and records ONE `.manualEdit` entry, so a single Deshacer reverts them all.
+    /// `before == nil` means the file is new. Files whose text doesn't change are left out; nil when nothing changed.
+    /// All or nothing: the before/after copies are written first; then the vault files; if one of those fails, the ones
+    /// already written are put back (or removed when new) and the entry's folder is dropped, so no page is left changed
+    /// without a Historial entry to undo it.
+    @discardableResult
+    public func recordManualEdits(title: String, projectSlug: String?,
+                                  files: [(path: String, before: String?, after: String)]) throws -> HistoryEntry? {
+        let files = files.filter { $0.before != $0.after }
+        guard !files.isEmpty else { return nil }
+        let id = SessionManifest.newId()
+        let dir = historyDir.appendingPathComponent(id)
+        let fm = FileManager.default
+        func write(_ text: String, to url: URL) throws {
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        }
+        // 1. The entry's copies (nothing in the vault changes yet).
+        do {
+            for file in files {
+                if let before = file.before { try write(before, to: dir.appendingPathComponent("before/\(file.path)")) }
+                try write(file.after, to: dir.appendingPathComponent("after/\(file.path)"))
+            }
+        } catch {
+            try? fm.removeItem(at: dir)
+            throw error
+        }
+        // 2. The vault, rolled back on the first failure.
+        var written: [(path: String, before: String?)] = []
+        do {
+            for file in files {
+                try write(file.after, to: vaultRoot.appendingPathComponent(file.path))
+                written.append((file.path, file.before))
+            }
+            let changes = files.map { FileChange(path: $0.path, change: $0.before == nil ? .added : .modified) }
+            let entry = HistoryEntry(id: id, title: title, kind: .manualEdit, sourceId: nil, projectSlug: projectSlug,
+                                     changes: changes.sorted { $0.path < $1.path }, createdAt: Date(), undone: false)
+            try save(entry)
+            gitCommit(message: title)
+            Log.info("history \(id): manual edit of \(changes.count) files — \(title)")
+            return entry
+        } catch {
+            for file in written.reversed() {
+                let target = vaultRoot.appendingPathComponent(file.path)
+                if let before = file.before { try? write(before, to: target) } else { try? fm.removeItem(at: target) }
+            }
+            try? fm.removeItem(at: dir)
+            Log.error("history: manual edit of \(files.count) files rolled back — \(error)")
+            throw error
+        }
+    }
+
     /// Drops a snapshot without recording anything.
     public func discard(_ snapshot: HistorySnapshot) {
         let dir = historyDir.appendingPathComponent(snapshot.id)

@@ -297,10 +297,11 @@ struct TemplateEditor: View {
                     TextField(L("tpl.name"), text: $draft.name)
                         .textFieldStyle(.roundedBorder)
                         .font(Brand.font(15, .medium))
+                    // v0.6 (§16.10): notes and documents have formats too.
                     Picker("", selection: $draft.scope) {
-                        Text(TemplateScope.meeting.label).tag(TemplateScope.meeting)
-                        Text(TemplateScope.email.label).tag(TemplateScope.email)
-                        Text(TemplateScope.any.label).tag(TemplateScope.any)
+                        ForEach(TemplateScope.allCases, id: \.self) { scope in
+                            Text(scope.label).tag(scope)
+                        }
                     }
                     .labelsHidden()
                     .frame(maxWidth: 200)

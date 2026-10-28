@@ -23,7 +23,7 @@
 "brain.subtitle" = "Lo que sé de todos tus proyectos";
 "people.subtitle" = "Las personas que aparecen en tus reuniones";
 "people.emptyTitle" = "Aún no conozco a nadie";
-"people.emptyMessage" = "Cuando aprenda de tus reuniones, aquí aparecerá una página por cada persona: quién es, en qué proyectos está y qué ha dicho.";
+"people.emptyMessage" = "Cuando aprenda de tus correos, notas, documentos y reuniones, aquí aparecerá una página por cada persona: quién es, en qué proyectos está y qué ha dicho.";
 "project.missing" = "No encuentro este proyecto";
 
 /* Pestañas */
@@ -85,7 +85,7 @@
 "wiki.emptyPage" = "Esta página está vacía por ahora.";
 "wiki.noPageSelected" = "Elige una página de la lista.";
 "wiki.emptyTitle" = "Aún no hay nada aquí";
-"wiki.emptyMessage" = "Graba una reunión o agrega un documento y aquí aparecerá lo que aprenda: resúmenes, decisiones, pendientes y personas.";
+"wiki.emptyMessage" = "Agrega una nota, un documento, un enlace o un correo —o graba una reunión— y aquí aparecerá lo que aprenda: resúmenes, decisiones, pendientes y personas.";
 "wiki.showInFinder" = "Mostrar en Finder";
 "wiki.back" = "Página anterior";
 "wikiGroup.general" = "General";
@@ -138,7 +138,7 @@
 
 /* Fuentes */
 "sources.emptyTitle" = "Nada por aquí todavía";
-"sources.emptyMessage" = "Graba una reunión, arrastra archivos (PDF, Word, texto, audio o video) o pega un enlace. Las grabaciones se transcriben automáticamente. Aprenderé de todo y lo ordenaré en tu cerebro.";
+"sources.emptyMessage" = "Escribe una nota, arrastra archivos (PDF, Word, texto, audio o video), pega un enlace o un correo, o graba una reunión. Aprenderé de todo y lo ordenaré en tu cerebro.";
 "sources.dropHere" = "Suelta para agregar al proyecto";
 "sources.linkPlaceholder" = "Pega un enlace para que lo lea…";
 "sources.addLink" = "Agregar enlace";
@@ -167,8 +167,6 @@
 "note.failed" = "No pude guardar la nota.";
 
 /* Preguntar */
-"chat.scopeProject" = "Este proyecto";
-"chat.scopeBrain" = "Todo el cerebro";
 "chat.lint" = "Revisar mi cerebro";
 "chat.lintHelp" = "Busco contradicciones, páginas sueltas y pendientes vencidos, y arreglo lo sencillo.";
 "chat.lintQueued" = "Revisando… te aviso al terminar";
@@ -220,7 +218,7 @@
 "inbox.title" = "Sin asignar";
 "inbox.subtitle" = "Cosas que aún no tienen proyecto";
 "inbox.emptyTitle" = "Todo en orden";
-"inbox.emptyMessage" = "Cuando grabes sin elegir proyecto, la reunión llegará aquí y te sugeriré a cuál pertenece.";
+"inbox.emptyMessage" = "Lo que llegue sin proyecto —una nota, un correo, un archivo o una grabación— aparecerá aquí y te sugeriré a cuál pertenece.";
 "inbox.needsProject" = "¿De qué proyecto son?";
 "inbox.inProgress" = "En proceso";
 "inbox.suggestion" = "Parece de %@";
@@ -302,10 +300,10 @@
 "onb.skip" = "Omitir";
 "onb.finish" = "Empezar";
 "onb.welcome.title" = "Hola, soy tu segundo cerebro";
-"onb.welcome.message" = "Escucho tus reuniones, las transcribo y ordeno lo que aprendo por proyecto para que nunca olvides lo que se dijo.";
-"onb.welcome.feature1" = "Grabo el audio de tu computadora y tu micrófono: Zoom, Meet, Teams, lo que sea.";
-"onb.welcome.feature2" = "Todo se queda en tu Mac. La transcripción se hace aquí mismo, sin subir tu audio.";
-"onb.welcome.feature3" = "Claude, con tu propia cuenta, convierte cada reunión en resúmenes, decisiones, pendientes y páginas de personas.";
+"onb.welcome.message" = "Junto lo que pasa en tu día —correos, notas, documentos, enlaces, repositorios y reuniones— y lo ordeno por proyecto para que lo encuentres cuando lo necesites.";
+"onb.welcome.feature1" = "Me llega de todo: correos de tus cuentas, notas, PDF y documentos, enlaces, tus repositorios de GitHub y, si quieres, tus reuniones grabadas.";
+"onb.welcome.feature2" = "Todo se queda en tu Mac, en una carpeta normal de archivos de texto. Si grabas, la transcripción también se hace aquí, sin subir tu audio.";
+"onb.welcome.feature3" = "Claude, con tu propia cuenta, convierte todo eso en páginas de proyectos, personas, decisiones y pendientes, y responde lo que le preguntes.";
 "onb.consent.title" = "Antes de grabar, avisa";
 "onb.consent.message" = "Grabar a otras personas sin que lo sepan puede ser ilegal donde vives y, sobre todo, no es justo para ellas. Avisa al inicio de cada reunión que estás grabando y respeta si alguien no quiere.";
 "onb.consent.accept" = "Avisaré antes de grabar";
@@ -315,8 +313,6 @@
 "onb.vault.choose" = "Usar esta carpeta";
 "onb.vault.panelMessage" = "Elige dónde guardar tu cerebro";
 "onb.vault.hint" = "Si usas Obsidian, también puedes abrir esta carpeta ahí.";
-"onb.perm.title" = "Dos permisos y listo";
-"onb.perm.message" = "macOS te pedirá confirmar. Solo escucho cuando tú presionas Grabar.";
 "onb.perm.screenTitle" = "Audio de la computadora";
 "onb.perm.screenMessage" = "Para escuchar a los demás en tus llamadas. macOS lo llama “Grabación de pantalla y audio del sistema”, pero no grabo tu pantalla.";
 "onb.perm.micTitle" = "Micrófono";
@@ -324,18 +320,16 @@
 "onb.perm.allow" = "Permitir";
 "onb.perm.openSettings" = "Abrir Ajustes";
 "onb.perm.granted" = "Listo";
-"onb.perm.restartHint" = "¿Ya lo activaste en Ajustes y aquí no aparece? macOS necesita que reabras secondbrain. Volverás a este mismo paso.";
 "onb.claude.title" = "Conecta a Claude";
-"onb.claude.message" = "Uso tu cuenta de Claude (Pro o Max) para entender tus reuniones. No necesitas saber nada técnico.";
+"onb.claude.message" = "Uso tu cuenta de Claude (Pro o Max) para entender lo que me das y responder tus preguntas. No necesitas saber nada técnico.";
 "onb.models.title" = "Preparando la transcripción";
 "onb.models.message" = "Descargo el modelo que transcribe tus reuniones aquí en tu Mac (unos 3 GB). Solo pasa una vez.";
 "onb.models.starting" = "Empezando la descarga…";
 "onb.models.ready" = "Listo para transcribir";
 "onb.models.retry" = "Reintentar";
-"onb.models.hint" = "Puedes continuar: la descarga sigue en segundo plano.";
 "onb.models.continueBackground" = "Continuar";
 "onb.project.title" = "Tu primer proyecto";
-"onb.project.message" = "Un proyecto agrupa las reuniones y documentos de un tema: un cliente, un equipo, tu tesis…";
+"onb.project.message" = "Un proyecto agrupa los correos, notas, documentos y reuniones de un tema: un cliente, un equipo, tu tesis…";
 "onb.project.create" = "Crear y continuar";
 "onb.done.title" = "¡Todo listo!";
 "onb.done.message" = "Así es como vas a usar secondbrain día a día:";
@@ -465,7 +459,7 @@
 "tasks.emptyTheirs" = "Nadie más tiene pendientes aquí";
 "tasks.emptyUnowned" = "No hay pendientes sin dueño";
 "tasks.emptyDone" = "Todavía no hay nada hecho";
-"tasks.emptyMessage" = "Cuando aprenda de una reunión o un correo, aquí aparecerán los compromisos: los tuyos y los de los demás, con su fecha.";
+"tasks.emptyMessage" = "Cuando aprenda de un correo, una nota o una reunión, aquí aparecerán los compromisos: los tuyos y los de los demás, con su fecha.";
 "mytasks.title" = "Pendientes";
 "mytasks.subtitle" = "Lo que te toca hacer, en todos tus proyectos";
 "mytasks.overdue" = "Vencidos";
@@ -477,7 +471,7 @@
 "mytasks.showDone" = "Mostrar hechos";
 "mytasks.overdueHelp" = "%ld vencidos";
 "mytasks.emptyTitle" = "No tienes pendientes";
-"mytasks.emptyMessage" = "Cuando en una reunión o un correo te comprometas a algo, aparecerá aquí con su fecha.";
+"mytasks.emptyMessage" = "Cuando en un correo, una nota o una reunión te comprometas a algo, aparecerá aquí con su fecha.";
 "srctasks.title" = "Pendientes y acuerdos";
 "srctasks.mine" = "Míos";
 "srctasks.theirs" = "De otros";
@@ -566,7 +560,7 @@
 "tpl.save" = "Guardar formato";
 "tpl.scope.meeting" = "Reuniones";
 "tpl.scope.email" = "Correos";
-"tpl.scope.any" = "Reuniones y correos";
+"tpl.scope.any" = "Cualquier fuente";
 "tpl.picker" = "Formato";
 "tpl.pickerShort" = "Formato";
 "tpl.standard" = "Estándar";
@@ -651,7 +645,6 @@
 
 /* v0.3 — Grafo */
 "graph.empty.title" = "Tu cerebro aún está vacío";
-"graph.empty.message" = "Aquí verás cómo se conecta todo lo que aprendo. Graba una reunión o agrega algo para empezar.";
 "graph.seeInGraph" = "Ver en el grafo";
 "graph.showAll" = "Ver todo";
 "graph.fit" = "Ajustar";
@@ -662,8 +655,6 @@
 "graph.open" = "Abrir página";
 "graph.openOverview" = "Abrir resumen del proyecto";
 "graph.today" = "Hoy";
-"graph.hint.all" = "Haz clic en algo para explorarlo";
-"graph.hint.project" = "Haz clic en algo para explorarlo";
 "graph.close" = "Cerrar";
 "graph.connected" = "Conectado con";
 "graph.matches" = "%ld coincidencias";
@@ -1185,18 +1176,12 @@
 "home.seeAllTasks" = "Ver todos (%ld)";
 "home.tasksToday" = "Pendientes para hoy";
 "home.nothingDue" = "Nada vence hoy";
-"home.recent" = "Recientes";
+"home.recent" = "Lo último que aprendí";
 "home.seeByDate" = "Ver todo por fecha";
-"home.connections" = "Explorar cómo se conecta todo";
 "home.history" = "Historial";
 "home.emptyTitle" = "Tu conocimiento, en un lugar.";
-"home.emptyRecord" = "Grabar";
-"home.emptyPaste" = "Pegar un correo";
-"home.emptyDrop" = "Arrastra un archivo aquí";
-"home.connectCalendar" = "Conecta tu calendario o usa el de la Mac";
 "search.placeholder" = "Buscar o preguntar…";
 "search.ask" = "Preguntar: «%@»";
-"search.askProject" = "Preguntar a %@: «%@»";
 "search.group.meetings" = "Reuniones";
 "search.group.notes" = "Notas y documentos";
 "search.group.mail" = "Correos";
@@ -1287,7 +1272,7 @@
 "content.notePlaceholder" = "Escribe aquí…";
 "content.linkTitle" = "Pegar enlace";
 "content.linkHint" = "Leeré la página y la agregaré al proyecto.";
-"content.listEmpty" = "Aún no hay nada. Graba, pega un correo o arrastra un archivo aquí.";
+"content.listEmpty" = "Aún no hay nada. Agrega una nota, pega un correo o un enlace, o arrastra un archivo aquí.";
 "content.showLess" = "Ver menos";
 "content.learningHint" = "Estoy aprendiendo de esto. Lo verás aquí en cuanto termine.";
 "content.recordingHint" = "Grabando. Aprenderé de esta reunión cuando termine.";
@@ -1378,11 +1363,11 @@
 "export.tasks.none" = "_No hay pendientes._";
 
 /* v0.5 — settings fixes */
-"onb.you.message" = "Cómo te llamo y dónde guardo tus primeras reuniones.";
+"onb.you.message" = "Cómo te llamo y dónde guardo lo primero que aprenda.";
 "onb.finish.open" = "Abrir secondbrain";
 "onb.done.menuAfterMessage" = "Arriba a la derecha de tu pantalla. Haz clic para grabar y elegir el proyecto; mientras grabas aparece un punto rojo. Después de cada reunión transcribo y aprendo solo, y te aviso al terminar.";
 "onb.done.searchTitle" = "Encuentra o pregunta lo que sea";
-"onb.done.searchMessage" = "Presiona ⌘K donde estés: busca una reunión, una nota o una persona, o hazme una pregunta.";
+"onb.done.searchMessage" = "Presiona ⌘K donde estés: busca una persona, un correo, una nota o un documento, o hazme una pregunta.";
 "settings.whisper.notDownloaded" = "Sin descargar";
 "claude.waitingBrowser" = "Termina el inicio de sesión en tu navegador…";
 "claude.waitingBrowserHint" = "Me conecto solo en cuanto apruebes el acceso.";
@@ -1409,9 +1394,210 @@
 
 /* v0.5 — finish */
 "meetings.past.myTasks" = "Mis pendientes (%ld)";
-"meetings.past.myTasksHelp" = "Tareas tuyas de esta reunión que siguen abiertas";
 
 /* v0.5.3 — recording permission */
 "record.repairPermission" = "Reparar permiso";
 "record.repairPermissionHelp" = "Úsalo si secondbrain ya aparece activado en Ajustes del Sistema y aun así no graba: el permiso quedó de una versión anterior. Lo borro para que macOS te lo vuelva a pedir; acéptalo y vuelve a abrir secondbrain.";
 "record.repairFailed" = "No pude reparar el permiso. En Ajustes del Sistema → Grabación de pantalla y audio del sistema, quita secondbrain con «−» y vuelve a abrirlo.";
+
+/* v0.6 foundation — navigation, sidebar, scope */
+"sidebar.ask" = "Preguntar";
+"sidebar.graph" = "Grafo";
+"sidebar.sources" = "Fuentes";
+"project.tab.summary" = "Resumen";
+"add.title" = "Agregar";
+"add.note" = "Nota";
+"add.file" = "Archivo…";
+"add.link" = "Enlace…";
+"add.email" = "Pegar correo";
+"add.stopRecording" = "Detener grabación";
+"add.help" = "Agrega una nota, un archivo, un enlace, un correo o una grabación";
+"search.askBrain" = "Preguntar a todo el cerebro: «%@»";
+"page.open" = "Abrir";
+"page.openHelp" = "Abrir en su lugar";
+"entity.edit" = "Editar";
+"entity.editHelp" = "Corregir esta página a mano";
+
+/* v0.6 facts — editar, propagar, hechos confirmados */
+"editor.save" = "Guardar";
+"editor.saveHelp" = "Guardar (⌘S) y buscar otras páginas que digan lo mismo";
+"editor.notEditable" = "Las fuentes originales no se editan.";
+"editor.notText" = "Esta página no es texto UTF-8. Ábrela en otro editor para no perder su contenido.";
+"editor.conflict" = "La página cambió mientras la editabas (Claude la actualizó). Guardar ahora borraría esos cambios.";
+"editor.reload" = "Recargar";
+"editor.reloadHelp" = "Abre la página como está ahora (se pierde tu edición sin guardar)";
+"editor.saveAnyway" = "Guardar igual";
+"editor.saveAnywayHelp" = "Tu texto reemplaza la página, incluidos los cambios de Claude (se puede deshacer en Historial)";
+"editor.properties" = "Propiedades";
+"editor.propagateHint" = "Al guardar, busco otras páginas del cerebro que digan lo que corregiste y te las muestro antes de cambiarlas.";
+"corrections.title" = "Revisar cambios en el cerebro";
+"corrections.subtitle" = "Corregiste «%@»";
+"corrections.searching" = "Buscando otras páginas que digan lo mismo…";
+"corrections.searchingDetail" = "Tu cambio ya está guardado. Puedes cerrar esto: te lo muestro cuando termine.";
+"corrections.background" = "Seguir en segundo plano";
+"corrections.intro" = "Estas páginas todavía dicen lo que corregiste. Elige cuáles cambio:";
+"corrections.factsTitle" = "Lo guardo como hecho confirmado";
+"corrections.onlyThisPage" = "Solo esta página";
+"corrections.onlyThisPageHelp" = "No cambiar otras páginas; solo guardar el hecho confirmado";
+"corrections.nothing" = "No encontré otras páginas que lo dijeran.";
+"corrections.nothingDetail" = "Tu cambio quedó guardado.";
+"corrections.factSaved" = "Tu cambio quedó guardado y lo anoté en Hechos confirmados: nunca escribiré lo contrario.";
+"corrections.failed" = "No pude revisar el resto del cerebro. Tu cambio quedó guardado.";
+"corrections.retry" = "Reintentar";
+"corrections.done" = "Listo";
+/* v0.6 entity — fichas, Personas, Resumen */
+"entity.inProject" = "En %@";
+"entity.seeAll" = "Ver todo";
+"entity.seeAllHelp" = "Ver todo lo que sé, no solo lo de este proyecto";
+"entity.openHelp" = "Abrir la ficha completa";
+"entity.kind.person" = "Persona";
+"entity.kind.org" = "Empresa";
+"entity.kind.project" = "Proyecto";
+"entity.kind.meeting" = "Reunión";
+"entity.kind.email" = "Correo";
+"entity.kind.document" = "Documento";
+"entity.kind.note" = "Nota";
+"entity.kind.url" = "Enlace";
+"entity.kind.topic" = "Tema";
+"entity.kind.decision" = "Decisión";
+"entity.kind.question" = "Pregunta guardada";
+"entity.kind.repo" = "Repositorio";
+"entity.kind.facts" = "Hechos confirmados";
+"entity.kind.page" = "Página";
+"entity.section.projects" = "Proyectos";
+"entity.section.meetings" = "Reuniones";
+"entity.section.emails" = "Correos";
+"entity.section.documents" = "Documentos y notas";
+"entity.section.decisions" = "Decisiones";
+"entity.section.tasks" = "Pendientes";
+"entity.section.related" = "Relacionados";
+"people.pick" = "Elige a alguien de la lista";
+"people.search" = "Buscar personas";
+"people.noMatch" = "Nadie coincide con la búsqueda.";
+"summary.brief" = "En breve";
+"summary.noBriefTitle" = "Aún no hay resumen";
+"summary.noBriefMessage" = "Cuando aprenda de lo primero que agregues a este proyecto, aquí lo resumiré.";
+"summary.decisions" = "Decisiones recientes";
+"summary.upcoming" = "Próximas fechas";
+"summary.activity" = "Actividad reciente";
+"summary.myTasks" = "Mis pendientes";
+"summary.seeAll" = "Ver todos";
+"summary.nothingYet" = "Aún no hay decisiones, fechas ni actividad en este proyecto.";
+"projectPeople.emptyTitle" = "Aún no hay personas en este proyecto";
+"projectPeople.emptyMessage" = "Aparecerán cuando aprenda de reuniones y correos del proyecto. También puedes agregarlas tú.";
+"projectPeople.add" = "Agregar persona";
+"projectPeople.addHelp" = "Agregar a alguien del cerebro a este proyecto";
+"projectPeople.remove" = "Quitar del proyecto";
+"projectPeople.fact.added" = "%1$@ forma parte del proyecto %2$@.";
+"projectPeople.fact.removed" = "%1$@ no forma parte del proyecto %2$@.";
+"projectPeople.lastContact" = "Último contacto: %@";
+"projectPeople.addedByYou" = "Agregada por ti";
+/* v0.6 ask — Preguntar: conversaciones guardadas, panel de cita, guardar como página */
+"ask.new" = "Nueva conversación";
+"ask.newHelp" = "Empezar una conversación nueva (las anteriores quedan guardadas)";
+"ask.untitled" = "Conversación";
+"ask.listEmpty" = "Tus conversaciones quedan guardadas aquí.";
+"ask.emptyMessageProject" = "Respondo con lo que hay en este proyecto y te digo de dónde lo saqué.";
+"ask.rename" = "Renombrar";
+"ask.renameTitle" = "Renombrar conversación";
+"ask.renamePlaceholder" = "Nombre";
+"ask.delete" = "Eliminar";
+"ask.deleteTitle" = "¿Eliminar esta conversación?";
+"ask.deleteMessage" = "«%@» se borra de la lista. Las páginas que guardaste desde ella se quedan en el cerebro.";
+"ask.saveAsPage" = "Guardar como página";
+"ask.saved" = "Guardando…";
+"ask.savedOpen" = "Guardada · Ver";
+"ask.savedOpenHelp" = "Ver la página guardada";
+"ask.saveFailed" = "No pude guardar la respuesta como página.";
+"ask.closeInspector" = "Cerrar el panel";
+/* v0.6 graph */
+"graph.kind.org" = "Empresa";
+"graph.kinds.org" = "Empresas";
+"graph.hint.panel" = "Clic: ver su ficha aquí al lado · Doble clic: abrirla";
+"graph.emptyAny.message" = "Aquí verás cómo se conecta todo lo que aprendo: correos, notas, documentos, enlaces, repos y reuniones. Agrega algo para empezar.";
+"graph.panel.open" = "Abrir";
+"graph.panel.openHelp" = "Abrir la ficha completa (doble clic en el nodo)";
+"graph.panel.openProjectHelp" = "Abrir el proyecto (doble clic en el nodo)";
+"graph.panel.close" = "Cerrar la ficha";
+"graph.panel.selectHelp" = "Ver su ficha en el grafo";
+/* v0.6 search — ⌘K full text, groups, actions */
+"search.group.orgs" = "Empresas";
+"search.group.topics" = "Temas";
+"search.group.decisions" = "Decisiones";
+"search.group.questions" = "Preguntas guardadas";
+"search.group.repos" = "Repos";
+"search.more" = "Ver %ld más";
+"search.action.addFile" = "Agregar archivo";
+"search.action.pasteLink" = "Pegar enlace";
+"search.action.facts" = "Hechos confirmados";
+/* v0.6 tasks — Pendientes filters (§16.8) */
+"tasks.filter.project" = "Proyecto";
+"tasks.filter.allProjects" = "Todos los proyectos";
+"tasks.filter.projectHelp" = "Ver solo los pendientes de algunos proyectos";
+"tasks.filter.person" = "Persona";
+"tasks.filter.anyone" = "Todas las personas";
+"tasks.filter.personHelp" = "Ver lo que le debes a alguien o lo que te debe";
+"tasks.filter.noPeople" = "Nadie con pendientes todavía";
+"tasks.filter.with" = "Todo con %@";
+"tasks.filter.iOwe" = "Lo que le debo a %@";
+"tasks.filter.owesMe" = "Lo que me debe %@";
+"tasks.filter.iOweShort" = "Le debo a %@";
+"tasks.filter.owesMeShort" = "Me debe %@";
+"tasks.filter.search" = "Buscar";
+"tasks.filter.clear" = "Quitar filtros";
+"tasks.emptyFilters" = "Nada con estos filtros";
+"tasks.openProjectTasks" = "Ver en los pendientes del proyecto";
+"tasks.showInList" = "Ver en Pendientes";
+"meetings.past.myTasksOpen" = "Ver mis pendientes de esta reunión";
+/* v0.6 capture — captura rápida, barra de menús, correo automático, formatos */
+"capture.title" = "Captura rápida";
+"capture.placeholder" = "Escribe una nota, pega un enlace o un correo, o suelta archivos aquí…";
+"capture.kind.note" = "Nota";
+"capture.kind.link" = "Enlace";
+"capture.kind.email" = "Correo";
+"capture.kind.files" = "Archivos: %ld";
+"capture.kindHelp" = "Lo detecto solo: un enlace se lee como página, un correo pegado se guarda en su hilo y el resto queda como nota.";
+"capture.destination" = "Guardar en";
+"capture.destinationHelp" = "Lo sugieren tus reglas; si ninguna aplica, va a Sin asignar y lo clasifico yo.";
+"capture.save" = "Guardar";
+"capture.saved" = "Guardado en %@";
+"capture.hint" = "⌘↩ guardar · esc cerrar";
+"capture.removeFile" = "Quitar";
+"capture.moreFiles" = "y %ld más";
+"capture.thread" = "Se suma al hilo «%@»";
+"capture.failed" = "No pude guardarlo. Inténtalo de nuevo.";
+"settings.captureHotkey" = "Atajo de captura rápida";
+"settings.captureHotkeyDetail" = "Abre la captura rápida desde cualquier app.";
+"settings.captureHotkey.change" = "Cambiar…";
+"settings.captureHotkey.press" = "Pulsa el atajo…";
+"settings.captureHotkey.needsModifiers" = "Usa ⌘ o ⌃ junto con otra tecla modificadora (⌥ o ⇧) y una letra.";
+"settings.captureHotkey.recordTaken" = "⌥⌘R ya es el atajo para grabar.";
+"settings.captureHotkey.system" = "%@ lo usa macOS (Ajustes del Sistema › Teclado › Atajos). Elige otro con Cambiar….";
+"settings.captureHotkey.otherApp" = "Otra app ya usa %@. Elige otro.";
+"settings.key.space" = "Espacio";
+"tpl.scope.note" = "Notas";
+"tpl.scope.document" = "Documentos y enlaces";
+"rules.offer.fromAuto" = "¿Mandar siempre lo de %1$@ a %2$@ y guardar solos los próximos?";
+"rules.offer.toAuto" = "¿Mandar siempre lo que va para %1$@ a %2$@ y guardar solos los próximos?";
+"rules.offer.withAuto" = "¿Mandar siempre lo que incluya a %1$@ a %2$@ y guardar solos los próximos?";
+/* v0.6 home — Inicio, onboarding, first recording */
+"home.agenda" = "Agenda";
+"home.toSortLine" = "%ld por ordenar";
+"home.toSortHelp" = "Lo que llegó sin proyecto: asígnalo en Sin asignar";
+"home.repoChanges" = "Commits, PR y versiones";
+"home.empty.message" = "Notas, correos, documentos, enlaces, repositorios y reuniones: dame lo de tu día y lo ordeno por ti.";
+"home.empty.note" = "Nota";
+"home.empty.file" = "Archivo";
+"home.empty.link" = "Enlace";
+"home.empty.mail" = "Correo";
+"home.empty.record" = "Grabar";
+"home.empty.dropHint" = "También puedes arrastrar archivos a cualquier parte de Inicio.";
+"onb.done.menuCaptureMessage" = "Arriba a la derecha de tu pantalla: anota algo, pega un enlace o un correo, o graba una reunión (⌥⌘R), sin abrir la ventana.";
+"onb.done.captureTitle" = "Captura rápida desde cualquier lugar";
+"onb.done.captureMessage" = "Presiona %@ desde cualquier app y escribe: una nota, un enlace o un correo pegado. Lo guardo en su proyecto.";
+"record.intro.title" = "Antes de tu primera grabación";
+"record.intro.message" = "Grabo el audio de tu computadora y tu micrófono (Zoom, Meet, Teams, lo que sea) y lo transcribo aquí en tu Mac. Para eso necesito dos permisos y descargar una vez el modelo de transcripción (unos 3 GB).";
+"record.intro.needsConsent" = "Marca «Avisaré antes de grabar» para empezar.";
+"record.intro.needsPermission" = "Falta el permiso de audio de la computadora.";
+"record.intro.restartHint" = "¿Ya lo activaste en Ajustes del Sistema y aquí no aparece? macOS necesita que reabras secondbrain. Si ya estaba activado de antes, usa «Reparar permiso».";
+"record.intro.modelsHint" = "Puedes grabar ya: la descarga sigue en segundo plano y transcribo en cuanto termine.";

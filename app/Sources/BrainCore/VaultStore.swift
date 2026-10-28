@@ -42,7 +42,7 @@ public final class VaultStore: @unchecked Sendable {
 
     // MARK: Pages
 
-    /// Wiki pages of a project (`projects/<slug>/wiki/**`), or the global ones (index.md, log.md, people/…).
+    /// Wiki pages of a project (`projects/<slug>/wiki/**`), or the global ones (index.md, log.md, people/…, questions/…).
     public func pages(projectSlug: String?) -> [WikiPage] {
         let paths: [String]
         if let slug = projectSlug {
@@ -51,7 +51,9 @@ public final class VaultStore: @unchecked Sendable {
             let fm = FileManager.default
             let rootFiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? [])
                 .filter { $0.hasSuffix(".md") && $0 != "CLAUDE.md" && $0 != "README.md" }
-            paths = rootFiles + markdownFiles(under: "people").filter { !$0.hasSuffix("/README.md") }
+            // v0.6: `orgs/` (global companies, §16.4) next to `people/`, plus global saved answers in `questions/` (§16.3).
+            paths = rootFiles + (markdownFiles(under: "people") + markdownFiles(under: "orgs")).filter { !$0.hasSuffix("/README.md") }
+                + markdownFiles(under: "questions")
         }
         func rank(_ p: String) -> Int {
             switch (p as NSString).lastPathComponent {

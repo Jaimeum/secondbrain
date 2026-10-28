@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import BrainCore
 import SwiftUI
 
@@ -118,7 +119,123 @@ private struct GeneralSettings: View {
                 SettingsRow(title: L("settings.hotkey")) {
                     Toggle("", isOn: settingsBinding(state, \.hotkeyEnabled)).toggleStyle(.switch).labelsHidden()
                 }
+                // MARK: v0.6 capture — the capture shortcut next to ⌥⌘R, recordable (§16.10).
+                SettingsDivider()
+                CaptureHotKeyRow()
             }
+        }
+    }
+}
+
+// MARK: - Capture shortcut (§16.10)
+
+/// "Captura rápida": on/off, the current combination and "Cambiar…", which records a new one (⌘ or ⌃ plus another
+/// modifier and a key; esc cancels) and registers it at once. A combination macOS or another app already uses is
+/// refused with the reason; the current one is checked against macOS's own shortcuts when the row shows.
+private struct CaptureHotKeyRow: View {
+    @Environment(AppState.self) private var state
+    @ViewState private var recording = false
+    @ViewState private var problem: String?
+    @ViewState private var monitor: Any?
+
+    var body: some View {
+        SettingsRow(title: L("settings.captureHotkey"), detail: problem ?? L("settings.captureHotkeyDetail")) {
+            HStack(spacing: Brand.spacing.s) {
+                Text(recording ? L("settings.captureHotkey.press") : state.config.captureHotkey.symbols)
+                    .font(Brand.font(12, .semibold))
+                    .foregroundStyle(recording ? Brand.color.accent : Brand.color.text)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                Button(recording ? L("common.cancel") : L("settings.captureHotkey.change")) {
+                    recording ? stop(restore: true) : start()
+                }
+                .buttonStyle(.brandSecondary)
+                .disabled(!state.config.captureHotkeyEnabled)
+                Toggle("", isOn: settingsBinding(state, \.captureHotkeyEnabled)).toggleStyle(.switch).labelsHidden()
+            }
+        }
+        .onAppear(perform: checkCurrent)
+        .onChange(of: state.config.captureHotkeyEnabled) { checkCurrent() }
+        .onDisappear { if recording { stop(restore: true) } }
+    }
+
+    private func checkCurrent() {
+        let combo = state.config.captureHotkey
+        problem = state.config.captureHotkeyEnabled && SystemHotKeys.isTaken(keyCode: combo.keyCode, modifiers: combo.modifiers)
+            ? L("settings.captureHotkey.system", combo.symbols) : nil
+    }
+
+    private func start() {
+        problem = nil
+        recording = true
+        QuickCapturePanel.shared.suspendHotKey()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            MainActor.assumeIsolated { record(event) }
+            return nil
+        }
+    }
+
+    private func stop(restore: Bool) {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        recording = false
+        if restore { QuickCapturePanel.shared.applyHotKey(state: state) }
+    }
+
+    private func record(_ event: NSEvent) {
+        if event.keyCode == UInt16(kVK_Escape) {
+            stop(restore: true)
+            return
+        }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        var mods = 0
+        if flags.contains(.command) { mods |= CaptureHotKey.command }
+        if flags.contains(.shift) { mods |= CaptureHotKey.shift }
+        if flags.contains(.option) { mods |= CaptureHotKey.option }
+        if flags.contains(.control) { mods |= CaptureHotKey.control }
+        let combo = CaptureHotKey(keyCode: Int(event.keyCode), modifiers: mods, key: Self.label(event))
+        guard combo.isValid else {
+            problem = L("settings.captureHotkey.needsModifiers")
+            return
+        }
+        if combo.keyCode == kVK_ANSI_R, combo.modifiers == CaptureHotKey.option | CaptureHotKey.command {
+            problem = L("settings.captureHotkey.recordTaken")
+            return
+        }
+        if SystemHotKeys.isTaken(keyCode: combo.keyCode, modifiers: combo.modifiers) {
+            problem = L("settings.captureHotkey.system", combo.symbols)
+            return
+        }
+        stop(restore: false)
+        let previous = state.config.captureHotkey
+        state.update { $0.captureHotkey = combo }
+        if !QuickCapturePanel.shared.applyHotKey(state: state) {
+            state.update { $0.captureHotkey = previous }
+            problem = L("settings.captureHotkey.otherApp", combo.symbols)
+        }
+    }
+
+    private static let fKeys = [kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10, kVK_F11, kVK_F12]
+
+    /// The key as printed on the keyboard ("N", "Espacio", "F5").
+    private static func label(_ event: NSEvent) -> String {
+        switch Int(event.keyCode) {
+        case kVK_Space: return L("settings.key.space")
+        case kVK_Return: return "↩"
+        case kVK_Tab: return "⇥"
+        case kVK_Delete: return "⌫"
+        case kVK_LeftArrow: return "←"
+        case kVK_RightArrow: return "→"
+        case kVK_UpArrow: return "↑"
+        case kVK_DownArrow: return "↓"
+        case let code where fKeys.contains(code):
+            return "F\((fKeys.firstIndex(of: code) ?? 0) + 1)"
+        default:
+            let chars = event.characters(byApplyingModifiers: []) ?? event.charactersIgnoringModifiers ?? ""
+            return chars.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         }
     }
 }

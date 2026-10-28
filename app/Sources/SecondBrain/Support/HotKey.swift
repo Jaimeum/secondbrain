@@ -1,12 +1,14 @@
 import Carbon.HIToolbox
 import Foundation
 
-/// Global ⌥⌘R via Carbon's RegisterEventHotKey, which needs no Accessibility permission.
+/// A global shortcut (⌥⌘R, the capture one) via Carbon's RegisterEventHotKey, which needs no Accessibility permission.
+/// `isRegistered` is false when another app already registered the same combination.
 @MainActor
 final class GlobalHotKey {
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private let action: () -> Void
+    private(set) var isRegistered = false
 
     nonisolated(unsafe) private static var registry: [UInt32: GlobalHotKey] = [:]
     nonisolated(unsafe) private static var nextId: UInt32 = 1
@@ -29,7 +31,8 @@ final class GlobalHotKey {
         }, 1, &spec, nil, &handlerRef)
 
         let hotKeyId = EventHotKeyID(signature: OSType(0x5342_524E), id: id) // "SBRN"
-        RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyId, GetApplicationEventTarget(), 0, &hotKeyRef)
+        let status = RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyId, GetApplicationEventTarget(), 0, &hotKeyRef)
+        isRegistered = status == noErr && hotKeyRef != nil
         Self.registry[id] = self
     }
 
@@ -39,5 +42,24 @@ final class GlobalHotKey {
         hotKeyRef = nil
         handlerRef = nil
         Self.registry = Self.registry.filter { $0.value !== self }
+    }
+}
+
+/// Shortcuts macOS itself owns (Ajustes del Sistema › Teclado › Atajos: input sources, Spotlight, Mission Control…).
+/// A global shortcut registered on one of them never fires while it is enabled there.
+enum SystemHotKeys {
+    /// Whether `keyCode` + Carbon `modifiers` is an enabled system shortcut.
+    static func isTaken(keyCode: Int, modifiers: Int) -> Bool {
+        var unmanaged: Unmanaged<CFArray>?
+        guard CopySymbolicHotKeys(&unmanaged) == noErr, let array = unmanaged?.takeRetainedValue() as? [[String: Any]] else {
+            return false
+        }
+        let relevant = cmdKey | shiftKey | optionKey | controlKey
+        return array.contains { entry in
+            guard (entry[kHISymbolicHotKeyEnabled as String] as? Bool) ?? false,
+                  let code = (entry[kHISymbolicHotKeyCode as String] as? NSNumber)?.intValue,
+                  let mods = (entry[kHISymbolicHotKeyModifiers as String] as? NSNumber)?.intValue else { return false }
+            return code == keyCode && (mods & relevant) == (modifiers & relevant)
+        }
     }
 }

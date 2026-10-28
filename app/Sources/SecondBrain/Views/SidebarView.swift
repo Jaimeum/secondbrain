@@ -1,8 +1,9 @@
 import BrainCore
 import SwiftUI
 
-/// Inicio · Reuniones · Correo · Pendientes · Personas, then Proyectos (CONTRACT §15.2). Header: the brand and the ⌘K
-/// search; footer: the one recording control and the queue line.
+/// Inicio · Preguntar · Grafo · Pendientes · Personas, then Fuentes (Correo · Reuniones · Sin asignar) and Proyectos
+/// (CONTRACT §16.1). Header: the brand and the ⌘K search; footer: "+ Agregar" (and the recording card while a meeting
+/// is on or a recording runs) over the queue line.
 struct SidebarView: View {
     @Environment(AppState.self) private var state
     @Binding var showNewProject: Bool
@@ -11,18 +12,24 @@ struct SidebarView: View {
     var body: some View {
         List(selection: selection) {
             Section {
-                item(L("home.title"), symbol: "house").tag(SidebarItem.home)
-                    // Re-clicking the selected row doesn't go through the selection binding: pop Inicio to its root.
-                    .simultaneousGesture(TapGesture().onEnded {
-                        if state.selection?.normalized == .home { state.homePopToken += 1 }
-                    })
-                item(L("sidebar.meetings"), symbol: "calendar").tag(SidebarItem.meetings)
-                item(L("sidebar.mail"), symbol: "envelope").tag(SidebarItem.mail)
-                item(L("tasks.title"), symbol: "checklist")
-                    .badge(overdueBadge)
-                    .help(state.overdueCount > 0 ? L("mytasks.overdueHelp", state.overdueCount) : "")
-                    .tag(SidebarItem.tasks)
-                item(L("sidebar.people"), symbol: "person.2").tag(SidebarItem.people)
+                ForEach(SidebarItem.main, id: \.self) { entry in
+                    row(entry)
+                }
+            }
+
+            Section {
+                ForEach(SidebarItem.sources, id: \.self) { entry in
+                    row(entry)
+                }
+                // Only while something waits (or while on it, so assigning the last one doesn't pull the screen away).
+                let waiting = state.unassignedCount
+                if waiting > 0 || state.selection == .unassigned {
+                    item(SidebarItem.unassigned.title, symbol: SidebarItem.unassigned.symbol)
+                        .badge(waiting)
+                        .tag(SidebarItem.unassigned)
+                }
+            } header: {
+                sectionHeader(L("sidebar.sources"))
             }
 
             Section {
@@ -48,9 +55,7 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
                 .listItemTint(Brand.color.text2)
             } header: {
-                Text(L("sidebar.projects"))
-                    .font(Brand.font(11, .semibold))
-                    .foregroundStyle(Brand.color.text2)
+                sectionHeader(L("sidebar.projects"))
             }
         }
         .listStyle(.sidebar)
@@ -67,12 +72,34 @@ struct SidebarView: View {
         }
     }
 
-    /// Selection through `SidebarItem.normalized`, so an alias set elsewhere (`.myTasks`, `.brain`) still highlights
-    /// its row. Clicking "Inicio" while on Inicio goes back to its root (from a page, the timeline, the graph…).
+    @ViewBuilder private func row(_ entry: SidebarItem) -> some View {
+        switch entry {
+        case .home:
+            item(entry.title, symbol: entry.symbol).tag(entry)
+                // Re-clicking the selected row doesn't go through the selection binding: pop Inicio to its root.
+                .simultaneousGesture(TapGesture().onEnded {
+                    if state.selection == .home { state.homePopToken += 1 }
+                })
+        case .tasks:
+            item(entry.title, symbol: entry.symbol)
+                .badge(overdueBadge)
+                .help(state.overdueCount > 0 ? L("mytasks.overdueHelp", state.overdueCount) : "")
+                .tag(entry)
+        default:
+            item(entry.title, symbol: entry.symbol).tag(entry)
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(Brand.font(11, .semibold))
+            .foregroundStyle(Brand.color.text2)
+    }
+
+    /// Every click goes through the router (§16.12), which drops requests left for other screens.
     private var selection: Binding<SidebarItem?> {
-        Binding(get: { state.selection?.normalized ?? state.selection }, set: { item in
-            if item == .home, state.selection?.normalized == .home { state.homePopToken += 1 }
-            state.selection = item
+        Binding(get: { state.selection }, set: { item in
+            if let item { state.navigate(to: .sidebar(item)) } else { state.selection = nil }
         })
     }
 
@@ -179,12 +206,24 @@ private struct ProjectRow: View {
     }
 }
 
-/// ≤ 96 pt: the recording control and, under it, the queue line.
+/// ≤ 96 pt (§16.1): "+ Agregar" and the queue line. Recording takes the footer only while a calendar meeting is on
+/// or a recording runs (the record-soft card of §15.2); "+ Agregar" then shrinks to a "+" beside the queue line.
 private struct SidebarFooter: View {
+    @Environment(AppState.self) private var state
+
     var body: some View {
+        let recordTakesOver = state.isRecording || state.isRecorderBusy
+            || MeetingBanner.recordableNow(state: state, now: MeetingsModel.shared.now) != nil
         VStack(alignment: .leading, spacing: 4) {
-            RecordControl(placement: .sidebar)
-            QueueStatusLine(showsProgressBar: false)
+            if recordTakesOver {
+                // §16.1: Grabar takes the footer; "+ Agregar" stays a real button, secondary, right under it.
+                RecordControl(placement: .sidebar)
+                AddControl(secondary: true)
+                QueueStatusLine(showsProgressBar: false)
+            } else {
+                AddControl()
+                QueueStatusLine(showsProgressBar: false)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -192,6 +231,66 @@ private struct SidebarFooter: View {
         .background(Brand.color.bg)
         .overlay(alignment: .top) {
             Rectangle().fill(Brand.color.line).frame(height: 1)
+        }
+    }
+}
+
+/// "+ Agregar" (§16.1): Nota · Archivo… · Enlace… · Pegar correo ⌘⇧V · Grabar, into the project on screen (else
+/// Sin asignar / classified). `compact` = a "+" only; `secondary` = full width but regular size (under the Grabar
+/// card while a meeting is on or recording).
+/// v0.6: G1 may reuse it in the menu bar.
+struct AddControl: View {
+    @Environment(AppState.self) private var state
+    var compact = false
+    var secondary = false
+    @ViewState private var error: String?
+
+    var body: some View {
+        Menu {
+            Button { state.noteRequest = NoteRequest(projectSlug: state.currentProjectSlug) } label: {
+                Label(L("add.note"), systemImage: "square.and.pencil")
+            }
+            Button(action: addFiles) { Label(L("add.file"), systemImage: "doc.badge.plus") }
+            Button { state.linkRequest = LinkRequest(projectSlug: state.currentProjectSlug) } label: {
+                Label(L("add.link"), systemImage: "link")
+            }
+            // ⌘⇧V is the app menu's (Edit › Pegar correo); the label shows it.
+            Button { state.requestEmail() } label: { Label(L("add.email"), systemImage: "envelope") }
+            Divider()
+            Button { state.recordNow(placement: .sidebar, meeting: false) } label: {
+                Label(state.isRecording ? L("add.stopRecording") : L("record.start"), systemImage: "record.circle")
+            }
+            .disabled(state.isRecorderBusy)
+        } label: {
+            if compact {
+                Image(systemName: "plus")
+            } else {
+                Label(L("add.title"), systemImage: "plus")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .menuStyle(.button)
+        .menuIndicator(compact ? .hidden : .visible)
+        .buttonStyle(.bordered)
+        .controlSize(compact ? .small : secondary ? .regular : .large)
+        .frame(maxWidth: compact ? nil : .infinity)
+        .fixedSize(horizontal: compact, vertical: false)
+        .help(L("add.help"))
+        .disabled(!state.engineStarted)
+        .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button(L("common.ok")) { error = nil }
+        } message: {
+            Text(error ?? "")
+        }
+    }
+
+    /// Files import right away with their own dates, into the project on screen (like a drop).
+    private func addFiles() {
+        guard let batch = SourceImport.chooseFiles() else { return }
+        let slug = state.currentProjectSlug
+        Task {
+            let failed = await SourceImport.importURLs(batch.urls, projectSlug: slug, state: state)
+            if !failed.isEmpty { error = failed.joined(separator: "\n") }
         }
     }
 }

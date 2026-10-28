@@ -4,45 +4,7 @@ import Observation
 import Recorder
 import Transcription
 
-/// Sidebar destinations (CONTRACT §15.2): Inicio · Reuniones · Correo · Pendientes · Personas · Proyectos.
-enum SidebarItem: Hashable {
-    case home
-    case meetings
-    case mail
-    case tasks
-    case people
-    case project(String)
-    // Deprecated aliases, kept one release (MainView maps them): `.brain` → Inicio, `.inbox` → Inicio › Sin asignar,
-    // `.myTasks` → Pendientes, `.templates` → Ajustes › Formatos (then Inicio).
-    case brain
-    case inbox
-    case myTasks
-    case templates
-
-    /// The item the sidebar shows as selected (aliases resolved); nil for `.templates`, which opens Ajustes instead.
-    var normalized: SidebarItem? {
-        switch self {
-        case .brain, .inbox: .home
-        case .myTasks: .tasks
-        case .templates: nil
-        default: self
-        }
-    }
-}
-
-/// Screens pushed inside Inicio's NavigationStack (CONTRACT §15.2).
-enum HomeRoute: Hashable {
-    /// A global page (index.md, log.md…) shown in place.
-    case page(String)
-    /// "Ver todo por fecha": the timeline of every project.
-    case timeline
-    /// "Explorar cómo se conecta todo": the global graph.
-    case graph
-    /// "Por ordenar › Ver todo": Sin asignar.
-    case inbox
-    /// "Preguntar: «…»" from ⌘K for the whole brain (asked in `AppState.homeChat`).
-    case ask(String)
-}
+// SidebarItem, HomeRoute, Destination and the router: Support/Navigation.swift (CONTRACT §16.12).
 
 /// "Nueva nota" from ⌘K (MainView presents `NoteSheet`).
 struct NoteRequest: Identifiable, Equatable {
@@ -125,36 +87,49 @@ final class AppState {
         return notice
     }
     private var dismissedMigrationNotice = UserDefaults.standard.string(forKey: "migration.dismissed")
-    /// A page to open when the selected project appears (from "Mis pendientes" or the global timeline).
+    // MARK: v0.6 navigation (CONTRACT §16.12) — requests left by `navigate(to:)` for the screen it selects. Only the
+    // router sets them (it clears them all first); the screen that consumes one clears it.
+    /// A vault page to open: a project's own page in Contenido, a foreign page as a ficha filtered to the project
+    /// (ProjectView), a person in Personas (PeopleView).
     var pendingPage: String?
-    /// v0.3: a page to focus in the Grafo tab ("Ver en el grafo" from a wiki page header).
+    /// A page to center the Grafo on (GraphView of the brain, or ProjectView's Grafo tab).
     var pendingGraphFocus: String?
-    // MARK: v0.5 navigation (CONTRACT §15.2)
-    /// Set by Inicio or the search palette; MeetingsView selects this event and clears it.
+    /// MeetingsView selects this event and clears it.
     var pendingEventId: String?
-    /// Set by Inicio or the search palette; ProjectView switches to this tab and clears it.
+    /// With `pendingEventId`: open the event on its preparation ("Prepararme" from Inicio), not the plain detail.
+    var pendingEventPrepare = false
+    /// ProjectView switches to this tab and clears it.
     var pendingProjectTab: ProjectTab?
-    /// Question typed in the search palette, sent by ChatView when it appears.
-    var pendingQuestion: String?
+    /// TasksView highlights this task (`TaskItem.id`) and clears it.
+    var pendingTaskId: String?
+    /// AskView (or a project's Preguntar tab) opens this conversation / asks this question and clears it.
+    var pendingChat: ChatRequest?
+    /// InboxView (Sin asignar) highlights this source's row and clears it ("failed" notification).
+    var pendingSourceHighlight: String?
     /// A screen to push inside Inicio's NavigationStack; HomeView consumes it and clears it.
     var homeRoute: HomeRoute?
     /// Bumped by "Inicio" (sidebar row re-selected, ⌘1) while Inicio is on screen: HomeView pops back to its root.
     var homePopToken = 0
-    /// With `pendingEventId`: open the event on its preparation ("Prepararme" from Inicio), not the plain detail.
-    var pendingEventPrepare = false
-    /// When the last whole-brain question was asked from ⌘K (Inicio offers to go back to its answer).
-    var homeChatAskedAt: Date?
+    /// "Editar" on a page or ficha (§16.6): MainView presents the editor over everything while set.
+    var editingPage: String?
+    /// The first "Grabar" waiting for RecordingIntroSheet (§16.11; MainView presents it while set).
+    var recordingIntro: RecordingIntroRequest?
+    /// SwiftUI's `openWindow(id: "main")`, left by the menu bar icon (always on screen): the main window can be
+    /// reopened from code that has no view (⌥⌘R, the menu bar's Grabar) after the user closed it.
+    @ObservationIgnored var openMainWindowAction: (() -> Void)?
+    /// "Historial" over any screen (MainView presents `ActivitySheet`).
+    var historyRequest: HistoryRequest?
+    /// "Enlace…" from the sidebar's "+ Agregar".
+    var linkRequest: LinkRequest?
     /// The ⌘K palette is on screen.
     var searchPresented = false
     /// "Nuevo proyecto" sheet (⌘N, sidebar, ⌘K).
     var showNewProject = false
     /// "Nueva nota" from ⌘K.
     var noteRequest: NoteRequest?
-    /// The whole-brain conversation of Inicio ("Preguntar" from ⌘K without a project).
-    let homeChat = ChatModel()
-    /// Each project's "Preguntar" conversation, kept while the app runs: leaving a project and coming back (or asking
-    /// it from ⌘K) continues the same conversation. Created on first use; dropped when the vault changes.
-    @ObservationIgnored private(set) var projectChats: [String: ChatModel] = [:]
+    /// v0.6 ask (§16.3): Preguntar's saved conversations per scope ("brain" / "project:<slug>"), kept while the app
+    /// runs so an answer keeps streaming off screen. Created on first use; dropped when the vault changes.
+    @ObservationIgnored private var conversationsByScope: [String: Conversations] = [:]
     /// v0.3: bumped when connected accounts change (connect / disconnect), so Correo and Reuniones reload.
     var accountsRevision = 0
     @ObservationIgnored private var overdueReload: Task<Void, Never>?
@@ -166,6 +141,12 @@ final class AppState {
     @ObservationIgnored private var projectsReload: Task<Void, Never>?
 
     private init() {
+        // Snapshots seed chats and migrate the vault: never against the owner's real config.
+        let env = ProcessInfo.processInfo.environment
+        if !(env["SB_SNAPSHOT_DIR"] ?? "").isEmpty, (env["SB_CONFIG"] ?? "").isEmpty {
+            FileHandle.standardError.write(Data("SB_SNAPSHOT_DIR needs SB_CONFIG pointing at an isolated config.json\n".utf8))
+            exit(64)
+        }
         let config = AppConfig.load()
         self.config = config
         menuLanguageAtLaunch = config.uiLanguage
@@ -189,10 +170,13 @@ final class AppState {
         if !snapshot {
             Notifier.requestAuthorization()
             applyHotKey()
+            QuickCapturePanel.shared.applyHotKey(state: self)   // MARK: v0.6 capture — ⌥⌘N or the recorded one (§16.10)
         }
         if config.onboardingComplete {
             startEngine()
-            if !snapshot { prepareModels() }
+            // v0.6 (§16.11): the transcription model waits for the first "Grabar" (or Ajustes); once recording was
+            // set up it loads at launch as before.
+            if !snapshot, recordingIntroDone { prepareModels() }
         }
     }
 
@@ -219,7 +203,6 @@ final class AppState {
     func completeOnboarding() {
         update { $0.onboardingComplete = true }
         startEngine()
-        prepareModels()
     }
 
     /// Quits and opens SecondBrain again. The new instance starts only after this process has exited, so two
@@ -302,6 +285,9 @@ final class AppState {
             Self.applyMenuLanguage(next.uiLanguage)
         }
         if next.hotkeyEnabled != old.hotkeyEnabled { applyHotKey() }
+        if next.captureHotkeyEnabled != old.captureHotkeyEnabled || next.captureHotkey != old.captureHotkey {   // MARK: v0.6 capture
+            QuickCapturePanel.shared.applyHotKey(state: self)
+        }
         if next.appearance != old.appearance { Self.applyAppearance(next.appearance) }
 
         let modelChanged = next.whisperModel != old.whisperModel
@@ -363,11 +349,9 @@ final class AppState {
         // Conversations were about the other vault's pages: start fresh (an answer still streaming is stopped).
         // A transcription-model change alone keeps them.
         if vaultChanged {
-            for chat in projectChats.values { chat.stop() }
-            projectChats.removeAll()
-            homeChat.clear()
-            homeChatAskedAt = nil
-            homeRoute = nil
+            for conversations in conversationsByScope.values { conversations.stopAll() }
+            conversationsByScope.removeAll()
+            clearPending()
         }
         vaultGeneration += 1
         bumpHistory()
@@ -458,12 +442,12 @@ final class AppState {
         vaultRevision += 1
     }
 
-    /// The project's persistent conversation (see `projectChats`).
-    func projectChat(for slug: String) -> ChatModel {
-        if let chat = projectChats[slug] { return chat }
-        let chat = ChatModel()
-        projectChats[slug] = chat
-        return chat
+    /// Preguntar's conversations of a scope (saved under `data/chats/<vault>/`, §16.3: per vault).
+    func conversations(for scope: Scope) -> Conversations {
+        if let existing = conversationsByScope[scope.key] { return existing }
+        let conversations = Conversations(scope: scope, store: ChatStore(dataRoot: config.dataURL, vaultRoot: config.vaultURL))
+        conversationsByScope[scope.key] = conversations
+        return conversations
     }
 
     func project(_ slug: String?) -> Project? {
@@ -598,6 +582,10 @@ final class AppState {
             recordingError = L("record.finishSetupFirst")
             return
         }
+        // v0.6: the first recording goes through RecordingIntroSheet (permissions, consent, model), then runs.
+        if await needsRecordingIntro(then: { [weak self] in
+            await self?.startRecording(calendarEventId: calendarEventId, attendees: attendees)
+        }) { return }
         recordingError = nil
         do {
             let manifest = try await recorder.start(title: recordingTitleOrNil, projectSlug: recordingProjectSlug,

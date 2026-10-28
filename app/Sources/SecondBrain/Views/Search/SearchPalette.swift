@@ -3,15 +3,15 @@ import BrainCore
 import SwiftUI
 
 /// ⌘K (CONTRACT §15.2): a centered 560 pt overlay on `card` with the overlay shadow. ↑↓ move, ↩ opens (or asks when
-/// nothing matches), ⌘↩ always asks, ⌥ asks the project on screen, esc closes. The last row is always
-/// "Preguntar: «…»".
+/// nothing matches), ⌘↩ always asks, esc closes. Always global (§16.7, no ⌥): the last row is always "Preguntar a
+/// todo el cerebro: «…»", asked in a new conversation of the sidebar's Preguntar. Up to 4 rows per group, "Ver n más"
+/// shows the rest; a row found by its page's text (not its title) shows the passage under the title.
 struct SearchPalette: View {
     @Environment(AppState.self) private var state
     var initialQuery = ""
 
     @ViewState private var query = ""
     @ViewState private var selected = 0
-    @ViewState private var optionHeld = false
     @ViewState private var monitor: Any?
     /// The window the palette lives in: its key monitor only handles keys typed there, never in a sheet or Ajustes.
     @ViewState private var host = HostWindow()
@@ -29,8 +29,13 @@ struct SearchPalette: View {
     static let fieldHeight: CGFloat = 48
     static let footerHeight: CGFloat = 32
 
+    /// A row found by its page's text: title line + snippet line.
+    static let snippetRowHeight: CGFloat = 46
+
     private enum RowKind: Hashable {
         case item(SearchItem)
+        /// "Ver n más" under a group with more results than it shows.
+        case more(SearchGroup, Int)
         case ask
     }
 
@@ -39,27 +44,36 @@ struct SearchPalette: View {
         var id: String {
             switch kind {
             case .item(let item): item.id
+            case .more(let group, _): "more|" + group.rawValue
             case .ask: "ask"
             }
         }
+
+        var height: CGFloat {
+            if case .item(let item) = kind, item.snippet != nil { return SearchPalette.snippetRowHeight }
+            return SearchPalette.rowHeight
+        }
     }
+
+    /// Groups opened with "Ver n más" (for this query).
+    @ViewState private var expanded: Set<SearchGroup> = []
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    private var groups: [(SearchGroup, [SearchItem])] {
-        trimmed.isEmpty ? index.suggestions(now: MeetingsModel.shared.now) : index.results(for: trimmed)
+    private var groups: [SearchSection] {
+        trimmed.isEmpty ? index.suggestions(now: MeetingsModel.shared.now) : index.results(for: trimmed, expanded: expanded)
+    }
+
+    /// The rows of one group: its results, then "Ver n más" when it has more.
+    private func sectionRows(_ section: SearchSection) -> [Row] {
+        section.items.map { Row(kind: .item($0)) } + (section.more > 0 ? [Row(kind: .more(section.group, section.more))] : [])
     }
 
     /// Selectable rows in display order (the ask row last).
-    private func rows(_ groups: [(SearchGroup, [SearchItem])]) -> [Row] {
-        var out = groups.flatMap { $0.1.map { Row(kind: .item($0)) } }
+    private func rows(_ groups: [SearchSection]) -> [Row] {
+        var out = groups.flatMap { sectionRows($0) }
         if !trimmed.isEmpty { out.append(Row(kind: .ask)) }
         return out
-    }
-
-    /// ⌥ asks the project on screen.
-    private var askProject: Project? {
-        optionHeld ? state.project(state.currentProjectSlug) : nil
     }
 
     var body: some View {
@@ -102,7 +116,10 @@ struct SearchPalette: View {
             DispatchQueue.main.async { fieldFocused = true }
         }
         .onDisappear(perform: removeMonitor)
-        .onChange(of: query) { selected = 0 }
+        .onChange(of: query) {
+            selected = 0
+            expanded = []
+        }
     }
 
     // MARK: Pieces
@@ -122,16 +139,17 @@ struct SearchPalette: View {
         .frame(height: Self.fieldHeight)
     }
 
-    private func list(groups: [(SearchGroup, [SearchItem])], rows: [Row], maxHeight: CGFloat) -> some View {
+    private func list(groups: [SearchSection], rows: [Row], maxHeight: CGFloat) -> some View {
         let headers = groups.count + (trimmed.isEmpty || !groups.isEmpty ? 0 : 1)
-        let height = min(maxHeight, CGFloat(rows.count) * Self.rowHeight + CGFloat(headers) * Self.headerHeight + 12)
+        let rowsHeight = rows.reduce(0) { $0 + $1.height }
+        let height = min(maxHeight, rowsHeight + CGFloat(headers) * Self.headerHeight + 12)
         return ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(groups, id: \.0) { group, items in
-                        header(group.title)
-                        ForEach(items) { item in
-                            rowView(Row(kind: .item(item)), rows: rows)
+                    ForEach(groups) { section in
+                        header(section.group.title)
+                        ForEach(sectionRows(section)) { row in
+                            rowView(row, rows: rows)
                         }
                     }
                     if !trimmed.isEmpty {
@@ -173,15 +191,24 @@ struct SearchPalette: View {
             HStack(spacing: 10) {
                 icon(row)
                     .frame(width: 18)
-                HStack(spacing: 8) {
-                    Text(title(row))
-                        .font(Brand.body)
-                        .foregroundStyle(Brand.color.text)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .layoutPriority(1)
-                    if case .item(let item) = row.kind, !item.subtitle.isEmpty {
-                        Text(item.subtitle)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(title(row))
+                            .font(Brand.body)
+                            .foregroundStyle(isMore(row) ? Brand.color.accent : Brand.color.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(1)
+                        if case .item(let item) = row.kind, !item.subtitle.isEmpty {
+                            Text(item.subtitle)
+                                .font(Brand.caption)
+                                .foregroundStyle(Brand.color.text2)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
+                    if case .item(let item) = row.kind, let snippet = item.snippet {
+                        Text(Self.attributed(snippet))
                             .font(Brand.caption)
                             .foregroundStyle(Brand.color.text2)
                             .lineLimit(1)
@@ -196,7 +223,7 @@ struct SearchPalette: View {
                 }
             }
             .padding(.horizontal, 10)
-            .frame(height: Self.rowHeight)
+            .frame(height: row.height)
             .background(isSelected ? Brand.color.accentSoft : .clear,
                         in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
             .contentShape(Rectangle())
@@ -222,6 +249,8 @@ struct SearchPalette: View {
             } else {
                 Image(systemName: item.symbol).foregroundStyle(Brand.color.text2)
             }
+        case .more:
+            Image(systemName: "chevron.down").foregroundStyle(Brand.color.accent)
         case .ask:
             Image(systemName: "bubble.left.and.text.bubble.right").foregroundStyle(Brand.color.accent)
         }
@@ -230,26 +259,31 @@ struct SearchPalette: View {
     private func title(_ row: Row) -> String {
         switch row.kind {
         case .item(let item): item.title
-        case .ask:
-            if let project = askProject {
-                L("search.askProject", "\(project.emoji) \(project.name)", trimmed)
-            } else {
-                L("search.ask", trimmed)
-            }
+        case .more(_, let n): L("search.more", n)
+        case .ask: L("search.askBrain", trimmed)
         }
     }
 
-    /// "↑↓ moverte · ↩ abrir · ⌘↩ preguntar · ⌥↩ preguntar a 🚀 Atlas (inside a project) · esc"; the project hint
-    /// gives way first when the palette is narrow.
+    private func isMore(_ row: Row) -> Bool {
+        if case .more = row.kind { return true }
+        return false
+    }
+
+    /// The snippet with the matching words in semibold (the text color stays the row's).
+    static func attributed(_ parts: [SnippetPart]) -> AttributedString {
+        var out = AttributedString()
+        for part in parts {
+            var piece = AttributedString(part.text)
+            if part.bold { piece.inlinePresentationIntent = .stronglyEmphasized }
+            out += piece
+        }
+        return out
+    }
+
+    /// "↑↓ moverte · ↩ abrir · ⌘↩ preguntar · esc".
     private var footer: some View {
-        let project = state.project(state.currentProjectSlug)
-        return HStack(spacing: 14) {
-            ViewThatFits(in: .horizontal) {
-                if let project {
-                    hints(project: project)
-                }
-                hints(project: nil)
-            }
+        HStack(spacing: 14) {
+            hints
             Spacer(minLength: 0)
             Text(verbatim: "esc")
                 .font(Brand.font(11, .medium))
@@ -259,14 +293,11 @@ struct SearchPalette: View {
         .frame(height: Self.footerHeight)
     }
 
-    private func hints(project: Project?) -> some View {
+    private var hints: some View {
         HStack(spacing: 14) {
             hint(["arrow.up.arrow.down"], L("search.hint.move"))
             hint(["return"], L("search.hint.open"))
             hint(["command", "return"], L("search.hint.askShort"))
-            if let project {
-                hint(["option", "return"], L("search.hint.askProject", "\(project.emoji) \(project.name)"))
-            }
         }
         .fixedSize()
     }
@@ -287,7 +318,7 @@ struct SearchPalette: View {
 
     private func installMonitor() {
         removeMonitor()
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
             let consumed = MainActor.assumeIsolated { handle(event) }
             return consumed ? nil : event
         }
@@ -302,10 +333,6 @@ struct SearchPalette: View {
     /// Ajustes window keeps its ↑↓, Return and Esc.
     private func handle(_ event: NSEvent) -> Bool {
         guard let window = event.window, window === host.window, window.attachedSheet == nil else { return false }
-        if event.type == .flagsChanged {
-            optionHeld = event.modifierFlags.contains(.option)
-            return false
-        }
         let rows = rows(groups)
         switch event.keyCode {
         case 125:   // ↓
@@ -320,13 +347,12 @@ struct SearchPalette: View {
             close()
             return true
         case 36, 76:   // return
-            let flags = event.modifierFlags
-            if flags.contains(.command) || flags.contains(.option) {
-                ask(project: flags.contains(.option))
+            if event.modifierFlags.contains(.command) {
+                ask()
             } else if rows.indices.contains(selected) {
                 activate(rows[selected])
             } else {
-                ask(project: false)
+                ask()
             }
             return true
         default:
@@ -342,16 +368,20 @@ struct SearchPalette: View {
             SearchIndex.noteOpened(item, state: state)
             close()
             SearchIndex.perform(item.target, state: state)
+        case .more(let group, _):
+            // The selection stays on the same spot: now the first of the newly shown rows.
+            expanded.insert(group)
         case .ask:
-            ask(project: askProject != nil)
+            ask()
         }
     }
 
-    private func ask(project: Bool) {
+    /// The whole brain, in a new conversation (§16.7).
+    private func ask() {
         let q = trimmed
         guard !q.isEmpty else { return }
         close()
-        state.ask(q, projectSlug: project ? state.currentProjectSlug : nil)
+        state.ask(q, scope: .brain)
     }
 
     private func close() {

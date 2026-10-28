@@ -16,6 +16,10 @@ struct SB: AsyncParsableCommand {
                       DemoVaultCmd.self, GraphCmd.self,  // MARK: v0.3 graph
                       GitHubCmd.self]  // MARK: v0.4 github
                       + [RulesCmd.self, RouteCmd.self]  // MARK: v0.4 routing
+                      + [FactsCmd.self]  // MARK: v0.6 facts
+                      + [EntityCmd.self]  // MARK: v0.6 entity
+                      + [ChatCmd.self]  // MARK: v0.6 ask
+                      + [SearchCmd.self]  // MARK: v0.6 search
     )
 }
 

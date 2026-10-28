@@ -35,13 +35,13 @@ struct SecondBrainApp: App {
                     .keyboardShortcut("n")
                     .disabled(!state.config.onboardingComplete || !state.engineStarted)
             }
-            // MARK: v0.5 navigation (CONTRACT §15.2): ⌘1–5 and ⌘K.
+            // MARK: v0.6 navigation (CONTRACT §16.1): ⌘1–⌘7 and ⌘K.
             CommandMenu(L("menu.go")) {
-                Button(L("home.title")) { go(.home) }.keyboardShortcut("1")
-                Button(L("sidebar.meetings")) { go(.meetings) }.keyboardShortcut("2")
-                Button(L("sidebar.mail")) { go(.mail) }.keyboardShortcut("3")
-                Button(L("tasks.title")) { go(.tasks) }.keyboardShortcut("4")
-                Button(L("sidebar.people")) { go(.people) }.keyboardShortcut("5")
+                ForEach(SidebarItem.main + SidebarItem.sources, id: \.self) { item in
+                    if let key = item.shortcut {
+                        Button(item.title) { go(item) }.keyboardShortcut(KeyEquivalent(key))
+                    }
+                }
                 Divider()
                 // Not over a sheet: the palette would open under it, out of reach.
                 Button(L("menu.search")) { state.searchPresented.toggle() }
@@ -85,10 +85,7 @@ struct SecondBrainApp: App {
     }
 
     private func go(_ item: SidebarItem) {
-        state.searchPresented = false
-        // ⌘1 on Inicio goes back to its root (from a page, the timeline, the graph, Sin asignar…).
-        if item == .home, state.selection?.normalized == .home { state.homePopToken += 1 }
-        state.selection = item
+        state.navigate(to: .sidebar(item))
     }
 }
 
@@ -140,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { true }
 
-    // MARK: Notifications (CONTRACT §15.2: "Por ordenar" and failures select Inicio; "Listo" opens what was learned)
+    // MARK: Notifications (CONTRACT §16.12: routed by AppState.route(notificationId:))
 
     /// Shown even while SecondBrain is in front (a recording finishing is news wherever you are).
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
@@ -160,26 +157,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     @MainActor private static func route(notificationId id: String) {
-        let state = AppState.shared
         NSApp.activate(ignoringOtherApps: true)
         // The main window (WindowGroup "main": SwiftUI names its windows "main-AppWindow-n") to the front.
         NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true }?.makeKeyAndOrderFront(nil)
-        state.searchPresented = false
-        if id.hasPrefix("done-") {
-            let rest = id.dropFirst("done-".count)
-            if let source = state.engine.sources.first(where: { rest.hasPrefix($0.id + "-") || rest == $0.id }) {
-                state.open(source: source)
-                return
-            }
-        }
-        if id.hasPrefix("inbox-") || id.hasPrefix("failed-") || id.hasPrefix("done-") {
-            state.selection = .home
-        }
+        AppState.shared.route(notificationId: id)
     }
 }
 
 struct RootView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -191,14 +178,19 @@ struct RootView: View {
             }
         }
         .frame(minWidth: 920, minHeight: 620)   // CONTRACT §15.3
+        // The scene's openWindow outlives this window: ⌥⌘R / the menu bar can reopen it once closed.
+        .onAppear { state.openMainWindowAction = { [openWindow] in openWindow(id: "main") } }
     }
 }
 
 /// The brand symbol in the menu bar (an 18 pt template image); while recording, the same symbol plus a `record` dot.
 struct MenuBarLabel: View {
+    @Environment(\.openWindow) private var openWindow
     let isRecording: Bool
 
     var body: some View {
         Image(nsImage: isRecording ? BrandMenuBarIcon.recording : BrandMenuBarIcon.idle)
+            // Always on screen, so the main window can be reopened from anywhere (`AppState.showMainWindow`).
+            .onAppear { AppState.shared.openMainWindowAction = { openWindow(id: "main") } }
     }
 }

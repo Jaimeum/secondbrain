@@ -23,6 +23,7 @@ struct SelfTest: AsyncParsableCommand {
         t.group("dates") { testDates(t) }
         t.group("email-parse") { testEmailParsing(t) }
         t.group("tasks-parse") { testTaskParsing(t) }
+        t.group("tasks-filter") { testTaskFilters(t) }
         t.group("integration-fixes") { testIntegrationFixes(t) }
         await t.groupAsync("v03-models") { await testV3Models(t, root: root.appendingPathComponent("v03")) }
         await t.groupAsync("accounts") { await testAccounts(t, root: root.appendingPathComponent("accounts")) }   // MARK: v0.3 accounts
@@ -35,6 +36,7 @@ struct SelfTest: AsyncParsableCommand {
         await t.groupAsync("routing-mail") { await testRoutingMail(t, root: root.appendingPathComponent("routing-mail")) }   // MARK: v0.4 routing mail
         await t.groupAsync("routing-meetings") { await testRoutingMeetings(t, root: root.appendingPathComponent("routing-meetings")) }   // MARK: v0.4 rules UI
         await t.groupAsync("routing-review") { await testRoutingReview(t, root: root.appendingPathComponent("routing-review")) }   // MARK: v0.4 review fixes
+        await t.groupAsync("capture") { await testCapture(t, root: root.appendingPathComponent("capture")) }   // MARK: v0.6 capture
         if let v01 {
             await t.groupAsync("migration") { await testMigration(t, source: URL(fileURLWithPath: v01), root: root.appendingPathComponent("v01")) }
         }
@@ -533,6 +535,48 @@ project: acme
     t.eq(TaskParser.toggled(done, done: false), line, "toggle back")
     let parsedDone = TaskParser.parseLine(done, projectSlug: "acme")
     t.check(parsedDone?.done == true && parsedDone?.doneDate == local(2026, 10, 29) && parsedDone?.due == local(2026, 11, 3), "reparse toggled")
+}
+
+// MARK: - Pendientes filters (§16.8)
+
+@MainActor private func testTaskFilters(_ t: Tester) {
+    let owner = TaskParser.OwnerInfo(slugs: ["jaime-ruiz"], names: ["jaime ruiz", "jaime"])
+    let acme = TaskParser.parse(tasksFixture, path: "projects/acme/wiki/tasks.md", projectSlug: "acme", owner: owner)
+    let other = TaskParser.parse("""
+    ## Abiertas
+    ### Yo
+    - [ ] Llamar a Ana por el presupuesto — Yo · ([[k1]])
+    - [ ] Mandar a [[ana-garcia|Ana]] las fotos — Yo · ([[k2]])
+    - [ ] Revisar el plan de Anabel — Yo
+    """, path: "projects/nubia/wiki/tasks.md", projectSlug: "nubia", owner: owner)
+    let all = acme + other
+    let ana = TaskPerson(slug: "ana-garcia", name: "Ana García")
+    let diego = TaskPerson(slug: "diego", name: "Diego Pérez")
+    func texts(_ f: TaskFilter) -> [String] { all.filter { f.matches($0) }.map(\.text) }
+
+    t.check(!TaskFilter().isActive, "empty filter inactive")
+    t.eq(all.filter { TaskFilter().matches($0) }.count, all.count, "empty filter keeps everything")
+    t.eq(Set(all.filter { TaskFilter(projects: ["nubia"]).matches($0) }.map(\.projectSlug)), ["nubia"], "project filter")
+    t.eq(all.filter { TaskFilter(projects: ["nubia", "acme"]).matches($0) }.count, all.count, "multi-project filter")
+    t.eq(texts(TaskFilter(person: ana, relation: .owesMe)), ["Enviar propuesta revisada a Acme"], "what Ana owes me")
+    t.eq(texts(TaskFilter(person: ana, relation: .iOwe)), ["Llamar a Ana por el presupuesto", "Mandar a Ana las fotos"],
+         "what I owe Ana (name or link; not 'Anabel')")
+    t.eq(texts(TaskFilter(person: ana)).count, 3, "anything with Ana")
+    t.eq(texts(TaskFilter(person: diego, relation: .owesMe)).count, 2, "plain-text owner 'Diego' matches the page by first name")
+    t.eq(texts(TaskFilter(text: "ACME propuesta")), ["Enviar propuesta revisada a Acme"], "text: all words, any case")
+    t.eq(texts(TaskFilter(text: "presupuésto")), ["Llamar a Ana por el presupuesto"], "text: accent-insensitive")
+    t.check(TaskFilter(text: "kickoff").matches(acme[0], projectName: "Kickoff") , "text matches the project name")
+    t.check(!TaskFilter(person: ana, relation: .owesMe).matches(acme[0]), "my own task is never someone else's")
+
+    let people = TaskPeople.people(in: all, directory: [ana, diego, TaskPerson(slug: "laura", name: "Laura")])
+    t.eq(people.first?.slug, "ana-garcia", "people: most tasks first")
+    t.check(!people.contains { $0.slug == "laura" }, "people without tasks are left out")
+    t.check(!people.contains { $0.name == "Diego" && $0.slug == nil }, "plain-text owner covered by a page isn't repeated")
+    let noPages = TaskPeople.people(in: all, directory: [])
+    t.check(noPages.contains { $0.name == "Diego" }, "plain-text owner offered without a page")
+    let data = try? JSONEncoder().encode(TaskFilter(projects: ["a"], person: ana, relation: .iOwe, text: "x"))
+    t.eq(data.flatMap { try? JSONDecoder().decode(TaskFilter.self, from: $0) },
+         TaskFilter(projects: ["a"], person: ana, relation: .iOwe, text: "x"), "filter round-trips (UserDefaults)")
 }
 
 // MARK: - Engine (temp vault)

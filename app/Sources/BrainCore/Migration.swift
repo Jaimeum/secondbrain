@@ -14,9 +14,12 @@ public struct VaultMigration: Sendable, Equatable {
 
 public extension VaultStore {
     /// SHA256 of every CLAUDE.md the app ever shipped. A vault whose CLAUDE.md matches one was not edited by the
-    /// user, so it can be replaced. (v0.1: commit 009517c, unchanged until 39ee3c2.)
+    /// user, so it can be replaced. (v0.1: commit 009517c, unchanged until 39ee3c2; then 1756d9f and 2e4fc40, the
+    /// manual up to template v4 — v0.6 also recognises those when `.secondbrain/claude-md.sha256` is missing.)
     static let shippedClaudeMdHashes: Set<String> = [
         "6d0a92b551f4ca7ddec3a92e8ace3e5acb6335db078d69cd485f090c0d978a47",
+        "e00dd97bf2e250ef7b10db97bc9dd8cff71ae519b3531cfe54a205253ddcd5f7",
+        "72d77ea50d0315632c382075f856deb4dccef267b1ffec282e1031bbb19a1618",
     ]
     static let stateDir = ".secondbrain"
     static let versionFile = ".secondbrain/template-version"
@@ -39,8 +42,8 @@ public extension VaultStore {
     }
 
     /// Installs the template into an empty vault, or upgrades an older one:
-    /// - copies files that are missing (new commands, `templates/`, `_inbox/emails/`, and per project
-    ///   `wiki/timeline.md`, `wiki/emails/`, `raw/emails/`); existing wiki pages are never touched;
+    /// - copies files that are missing (new commands, `templates/`, `_inbox/emails/`, v0.6 `facts.md` and `orgs/`, and
+    ///   per project `wiki/timeline.md`, `wiki/emails/`, `raw/emails/`); existing wiki pages are never touched;
     /// - always refreshes app-owned files: `.claude/commands/*` and built-in templates (`builtin: true`);
     /// - CLAUDE.md: replaced when it is one the app shipped (unedited); otherwise kept, and the new one is written
     ///   as `CLAUDE.v<N>.md` next to it (`pendingManual`).
@@ -62,7 +65,7 @@ public extension VaultStore {
         guard fm.fileExists(atPath: claude.path) else {
             result.copied = try Self.copyMissing(from: template, to: root)
             _ = try refreshAppOwned(from: template)   // records the built-in templates as installed
-            for dir in ["_inbox/meetings", "_inbox/docs", "_inbox/notes", "_inbox/emails", "projects", "people", "templates"] {
+            for dir in ["_inbox/meetings", "_inbox/docs", "_inbox/notes", "_inbox/emails", "projects", "people", "orgs", "templates"] {
                 try fm.createDirectory(at: url(for: dir), withIntermediateDirectories: true)
             }
             try writeState(version: target, claudeHash: Self.sha256(bundledClaude))

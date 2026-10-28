@@ -229,6 +229,9 @@ struct WikiPagePane: View {
     @Binding var selection: String?
     /// The page's title when the caller knows it (else read from the file).
     var title: String? = nil
+    /// v0.6 entity: a wikilink (default: shown here, into the back history). Contenido passes the single click rule
+    /// (§16.4): this project's pages here, anything else as a ficha.
+    var onLink: ((String) -> Void)? = nil
 
     @ViewState private var history: [String] = []
     /// The next selection change comes from Back: not recorded.
@@ -318,6 +321,10 @@ struct WikiPagePane: View {
 
     private func iconActions(_ path: String) -> some View {
         HStack(spacing: 2) {
+            // §16.6: every wiki page can be corrected by hand where it is read.
+            if Corrections.isEditable(path) {
+                iconButton("pencil", help: L("entity.editHelp")) { state.editPage(path) }
+            }
             if let source = meetingSource(of: path) {
                 iconButton("checklist", help: L("srctasks.title")) { tasksSource = source }
             }
@@ -336,6 +343,10 @@ struct WikiPagePane: View {
 
     private func moreMenu(_ path: String) -> some View {
         Menu {
+            if Corrections.isEditable(path) {
+                Button { state.editPage(path) } label: { Label(L("entity.edit"), systemImage: "pencil") }
+                Divider()
+            }
             if let source = meetingSource(of: path) {
                 Button { tasksSource = source } label: { Label(L("srctasks.title"), systemImage: "checklist") }
             }
@@ -376,7 +387,7 @@ struct WikiPagePane: View {
 
     /// A wikilink: the selection change itself goes into the history (`onChange(of: selection)`).
     private func navigate(to path: String) {
-        selection = path
+        if let onLink { onLink(path) } else { selection = path }
     }
 
     private func loadTitle() async {
@@ -392,17 +403,10 @@ struct WikiPagePane: View {
         NSWorkspace.shared.activateFileViewerSelecting([state.engine.vault.url(for: path)])
     }
 
-    /// "Ver en el grafo": the Grafo tab of the page's project; people and global pages open the whole brain's graph
-    /// in Inicio (`HomeRoute.graph`, whose `GraphView` takes the focus from `pendingGraphFocus`). Never `.brain`.
+    /// "Ver en el grafo": the Grafo of the page's project, else the whole brain's Grafo, centered on the page.
+    /// v0.6: filled in by C/B — the graph of the *current* scope (§16.5).
     private func showInGraph(_ path: String) {
-        state.pendingGraphFocus = path
-        let parts = path.split(separator: "/")
-        if parts.count > 2 && parts[0] == "projects" {
-            state.selection = .project(String(parts[1]))
-        } else {
-            state.selection = .home
-            state.homeRoute = .graph
-        }
+        state.navigate(to: .graph(Scope(projectSlug: Scope.projectSlug(ofPath: path)), path))
     }
 }
 

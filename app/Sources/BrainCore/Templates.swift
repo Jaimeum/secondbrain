@@ -128,21 +128,24 @@ public extension BrainEngine {
     }
 
     /// Template for a source (CONTRACT §11.3): `source.templateId` > `project.defaultTemplate` (when it fits the
-    /// kind) > `estandar` / `correo-hilo`. Documents/notes/urls only use one when chosen explicitly. Missing
-    /// files are skipped (nil = let Claude use its built-in default).
-    internal func templateId(for src: SourceRecord) -> String? {
-        let scope: TemplateScope? = src.kind == .meeting ? .meeting : src.kind == .email ? .email : nil
+    /// kind) > `estandar` / `correo-hilo`. v0.6 (§16.10): notes and documents (links included) take a project
+    /// default made for them (scope `note` / `document`, never `any`: the meeting formats don't reshape them) and
+    /// otherwise none, as before. Missing files are skipped (nil = let Claude use its built-in default).
+    func templateId(for src: SourceRecord) -> String? {   // public: `sb selftest` checks it
+        let scope = TemplateScope(kind: src.kind)
         func fits(_ id: String?) -> String? {
             guard let id, let t = vault.template(id: id) else { return nil }
-            guard let scope else { return t.id }
-            // A project's meeting format ("any" included) shouldn't reshape email threads: emails only take
-            // a project default that was made for emails.
-            if scope == .email { return t.scope == .email ? t.id : nil }
-            return t.scope == scope || t.scope == .any ? t.id : nil
+            switch scope {
+            case nil: return nil
+            // A project's meeting format ("any" included) shouldn't reshape email threads, notes or documents: they
+            // only take a project default that was made for them.
+            case .email, .note, .document: return t.scope == scope ? t.id : nil
+            case .meeting, .any: return t.scope == .meeting || t.scope == .any ? t.id : nil
+            }
         }
         if let chosen = src.templateId, vault.template(id: chosen) != nil { return chosen }
-        guard let scope else { return nil }
         if let slug = src.projectSlug, let id = fits(projects.get(slug)?.defaultTemplate) { return id }
+        guard scope == .meeting || scope == .email else { return nil }
         let fallback = scope == .email ? VaultStore.emailTemplateId : TemplateInfo.standardId
         return vault.template(id: fallback) != nil ? fallback : nil
     }

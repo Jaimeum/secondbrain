@@ -10,6 +10,14 @@ struct WikiWebView: NSViewRepresentable {
     let path: String?
     /// Leave out the "Tipo" chip (the surrounding header already names the page).
     var hideType = false
+    /// v0.6 entity: false in a ficha (§16.4), whose header shows the front matter as clickable chips and whose
+    /// sections replace the backlinks list.
+    var showsChrome = true
+    /// v0.6 entity: markdown rendered after the page (a ficha's automatic sections); links in it use
+    /// `sbwiki://page/<percent-encoded target>` like wikilinks.
+    var appendix: String? = nil
+    /// v0.6 graph side panel: no H1 and no backlinks, tighter type (wiki.js `compact`).
+    var compact = false
     var onNavigate: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -44,6 +52,7 @@ struct WikiWebView: NSViewRepresentable {
         private var shownPath: String?
         private weak var shownVault: VaultStore?
         private var shownModified: Date?
+        private var shownAppendix: String?
         private var watchTimer: Timer?
         private var renderGeneration = 0
 
@@ -51,7 +60,11 @@ struct WikiWebView: NSViewRepresentable {
 
         func show(_ path: String?) {
             // A different vault (switched in Settings) with the same relative path is a different page.
-            guard path != shownPath || parent.vault !== shownVault else { return }
+            guard path != shownPath || parent.vault !== shownVault else {
+                // Same page, new sections (the ficha's index refreshed): re-render in place.
+                if parent.appendix != shownAppendix { render(keepScroll: true) }
+                return
+            }
             shownPath = path
             shownVault = parent.vault
             render(keepScroll: false)
@@ -82,11 +95,14 @@ struct WikiWebView: NSViewRepresentable {
         private func render(keepScroll: Bool) {
             guard loaded, let webView else { return }
             let vault = parent.vault
+            let chrome = parent.showsChrome
+            let appendix = parent.appendix
+            shownAppendix = appendix
             var payload: [String: Any] = [
                 "keepScroll": keepScroll,
                 "backlinksTitle": L("wiki.backlinks"),
                 // Only these keys become chips; anything else in the front matter stays hidden (wiki.js PROP_ORDER).
-                "propLabels": Self.propLabels(),
+                "propLabels": chrome ? Self.propLabels() : [String: String](),
                 // Front-matter values in the user's words; "" hides a technical one (CONTRACT §12.7: no raw slugs).
                 "propValues": [
                     "type": Dictionary(uniqueKeysWithValues: Self.typeValues.map { ($0, L("prop.type.\($0)")) })
@@ -98,6 +114,7 @@ struct WikiWebView: NSViewRepresentable {
                 "theme": theme(of: webView),
                 "path": shownPath ?? "",
                 "hideType": parent.hideType,
+                "compact": parent.compact,
             ]
             renderGeneration += 1
             let generation = renderGeneration
@@ -112,12 +129,20 @@ struct WikiWebView: NSViewRepresentable {
             // Resolving links and backlinks walks (and reads) the whole vault: keep it off the main thread.
             Task {
                 let page = await Task.detached { () -> [String: Any] in
-                    let markdown = (try? vault.read(path)) ?? ""
+                    var markdown = (try? vault.read(path)) ?? ""
+                    if let appendix, !appendix.isEmpty { markdown += "\n\n" + appendix }
                     let targets = Self.wikilinkTargets(in: markdown)
                     let resolved = vault.resolveWikilinks(targets, from: path)  // already off the main thread
                     var links: [String: Any] = [:]
                     for target in targets { links[target] = resolved[target] ?? NSNull() }
-                    let backlinks = vault.backlinks(to: path).filter { $0.path != path }.map { ["path": $0.path, "title": $0.title] }
+                    // A [[slug]] without a label reads as its page's title ("Andrés Silva", not "andres-silva").
+                    var titles: [String: String] = [:]
+                    for target in Set(targets) {
+                        guard let resolvedPath = resolved[target] else { continue }
+                        let title = vault.title(of: resolvedPath)
+                        if !title.isEmpty, title != target { titles[target] = title }
+                    }
+                    let backlinks = !chrome ? [] : vault.backlinks(to: path).filter { $0.path != path }.map { ["path": $0.path, "title": $0.title] }
                     // Project and people chips show names, not slugs.
                     let head = markdown.hasPrefix("---") ? String(markdown.prefix(4000)) : ""
                     var projectNames: [String: String] = [:]
@@ -128,7 +153,7 @@ struct WikiWebView: NSViewRepresentable {
                     if head.contains("\npeople:") {
                         for p in MeetingPeopleIndex.load(vault: vault).people { peopleNames[p.slug] = p.title }
                     }
-                    return ["markdown": markdown, "links": links, "backlinks": backlinks,
+                    return ["markdown": markdown, "links": links, "titles": titles, "backlinks": backlinks,
                             "projectNames": projectNames, "peopleNames": peopleNames]
                 }.value
                 guard generation == renderGeneration, path == shownPath, let webView = self.webView else { return }

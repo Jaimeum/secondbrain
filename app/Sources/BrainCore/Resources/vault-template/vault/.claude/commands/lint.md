@@ -12,6 +12,9 @@ can act on. Follow `CLAUDE.md` at the vault root. **Never invent facts**: you ca
 link and flag, but every content change must come from what the wiki or raw sources already say.
 Never ask questions. Never touch `raw/` or `_inbox/`.
 
+Read `facts.md` (vault root) first: facts the owner confirmed (CLAUDE.md §17). They are true; a
+page that says otherwise is wrong. Never edit `facts.md`.
+
 ## Scope
 
 - A project slug → the pages under `projects/<slug>/wiki/` plus the `people/` pages of people in
@@ -72,6 +75,16 @@ Never ask questions. Never touch `raw/` or `_inbox/`.
     callouts still open); repo pages missing from the index `## Repositorios`; repo/branch pages
     whose `## Cambios recientes` keeps days older than ~60 days (report; condensing is not a
     trivial fix); people with `github:` duplicated on two pages.
+17. **Confirmed facts** (`facts.md`, CLAUDE.md §17): pages in the scope that state something a
+    confirmed fact contradicts (e.g. a person page that still puts Javier on Angela's team after
+    the owner confirmed he is not); global scope: also `people/` and `orgs/` pages. Keep the
+    `## Contradicen hechos confirmados` bullets of the previous report while the source still says it.
+18. **Organizations** (`orgs/`, CLAUDE.md §8.11): topic pages in the scope that describe a company
+    or organization (a client, vendor or partner: `topics/acme.md`, "Acme es el cliente…") with no
+    page in `orgs/` or no link to it; people whose `organization:` names a company that has (or
+    should have) an org page but who lack `org: "[[<org>]]"`; org pages missing from the global
+    `index.md` under `## Empresas`. Vaults from before v0.6 have project topics about clients and
+    an empty `orgs/`: this check is how they gain global companies.
 
 ## Fix (only trivial, safe things)
 
@@ -87,9 +100,16 @@ Never ask questions. Never touch `raw/` or `_inbox/`.
   without a full day → move it to the overview's "Próximos hitos y fechas"; a 📅 line that
   repeats a task → remove it.
   Wrong dates in frontmatter that the raw `date:` makes obvious → fix them.
+- A sentence that contradicts a confirmed fact (check 17) and is not a citation of what a source
+  said → rewrite it to agree with the fact, citing `([[facts|Hechos confirmados]])`; a source page
+  that reports what was said keeps it, with the `> [!warning] Esto contradice un hecho que
+  confirmaste: …` callout under its "En breve" (CLAUDE.md §17).
 - Template comments left in a page → remove them.
 - Orphan topic/decision → link it from the most relevant topic or the overview if the connection
   is clear from content.
+- Organizations (check 18), only when the org page already exists: link the topic to it (one line
+  under its "En breve" or in `## Relacionado`: `Empresa: [[acme|Acme]]`); add `org: "[[acme]]"` to
+  people whose `organization:` is that company; add the missing `## Empresas` index line.
 - Do NOT: resolve contradictions, merge different-looking people/topic pages, rewrite summaries,
   delete pages, or create content pages. Report those instead.
 - Set `updated:` to today on pages you change.
@@ -114,6 +134,9 @@ language: es
 ## Arreglado automáticamente
 - …
 
+## Contradicen hechos confirmados
+- 2026-10-28 · [[2026-10-28-1000-revision]] dice que Javier está en el equipo de Angela — contradice: «Javier Ruiz no forma parte del equipo de Angela Torres»
+
 ## Para revisar
 - **Contradicción:** … (links)
 - **Tus pendientes vencidos:** … · 📅 date (link)
@@ -123,6 +146,9 @@ language: es
 
 ## Sugerencias
 - Sources or meetings that would fill gaps; questions worth asking; pages worth creating.
+- **Empresa sin página:** [[acme-cliente|Acme]] describe a la empresa cliente; conviene una página global
+  `orgs/acme.md` enlazada desde ese tema y desde sus personas (el próximo ingest que la mencione la crea). One line
+  per company (check 18).
 
 ## Números
 Páginas: N · Reuniones: N · Hilos de correo: N · Fuentes: N · Decisiones: N · Pendientes abiertos: N (tuyos: N; vencidos: tuyos N, de otros N) · Conflictos abiertos: N

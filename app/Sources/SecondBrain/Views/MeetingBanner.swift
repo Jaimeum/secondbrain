@@ -216,12 +216,13 @@ struct RecordControl: View {
             }
             .padding(.horizontal, 4)
             .frame(height: 16)
-            .background(titleHovered ? Brand.color.accentSoft : .clear,
-                        in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .background(titleHovered ? Brand.color.hover : .clear,
+                        in: RoundedRectangle(cornerRadius: Brand.radius.control - 2, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { titleHovered = $0 }
+        .animation(Brand.motion.fast, value: titleHovered)
         .help(live.title + " · " + when + "\n" + L("meetings.openAgenda"))
     }
 

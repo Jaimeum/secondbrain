@@ -294,9 +294,11 @@ struct HomeLink: View {
     }
 }
 
+/// The rule between rows inside a Home card: `lineSoft`, inset 12 pt from each side so it never meets the card's
+/// rounded edge at a square joint (§15.1 calm surfaces).
 struct HomeDivider: View {
     var body: some View {
-        Rectangle().fill(Brand.color.line).frame(height: 1)
+        Rectangle().fill(Brand.color.lineSoft).frame(height: 1).padding(.horizontal, 12)
     }
 }
 
@@ -329,7 +331,9 @@ struct HomeBigAction: View {
             .frame(maxWidth: .infinity)
             .frame(height: 112)
             .background(shape.fill(Brand.color.card))
-            .overlay(shape.strokeBorder(Brand.color.line, style: StrokeStyle(lineWidth: 1, dash: dashed ? [5, 4] : [])))
+            // Resting edge `lineSoft`; the dashed "drop here" variant keeps `line` so its dashes still read.
+            .overlay(shape.strokeBorder(dashed ? Brand.color.line : Brand.color.lineSoft,
+                                        style: StrokeStyle(lineWidth: 1, dash: dashed ? [5, 4] : [])))
             .contentShape(shape)
         }
         .buttonStyle(.plain)

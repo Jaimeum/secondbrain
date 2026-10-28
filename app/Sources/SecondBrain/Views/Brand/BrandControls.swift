@@ -113,7 +113,8 @@ struct BrandChip: View {
 
 // MARK: Card
 
-/// Container: `card` background, 1 px `line` border, radius `card`. No shadow (shadows are for overlays only).
+/// Container: `card` background, 1 px `lineSoft` border, radius `card`. No shadow (shadows are for overlays only). The
+/// tone step from `surface` to `card` does the separating; the edge only keeps the card's shape in dark mode.
 struct BrandCard<Content: View>: View {
     let padding: CGFloat
     let content: Content
@@ -129,7 +130,7 @@ struct BrandCard<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(shape.fill(Brand.color.card))
-            .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
+            .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
     }
 }
 
@@ -238,5 +239,74 @@ struct BrandFieldLabel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+// MARK: Icon button
+
+/// Icon-only action in a header (‹ Atrás, ✕ Cerrar, ⋯): a 28 × 28 round hit area, `text2` glyph, a `hover` circle
+/// under the pointer and the pressed veil of the other brand buttons. One quiet, round affordance for every header.
+struct BrandIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { BrandIconButtonBody(configuration: configuration) }
+}
+
+private struct BrandIconButtonBody: View {
+    let configuration: ButtonStyle.Configuration
+    @Environment(\.isEnabled) private var isEnabled
+    @ViewState private var hovering = false
+
+    var body: some View {
+        configuration.label
+            .labelStyle(.iconOnly)
+            .font(Brand.callout)
+            .foregroundStyle(Brand.color.text2)
+            .frame(width: 28, height: 28)
+            .background(Circle().fill(hovering && isEnabled ? Brand.color.hover : .clear))
+            .contentShape(Circle())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.45)
+            .onHover { hovering = $0 }
+            .animation(Brand.motion.fast, value: configuration.isPressed)
+            .animation(Brand.motion.fast, value: hovering)
+    }
+}
+
+extension ButtonStyle where Self == BrandIconButtonStyle {
+    static var brandIcon: BrandIconButtonStyle { BrandIconButtonStyle() }
+}
+
+// MARK: Menu chip
+
+/// The label of a filter or sort menu: a `BrandChip` look with the value first and a faint `text3` chevron after it
+/// ("Tipo ⌄", "2 proyectos ⌄"). Pair it with `.menuStyle(.button)`, `.menuIndicator(.hidden)` and
+/// `.buttonStyle(.plain)` so the capsule survives (a borderless menu flattens custom labels) and no system indicator
+/// or tint shows. `text` nil = icon-only (compact toolbars).
+struct BrandMenuChip: View {
+    let text: String?
+    var symbol: String? = nil
+    var active: Bool = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .imageScale(.small)
+                    .foregroundStyle(active ? Brand.color.accent : Brand.color.text2)
+            }
+            if let text {
+                Text(text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(active ? Brand.color.accent : Brand.color.text)
+            }
+            Image(systemName: "chevron.down")
+                .imageScale(.small)
+                .font(Brand.font(9, .semibold))
+                .foregroundStyle(active ? Brand.color.accent.opacity(0.7) : Brand.color.text3)
+        }
+        .font(Brand.font(11, .medium))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(active ? Brand.color.accentSoft : Brand.color.cardAlt))
+        .contentShape(Capsule())
     }
 }

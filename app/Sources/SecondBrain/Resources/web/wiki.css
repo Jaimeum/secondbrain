@@ -13,6 +13,7 @@
   --card: #FFFFFF;
   --card-alt: #E9E0D4;
   --line: #DAD3C9;
+  --line-soft: rgba(218, 211, 201, 0.60);
   --text: #232B25;
   --text2: #5F665D;
   --text3: #AEB5A4;
@@ -35,6 +36,7 @@
   --card: #3A4238;
   --card-alt: #2A322A;
   --line: rgba(255, 255, 255, 0.10);
+  --line-soft: rgba(255, 255, 255, 0.06);
   --text: #F5F0E8;
   --text2: #AEB5A4;
   --text3: #818979;
@@ -56,6 +58,7 @@
     --card: #3A4238;
     --card-alt: #2A322A;
     --line: rgba(255, 255, 255, 0.10);
+  --line-soft: rgba(255, 255, 255, 0.06);
     --text: #F5F0E8;
     --text2: #AEB5A4;
     --text3: #818979;
@@ -84,9 +87,16 @@ body {
 #page { max-width: 760px; margin: 0 auto; padding: 28px 28px 64px; }
 ::selection { background: var(--accent-soft); }
 
+/* A quiet overlay-style scroller: no grey track, a rounded thumb that darkens under the pointer. */
+::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; border: 3px solid var(--surface); }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
 h1, h2, h3, h4 { font-family: inherit; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; margin: 1.6em 0 0.5em; }
 h1 { font-size: 1.9em; font-weight: 700; letter-spacing: -0.02em; margin-top: 0.2em; }
-h2 { font-size: 1.3em; padding-bottom: 0.3em; border-bottom: 1px solid var(--line); }
+/* Calm surfaces (§15.1): sections separate by space, never by a full-width rule. */
+h2 { font-size: 1.3em; margin: 1.8em 0 0.5em; }
 h3 { font-size: 1.1em; }
 h4 { font-size: 1em; color: var(--text2); }
 p { margin: 0.6em 0; }
@@ -94,7 +104,8 @@ ul, ol { padding-left: 1.4em; }
 li { margin: 0.25em 0; }
 li::marker { color: var(--text3); }
 li > p { margin: 0.2em 0; }
-hr { border: none; border-top: 1px solid var(--line); margin: 2em 0; }
+hr { border: none; height: 1px; width: 40%; margin: 2.2em auto;
+     background: linear-gradient(90deg, transparent, var(--line), transparent); }
 strong { font-weight: 600; }
 
 /* Links read as links: underlined (a quiet line that darkens on hover), and in dark never the same tone as text2. */
@@ -118,8 +129,10 @@ blockquote.callout-conflict { background: var(--warning-soft); }
 blockquote.callout-conflict .callout-title { color: var(--warning); }
 
 table { border-collapse: collapse; width: 100%; table-layout: fixed; margin: 1em 0; font-size: 0.93em; }
-th, td { border-bottom: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+th, td { padding: 6px 10px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 th { font-weight: 600; color: var(--text2); }
+td { border-bottom: 1px solid var(--line-soft); }
+tr:last-child td { border-bottom: none; }
 
 input[type=checkbox] { margin-right: 0.45em; accent-color: var(--accent); }
 
@@ -129,7 +142,7 @@ input[type=checkbox] { margin-right: 0.45em; accent-color: var(--accent); }
 .chip { flex: none; font-size: 12px; line-height: 20px; color: var(--text2); background: var(--card-alt); border-radius: 999px; padding: 1px 10px; }
 .chip b { font-weight: 500; color: var(--text); }
 
-#backlinks { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); }
+#backlinks { margin-top: 48px; }
 #backlinks:empty { display: none; }
 #backlinks h5 { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text2); }
 #backlinks ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }

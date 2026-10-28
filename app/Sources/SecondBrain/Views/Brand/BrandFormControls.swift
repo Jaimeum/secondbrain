@@ -118,34 +118,7 @@ struct BrandMoreMenuLabel: View {
 
 // MARK: Icon button
 
-/// Icon-only actions inside content (close ×, remove −): the symbol in `text2` on a 24 pt circle that fills with
-/// `hover` under the pointer. Replaces `.borderless`, which draws the system press highlight and accent tint.
-struct BrandIconButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        BrandIconButtonBody(configuration: configuration)
-    }
-
-    private struct BrandIconButtonBody: View {
-        let configuration: Configuration
-        @Environment(\.isEnabled) private var isEnabled
-        @ViewState private var hovering = false
-
-        var body: some View {
-            configuration.label
-                .foregroundStyle(Brand.color.text2)
-                .frame(minWidth: 24, minHeight: 24)
-                .background(Circle().fill(hovering && isEnabled ? Brand.color.hover : .clear))
-                .contentShape(Circle())
-                .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.45)
-                .onHover { hovering = $0 }
-                .animation(Brand.motion.fast, value: hovering)
-        }
-    }
-}
-
-extension ButtonStyle where Self == BrandIconButtonStyle {
-    static var brandIcon: BrandIconButtonStyle { BrandIconButtonStyle() }
-}
+// Icon-only actions (close ×, remove −) use `.buttonStyle(.brandIcon)` from BrandControls.swift.
 
 // MARK: Checkbox
 

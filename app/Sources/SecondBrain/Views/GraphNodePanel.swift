@@ -26,7 +26,6 @@ struct GraphNodePanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             EntityCard(path: page, scope: scope, onOpen: { link in
                 if let id = GraphView.nodeId(for: link), isNode(id) { onSelect(id) } else { onOpen(link) }
             }, showsHeader: false)
@@ -47,10 +46,8 @@ struct GraphNodePanel: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(Brand.font(11, .semibold))
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.brandIcon)
                 .keyboardShortcut(.cancelAction)
                 .help(L("graph.panel.close"))
                 .accessibilityLabel(L("graph.panel.close"))

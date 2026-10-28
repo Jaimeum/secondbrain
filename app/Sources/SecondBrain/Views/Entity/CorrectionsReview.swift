@@ -260,7 +260,7 @@ struct CorrectionsReviewSheet: View {
             if let icon {
                 Image(systemName: icon).font(Brand.font(24)).foregroundStyle(Brand.color.text2)
             } else {
-                ProgressView().controlSize(.regular)
+                BrandLoader(size: 24)
             }
             Text(title)
                 .font(Brand.callout)

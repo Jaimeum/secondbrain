@@ -42,7 +42,7 @@ struct GraphView: View {
                                 .accessibilityHidden(true)
                         }
                     if let id = selected, let node = loaded.nodes[id] {
-                        Rectangle().fill(Brand.color.line).frame(width: 1)
+                        ContentLayout.columnRule
                         GraphNodePanel(node: node, scope: scope,
                                        projects: state.projects,
                                        isNode: { loaded.nodes[$0] != nil },

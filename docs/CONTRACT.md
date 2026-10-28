@@ -1757,7 +1757,8 @@ graph, tasks, people`; por defecto `summary`; `ViewThatFits` → menú a 700 pt)
 - Una vista `AskView(scope:)`: lista de conversaciones a la izquierda (200–260 pt, "Nueva conversación", más
   recientes arriba, título = primera pregunta resumida a ≤ 6 palabras, menú contextual Renombrar / Eliminar) y la
   conversación a la derecha.
-- **Conversaciones guardadas en disco**: `data/chats/brain/<id>.json` y `data/chats/projects/<slug>/<id>.json`
+- **Conversaciones guardadas en disco**, por vault (`<vault>` = nombre de la carpeta + hash de su ruta):
+  `data/chats/<vault>/brain/<id>.json` y `data/chats/<vault>/projects/<slug>/<id>.json`
   (`ChatThread {id, scope, title, createdAt, updatedAt, messages: [ChatMessage]}`); sobreviven al reinicio y al cambio
   de vault se recargan del vault nuevo. `sb chat list [--project]` para tests.
 - Ámbito de proyecto = **prioriza el proyecto**: lee `projects/<slug>/**` y las páginas globales (`people/`, `orgs/`,
@@ -1766,7 +1767,8 @@ graph, tasks, people`; por defecto `summary`; `ViewThatFits` → menú a 700 pt)
 - Citas: clic abre la página en un **panel lateral** (inspector) dentro de Preguntar, con "Abrir" para ir a su lugar;
   nunca abandona la conversación. Igual en ambos ámbitos.
 - Cada respuesta: **Guardar como página** → `projects/<slug>/wiki/questions/` (proyecto) o `questions/` (cerebro);
-  aparece en Contenido / ⌘K. Botón "Corregir" no existe: la corrección es por edición (§16.6).
+  la app la escribe al momento (entrada de Historial, aparece en Contenido / ⌘K) y luego `/save-answer` (con `scope`
+  explícito y la `path` ya escrita) la enlaza desde index/log/temas del mismo ámbito, sin moverla nunca a otro. Botón "Corregir" no existe: la corrección es por edición (§16.6).
 - `questions/` global entra en `VaultStore.pages(projectSlug:nil)`, ⌘K y el grafo.
 - Preparación de reunión mantiene su ámbito implícito (proyecto del evento).
 
@@ -1848,7 +1850,10 @@ Archivo · Enlace · Correo · Grabar.
 
 ### 16.10 Captura del día a día
 - **Captura rápida** (`Views/Capture/QuickCaptureWindow.swift`, `NSPanel` flotante 520×~220, no activa la app
-  principal): atajo global **⌃⌥Espacio** (configurable/desactivable en Ajustes › General, junto a ⌥⌘R). Un campo de
+  principal): atajo global **⌥⌘N** por defecto (⌃⌥Espacio choca con "Seleccionar la siguiente fuente de entrada" de
+  macOS). En Ajustes › General, junto a ⌥⌘R: activar/desactivar, el atajo actual y "Cambiar…", que graba otro (⌘ o ⌃
+  más otra tecla modificadora y una tecla; esc cancela), rechaza los que usa macOS o ⌥⌘R y lo registra al momento
+  (`AppConfig.captureHotkey {keyCode, modifiers, key}`). Un campo de
   texto multilínea que detecta: URL → Enlace; texto con cabeceras de correo (From:/De:) → Correo; resto → Nota; y acepta
   soltar archivos. Selector de proyecto (por defecto: sugerido por las reglas o "Sin asignar"), Guardar ⌘↩, esc cierra.
   Confirmación "Guardado en 🚀 Kickoff" y se cierra.

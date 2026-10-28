@@ -54,7 +54,7 @@ enum DebugSnapshots {
             }
             shots.append(("note", CGSize(width: 560, height: 520), AnyView(NoteSheet(projectSlug: slug))))
             shots.append(("menubar", CGSize(width: 360, height: 600), AnyView(MenuBarView())))
-            // MARK: v0.6 capture (§16.10): the ⌃⌥Space panel empty, on a link, a pasted email and dropped files.
+            // MARK: v0.6 capture (§16.10): the quick capture panel empty, on a link, a pasted email and dropped files.
             @MainActor func capture(_ text: String, files: [URL] = []) -> AnyView {
                 AnyView(QuickCaptureView(model: QuickCaptureModel(state: state, text: text, files: files))
                     .frame(width: QuickCapturePanel.width).fixedSize(horizontal: false, vertical: true)

@@ -28,8 +28,10 @@ public struct AppConfig: Codable, Equatable, Sendable {
     /// Minutes between automatic GitHub syncs (CONTRACT §13.4); 0 = only by hand.
     public var githubSyncMinutes: Int = 60
     // MARK: v0.6 capture
-    /// Global ⌃⌥Space opens "Captura rápida" (CONTRACT §16.10).
+    /// The global shortcut opens "Captura rápida" (CONTRACT §16.10).
     public var captureHotkeyEnabled: Bool = true
+    /// Which shortcut (⌥⌘N unless the user recorded another one in Ajustes › General).
+    public var captureHotkey: CaptureHotKey = .default
 
     public static let `default` = AppConfig(
         vaultPath: "~/Documents/SecondBrain",
@@ -49,7 +51,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
         case vaultPath, dataPath, whisperModel, claudePath, ingestModel, queryModel, uiLanguage, captureMic, gitEnabled,
              hotkeyEnabled, onboardingComplete, appearance, oauth, lastMailProjectSlug,
              githubSyncMinutes,  // MARK: v0.4 github
-             captureHotkeyEnabled  // MARK: v0.6 capture
+             captureHotkeyEnabled, captureHotkey  // MARK: v0.6 capture
     }
 
     public init(vaultPath: String, dataPath: String, whisperModel: String, claudePath: String?, ingestModel: String,
@@ -95,6 +97,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
         }
         // MARK: v0.6 capture
         captureHotkeyEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .captureHotkeyEnabled)) ?? true
+        captureHotkey = (try? c.decodeIfPresent(CaptureHotKey.self, forKey: .captureHotkey)).flatMap { $0?.isValid == true ? $0 : nil } ?? .default
     }
 
     public static var configURL: URL {
@@ -119,6 +122,40 @@ public struct AppConfig: Codable, Equatable, Sendable {
 
     public var vaultURL: URL { URL(fileURLWithPath: (vaultPath as NSString).expandingTildeInPath) }
     public var dataURL: URL { URL(fileURLWithPath: (dataPath as NSString).expandingTildeInPath) }
+}
+
+/// A global shortcut as Carbon takes it (`RegisterEventHotKey`): a virtual key code and Carbon modifier flags
+/// (cmdKey 0x100, shiftKey 0x200, optionKey 0x800, controlKey 0x1000), plus the key's label as recorded ("N").
+public struct CaptureHotKey: Codable, Equatable, Hashable, Sendable {
+    public var keyCode: Int
+    public var modifiers: Int
+    public var key: String
+
+    public init(keyCode: Int, modifiers: Int, key: String) {
+        self.keyCode = keyCode; self.modifiers = modifiers; self.key = key
+    }
+
+    public static let command = 0x100, shift = 0x200, option = 0x800, control = 0x1000
+
+    /// ⌥⌘N. (⌃⌥Space, the v0.6 draft's default, is macOS's "Select next input source" for anyone with two keyboard
+    /// layouts.)
+    public static let `default` = CaptureHotKey(keyCode: 45, modifiers: option | command, key: "N")
+
+    /// ⌘ or ⌃, plus at least one other modifier (a single-modifier global shortcut would steal app shortcuts).
+    public var isValid: Bool {
+        let mods = [Self.command, Self.shift, Self.option, Self.control].filter { modifiers & $0 != 0 }.count
+        return (modifiers & Self.command != 0 || modifiers & Self.control != 0) && mods >= 2 && !key.isEmpty
+    }
+
+    /// "⌥⌘N", in macOS's modifier order (⌃⌥⇧⌘).
+    public var symbols: String {
+        var s = ""
+        if modifiers & Self.control != 0 { s += "⌃" }
+        if modifiers & Self.option != 0 { s += "⌥" }
+        if modifiers & Self.shift != 0 { s += "⇧" }
+        if modifiers & Self.command != 0 { s += "⌘" }
+        return s + key
+    }
 }
 
 public struct DataPaths: Sendable {

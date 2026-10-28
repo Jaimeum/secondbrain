@@ -1583,7 +1583,15 @@
 "capture.moreFiles" = "y %ld más";
 "capture.thread" = "Se suma al hilo «%@»";
 "capture.failed" = "No pude guardarlo. Inténtalo de nuevo.";
-"settings.captureHotkey" = "Atajo ⌃⌥Espacio para captura rápida";
+"settings.captureHotkey" = "Atajo de captura rápida";
+"settings.captureHotkeyDetail" = "Abre la captura rápida desde cualquier app.";
+"settings.captureHotkey.change" = "Cambiar…";
+"settings.captureHotkey.press" = "Pulsa el atajo…";
+"settings.captureHotkey.needsModifiers" = "Usa ⌘ o ⌃ junto con otra tecla modificadora (⌥ o ⇧) y una letra.";
+"settings.captureHotkey.recordTaken" = "⌥⌘R ya es el atajo para grabar.";
+"settings.captureHotkey.system" = "%@ lo usa macOS (Ajustes del Sistema › Teclado › Atajos). Elige otro con Cambiar….";
+"settings.captureHotkey.otherApp" = "Otra app ya usa %@. Elige otro.";
+"settings.key.space" = "Espacio";
 "tpl.scope.note" = "Notas";
 "tpl.scope.document" = "Documentos y enlaces";
 "rules.offer.fromAuto" = "¿Mandar siempre lo de %1$@ a %2$@ y guardar solos los próximos?";
@@ -1603,7 +1611,7 @@
 "home.empty.dropHint" = "También puedes arrastrar archivos a cualquier parte de Inicio.";
 "onb.done.menuCaptureMessage" = "Arriba a la derecha de tu pantalla: anota algo, pega un enlace o un correo, o graba una reunión (⌥⌘R), sin abrir la ventana.";
 "onb.done.captureTitle" = "Captura rápida desde cualquier lugar";
-"onb.done.captureMessage" = "Presiona ⌃⌥Espacio (Control + Opción + Espacio) y escribe: una nota, un enlace o un correo pegado. Lo guardo en su proyecto.";
+"onb.done.captureMessage" = "Presiona %@ desde cualquier app y escribe: una nota, un enlace o un correo pegado. Lo guardo en su proyecto.";
 "record.intro.title" = "Antes de tu primera grabación";
 "record.intro.message" = "Grabo el audio de tu computadora y tu micrófono (Zoom, Meet, Teams, lo que sea) y lo transcribo aquí en tu Mac. Para eso necesito dos permisos y descargar una vez el modelo de transcripción (unos 3 GB).";
 "record.intro.needsConsent" = "Marca «Avisaré antes de grabar» para empezar.";

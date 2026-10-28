@@ -1583,7 +1583,15 @@
 "capture.moreFiles" = "and %ld more";
 "capture.thread" = "Joins the thread “%@”";
 "capture.failed" = "I couldn't save it. Try again.";
-"settings.captureHotkey" = "⌃⌥Space shortcut for quick capture";
+"settings.captureHotkey" = "Quick capture shortcut";
+"settings.captureHotkeyDetail" = "Opens quick capture from any app.";
+"settings.captureHotkey.change" = "Change…";
+"settings.captureHotkey.press" = "Press the shortcut…";
+"settings.captureHotkey.needsModifiers" = "Use ⌘ or ⌃ with another modifier (⌥ or ⇧) and a key.";
+"settings.captureHotkey.recordTaken" = "⌥⌘R is already the recording shortcut.";
+"settings.captureHotkey.system" = "%@ is used by macOS (System Settings › Keyboard › Shortcuts). Pick another with Change….";
+"settings.captureHotkey.otherApp" = "Another app already uses %@. Pick another.";
+"settings.key.space" = "Space";
 "tpl.scope.note" = "Notes";
 "tpl.scope.document" = "Documents and links";
 "rules.offer.fromAuto" = "Always send mail from %1$@ to %2$@ and save the next ones by themselves?";
@@ -1603,7 +1611,7 @@
 "home.empty.dropHint" = "You can also drop files anywhere on Home.";
 "onb.done.menuCaptureMessage" = "Top right of your screen: jot something down, paste a link or an email, or record a meeting (⌥⌘R), without opening the window.";
 "onb.done.captureTitle" = "Quick capture from anywhere";
-"onb.done.captureMessage" = "Press ⌃⌥Space (Control + Option + Space) and type: a note, a link or a pasted email. I file it in its project.";
+"onb.done.captureMessage" = "Press %@ from any app and type: a note, a link or a pasted email. I file it in its project.";
 "record.intro.title" = "Before your first recording";
 "record.intro.message" = "I record your computer's audio and your microphone (Zoom, Meet, Teams, anything) and transcribe it right here on your Mac. For that I need two permissions and a one-time download of the transcription model (about 3 GB).";
 "record.intro.needsConsent" = "Check “I'll tell people before recording” to start.";

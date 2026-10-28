@@ -326,6 +326,8 @@ enum VaultPicker {
 }
 
 private struct DoneStep: View {
+    @Environment(AppState.self) private var state
+
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 14) {
@@ -343,11 +345,12 @@ private struct DoneStep: View {
             }
             BrandCard(padding: 18) {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Menu bar (capture first, recording as one more option) · ⌃⌥Espacio quick capture · ⌘K, the
+                    // Menu bar (capture first, recording as one more option) · the quick capture shortcut · ⌘K, the
                     // "find without thinking" way in (§16.10).
                     tip(icon: AnyView(BrandMark(size: 22)), title: L("onb.done.menuTitle"), message: L("onb.done.menuCaptureMessage"))
-                    tip(icon: AnyView(Text(verbatim: "⌃⌥␣").font(Brand.font(12, .semibold)).foregroundStyle(Brand.color.accent)),
-                        title: L("onb.done.captureTitle"), message: L("onb.done.captureMessage"))
+                    tip(icon: AnyView(Text(verbatim: state.config.captureHotkey.symbols).font(Brand.font(12, .semibold))
+                                        .foregroundStyle(Brand.color.accent).lineLimit(1).minimumScaleFactor(0.7)),
+                        title: L("onb.done.captureTitle"), message: L("onb.done.captureMessage", state.config.captureHotkey.symbols))
                     tip(icon: AnyView(Text(verbatim: "⌘K").font(Brand.font(13, .semibold)).foregroundStyle(Brand.color.accent)),
                         title: L("onb.done.searchTitle"), message: L("onb.done.searchMessage"))
                 }

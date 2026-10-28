@@ -12,6 +12,31 @@ import Foundation
         case .email: "email"
         }
     }
+    // The capture shortcut: ⌥⌘N by default (⌃⌥Space is macOS's input-source switch), a recorded one survives a
+    // reload, and a combination without ⌘/⌃ plus another modifier falls back to the default.
+    t.eq(AppConfig.default.captureHotkey.symbols, "⌥⌘N", "default capture shortcut ⌥⌘N")
+    t.check(CaptureHotKey.default.isValid, "default shortcut valid")
+    t.check(!CaptureHotKey(keyCode: 45, modifiers: CaptureHotKey.command, key: "N").isValid, "⌘N alone is refused")
+    t.check(!CaptureHotKey(keyCode: 49, modifiers: CaptureHotKey.option | CaptureHotKey.shift, key: "Espacio").isValid,
+            "⌥⇧ without ⌘/⌃ is refused")
+    t.eq(CaptureHotKey(keyCode: 49, modifiers: CaptureHotKey.control | CaptureHotKey.option, key: "Espacio").symbols, "⌃⌥Espacio",
+         "symbols in macOS order")
+    var hotkeyConfig = AppConfig.default
+    hotkeyConfig.captureHotkey = CaptureHotKey(keyCode: 8, modifiers: CaptureHotKey.control | CaptureHotKey.shift, key: "C")
+    if let data = try? JSONEncoder().encode(hotkeyConfig), let back = try? JSONDecoder().decode(AppConfig.self, from: data) {
+        t.eq(back.captureHotkey, hotkeyConfig.captureHotkey, "recorded shortcut round-trips")
+    } else {
+        t.check(false, "config with a shortcut encodes and decodes")
+    }
+    if var dict = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(AppConfig.default))) as? [String: Any] {
+        dict["captureHotkey"] = ["keyCode": 45, "modifiers": CaptureHotKey.shift, "key": "N"]
+        let back = (try? JSONSerialization.data(withJSONObject: dict)).flatMap { try? JSONDecoder().decode(AppConfig.self, from: $0) }
+        t.eq(back?.captureHotkey, .default, "an invalid stored shortcut falls back to ⌥⌘N")
+        dict.removeValue(forKey: "captureHotkey")
+        let old = (try? JSONSerialization.data(withJSONObject: dict)).flatMap { try? JSONDecoder().decode(AppConfig.self, from: $0) }
+        t.eq(old?.captureHotkey, .default, "a config without the field gets ⌥⌘N")
+    }
+
     // Links: only when the whole text is one address.
     t.eq(kind("https://acme.com/blog/x?a=1"), "link:https://acme.com/blog/x?a=1", "https link")
     t.eq(kind("  http://acme.com \n"), "link:http://acme.com", "trimmed http link")

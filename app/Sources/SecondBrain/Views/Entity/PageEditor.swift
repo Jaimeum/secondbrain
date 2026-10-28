@@ -21,13 +21,18 @@ struct PageEditorHost: View {
     @ViewState private var showsFrontMatter = false
     @ViewState private var loaded = false
     @ViewState private var error: String?
+    /// The page exists but isn't UTF-8 text: shown, never saved (saving would replace what can't be read).
+    @ViewState private var unreadable = false
+    /// The page changed on disk while editing (an ingest updated it): its text now. The footer offers Recargar
+    /// (drop my edit, take the new page) or Guardar igual (my text wins, knowingly).
+    @ViewState private var conflict: String?
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
-            if !Corrections.isEditable(path) {
-                Text(L("editor.notEditable"))
+            if !Corrections.isEditable(path) || unreadable {
+                Text(L(unreadable ? "editor.notText" : "editor.notEditable"))
                     .font(Brand.body)
                     .foregroundStyle(Brand.color.text2)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -60,7 +65,7 @@ struct PageEditorHost: View {
             Button(L("editor.save")) { save() }
                 .buttonStyle(.brandPrimary)
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(!loaded || !Corrections.isEditable(path))
+                .disabled(!loaded || unreadable || !Corrections.isEditable(path))
                 .help(L("editor.saveHelp"))
         }
         .padding(.horizontal, Brand.spacing.l)
@@ -101,7 +106,19 @@ struct PageEditorHost: View {
 
     private var footer: some View {
         HStack(spacing: Brand.spacing.s) {
-            if let error {
+            if conflict != nil {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(Brand.color.warning)
+                Text(L("editor.conflict"))
+                    .foregroundStyle(Brand.color.text)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(L("editor.reload")) { reload() }
+                    .buttonStyle(.brandSecondary)
+                    .help(L("editor.reloadHelp"))
+                Button(L("editor.saveAnyway")) { save(over: conflict) }
+                    .buttonStyle(.brandSecondary)
+                    .help(L("editor.saveAnywayHelp"))
+            } else if let error {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(Brand.color.warning)
                 Text(error)
                     .foregroundStyle(Brand.color.text)
@@ -121,9 +138,18 @@ struct PageEditorHost: View {
 
     private func load() async {
         let vault = state.engine.vault, path = self.path
-        let (t, text) = await Task.detached { (vault.title(of: path), (try? vault.read(path)) ?? "") }.value
+        let (t, text, exists) = await Task.detached {
+            (vault.title(of: path), try? vault.read(path), FileManager.default.fileExists(atPath: vault.url(for: path).path))
+        }.value
         title = t
+        unreadable = exists && text == nil
+        show(text ?? "")
+    }
+
+    private func show(_ text: String) {
         original = text
+        conflict = nil
+        error = nil
         let parts = PageText.split(text)
         frontMatter = parts.frontMatter
         gap = parts.gap
@@ -131,16 +157,28 @@ struct PageEditorHost: View {
         loaded = true
     }
 
-    private func save() {
+    /// "Recargar" after a conflict: the page as it is now (my unsaved edit is dropped).
+    private func reload() {
+        guard let current = conflict else { return }
+        show(current)
+    }
+
+    /// Saves over `original` (the text the editor started from); `over` = the page's text now, when the owner chose
+    /// "Guardar igual" after a conflict (the diff for /propagate is then taken against it).
+    private func save(over current: String? = nil) {
+        guard !unreadable else { return }
         let text = PageText.join(PageText.Parts(frontMatter: frontMatter, gap: gap, body: content))
-        guard text != original else {
+        let base = current ?? original
+        guard text != base else {
             dismiss()
             return
         }
         do {
-            try state.engine.saveHandEdit(path: path, text: text)
+            try state.engine.saveHandEdit(path: path, text: text, basedOn: base)
             dismiss()
-            CorrectionsModel.shared.start(state: state, path: path, before: original, after: text)
+            CorrectionsModel.shared.start(state: state, path: path, before: base, after: text)
+        } catch CorrectionError.changedOnDisk(let now) {
+            conflict = now
         } catch {
             self.error = FriendlyError.message(error)
         }

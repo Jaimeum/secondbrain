@@ -351,6 +351,20 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public init(slug: String, name: String, description: String, emoji: String, createdAt: Date = Date()) {
         self.slug = slug; self.name = name; self.description = description; self.emoji = emoji; self.createdAt = createdAt
     }
+
+    enum CodingKeys: String, CodingKey { case slug, name, description, emoji, createdAt, defaultTemplate, people }
+
+    /// A malformed optional field (`people` written by hand or by another Mac) is dropped, never the whole project.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        slug = try c.decode(String.self, forKey: .slug)
+        name = try c.decode(String.self, forKey: .name)
+        description = try c.decode(String.self, forKey: .description)
+        emoji = try c.decode(String.self, forKey: .emoji)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        defaultTemplate = try? c.decodeIfPresent(String.self, forKey: .defaultTemplate)
+        people = try? c.decodeIfPresent(ProjectPeople.self, forKey: .people)
+    }
 }
 
 public struct WikiPage: Identifiable, Hashable, Sendable {

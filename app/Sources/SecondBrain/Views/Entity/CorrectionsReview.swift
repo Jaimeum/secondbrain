@@ -68,9 +68,12 @@ final class CorrectionsModel {
             let proposal = try await state.engine.proposeCorrections(path: s.path, before: s.before, after: s.after)
             guard !Task.isCancelled, session?.path == s.path else { return }
             if proposal.edits.isEmpty {
-                // §16.6: nothing to propagate → the fact is still recorded, and I say so.
-                let added = (try? state.engine.applyCorrections([], facts: proposal.facts, editedPath: s.path))?.factsAdded ?? 0
+                // §16.6: nothing to propagate → the fact is still recorded, and I say so (the sheet comes back if it
+                // was hidden while searching).
+                let added = try await recordFacts(proposal.facts, editedPath: s.path, state: state)
+                guard !Task.isCancelled, session?.path == s.path else { return }
                 session?.phase = .nothing(factsAdded: added)
+                isPresented = true
                 return
             }
             let vault = state.engine.vault
@@ -86,6 +89,19 @@ final class CorrectionsModel {
             Log.error("propagate \(s.path) failed: \(error)")
             session?.phase = .failed(FriendlyError.message(error))
             isPresented = true
+        }
+    }
+
+    /// Appends `facts` to `facts.md`. While Claude is editing the brain the write is refused (its Historial entry would
+    /// take the line): wait for it to finish and try again, still "Buscando…", instead of dropping the facts.
+    private func recordFacts(_ facts: [String], editedPath: String, state: AppState) async throws -> Int {
+        guard !facts.isEmpty else { return 0 }
+        while true {
+            do {
+                return try state.engine.applyCorrections([], facts: facts, editedPath: editedPath).factsAdded
+            } catch EngineError.busy {
+                try await Task.sleep(for: .seconds(2))
+            }
         }
     }
 

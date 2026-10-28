@@ -1438,6 +1438,12 @@
 "editor.save" = "Guardar";
 "editor.saveHelp" = "Guardar (⌘S) y buscar otras páginas que digan lo mismo";
 "editor.notEditable" = "Las fuentes originales no se editan.";
+"editor.notText" = "Esta página no es texto UTF-8. Ábrela en otro editor para no perder su contenido.";
+"editor.conflict" = "La página cambió mientras la editabas (Claude la actualizó). Guardar ahora borraría esos cambios.";
+"editor.reload" = "Recargar";
+"editor.reloadHelp" = "Abre la página como está ahora (se pierde tu edición sin guardar)";
+"editor.saveAnyway" = "Guardar igual";
+"editor.saveAnywayHelp" = "Tu texto reemplaza la página, incluidos los cambios de Claude (se puede deshacer en Historial)";
 "editor.properties" = "Propiedades";
 "editor.propagateHint" = "Al guardar, busco otras páginas del cerebro que digan lo que corregiste y te las muestro antes de cambiarlas.";
 "corrections.title" = "Revisar cambios en el cerebro";

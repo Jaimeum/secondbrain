@@ -1438,6 +1438,12 @@
 "editor.save" = "Save";
 "editor.saveHelp" = "Save (⌘S) and look for other pages that say the same";
 "editor.notEditable" = "Original sources can't be edited.";
+"editor.notText" = "This page isn't UTF-8 text. Open it in another editor so its content isn't lost.";
+"editor.conflict" = "The page changed while you were editing it (Claude updated it). Saving now would erase those changes.";
+"editor.reload" = "Reload";
+"editor.reloadHelp" = "Opens the page as it is now (your unsaved edit is dropped)";
+"editor.saveAnyway" = "Save anyway";
+"editor.saveAnywayHelp" = "Your text replaces the page, Claude's changes included (undo in History)";
 "editor.properties" = "Properties";
 "editor.propagateHint" = "When you save, I look for other pages in the brain that say what you corrected and show them before changing them.";
 "corrections.title" = "Review changes in the brain";

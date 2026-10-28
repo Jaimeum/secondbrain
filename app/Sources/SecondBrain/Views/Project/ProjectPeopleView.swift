@@ -93,9 +93,14 @@ struct ProjectPeopleView: View {
         loaded = true
     }
 
-    /// Saves the choice in `project.json` and records it as a confirmed fact.
+    /// Saves the choice in `project.json` and records it as a confirmed fact. Refused while Claude is editing the
+    /// brain: its Historial entry would take both files, and undoing it would silently revert the choice.
     private func set(_ path: String, title: String, included: Bool) {
         let personSlug = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+        guard !state.engine.claudeIsEditing else {
+            error = FriendlyError.message(EngineError.busy)
+            return
+        }
         do {
             try state.engine.projects.setPerson(personSlug, included: included, in: slug)
             state.reloadProjects()

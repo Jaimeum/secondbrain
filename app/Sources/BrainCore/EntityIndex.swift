@@ -599,6 +599,15 @@ public struct ProjectPeople: Codable, Hashable, Sendable {
     public var include: [String]
     public var exclude: [String]
     public init(include: [String] = [], exclude: [String] = []) { self.include = include; self.exclude = exclude }
+
+    enum CodingKeys: String, CodingKey { case include, exclude }
+
+    /// Either list may be missing (a hand edit, another Mac, a script): a partial `people` never hides the project.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        include = (try? c.decodeIfPresent([String].self, forKey: .include)) ?? []
+        exclude = (try? c.decodeIfPresent([String].self, forKey: .exclude)) ?? []
+    }
 }
 
 public extension ProjectManager {

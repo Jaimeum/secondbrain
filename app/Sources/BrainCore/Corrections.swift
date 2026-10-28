@@ -54,12 +54,20 @@ public enum CorrectionError: Error, LocalizedError {
     case notEditable
     /// `/propagate` answered without the JSON object.
     case unreadableAnswer
+    /// The page isn't UTF-8 text (e.g. a note saved as Latin-1): editing it would lose the original.
+    case notText
+    /// The page changed on disk since the editor read it (an ingest updated it meanwhile). `current` is its text now.
+    case changedOnDisk(current: String)
 
     public var errorDescription: String? {
         let lang = Lang(AppConfig.load().uiLanguage)
         switch self {
         case .notEditable: return lang.t("Esta página no se puede editar.", "This page can't be edited.")
         case .unreadableAnswer: return lang.t("No entendí la respuesta de Claude.", "I couldn't read Claude's answer.")
+        case .notText: return lang.t("Esta página no es texto UTF-8: ábrela en otro editor para no perder su contenido.",
+                                     "This page isn't UTF-8 text: open it in another editor so its content isn't lost.")
+        case .changedOnDisk: return lang.t("La página cambió mientras la editabas (Claude la actualizó).",
+                                           "The page changed while you were editing it (Claude updated it).")
         }
     }
 }
@@ -151,16 +159,18 @@ public enum Corrections {
         return nil
     }
 
-    /// `text` with `edit` applied, or nil when `before` isn't in it any more. `before` is matched exactly first, then
-    /// ignoring trailing spaces and \r at the ends of lines (Claude sometimes loses those).
+    /// `text` with `edit` applied, or nil when `before` isn't in it any more. `before` is whole lines of the page: it is
+    /// matched only where it starts at a line start and ends at a line end (so "- Ana" never matches inside
+    /// "- Ana María"), exactly first, then ignoring trailing spaces and \r at the ends of lines (Claude sometimes loses
+    /// those).
     public static func applying(_ edit: ProposedEdit, to text: String) -> String? {
         guard !edit.before.isEmpty else { return nil }
-        if let range = text.range(of: edit.before) {
+        if let range = lineRange(of: edit.before, in: text) {
             return text.replacingCharacters(in: range, with: edit.after)
         }
         let trimmed = edit.before.trimmingCharacters(in: .newlines)
         guard !trimmed.isEmpty else { return nil }
-        if let range = text.range(of: trimmed) {
+        if let range = lineRange(of: trimmed, in: text) {
             return text.replacingCharacters(in: range, with: edit.after.trimmingCharacters(in: .newlines))
         }
         // Line by line, ignoring trailing whitespace.
@@ -172,6 +182,20 @@ public enum Corrections {
             var out = lines
             out.replaceSubrange(i..<(i + wanted.count), with: edit.after.trimmingCharacters(in: .newlines).components(separatedBy: "\n"))
             return out.joined(separator: "\n")
+        }
+        return nil
+    }
+
+    /// The first occurrence of `needle` in `text` that starts at a line start and ends at a line end (or with a
+    /// newline of its own).
+    static func lineRange(of needle: String, in text: String) -> Range<String.Index>? {
+        var from = text.startIndex
+        while from < text.endIndex, let range = text.range(of: needle, range: from..<text.endIndex) {
+            let startsLine = range.lowerBound == text.startIndex || text[text.index(before: range.lowerBound)].isNewline
+                || needle.hasPrefix("\n")
+            let endsLine = range.upperBound == text.endIndex || text[range.upperBound].isNewline || needle.hasSuffix("\n")
+            if startsLine && endsLine { return range }
+            from = text.index(after: range.lowerBound)
         }
         return nil
     }
@@ -270,9 +294,19 @@ public extension VaultStore {
 
     /// The owner's hand edit of one page (§16.6): writes it and records a `.manualEdit` Historial entry with
     /// before/after (Deshacer). nil when the text didn't change.
+    /// `basedOn`: the text the editor started from (a missing page = ""). When the page on disk differs now (an ingest
+    /// updated it meanwhile), nothing is written and `CorrectionError.changedOnDisk` is thrown, so the owner's save never
+    /// silently erases what Claude added. A page that exists but isn't UTF-8 is refused (`notText`), never replaced.
     @discardableResult
-    func saveHandEdit(path: String, text: String, title: String, history: HistoryStore) throws -> HistoryEntry? {
-        let before = try? read(path)
+    func saveHandEdit(path: String, text: String, title: String, history: HistoryStore, basedOn: String? = nil) throws -> HistoryEntry? {
+        let before: String?
+        if FileManager.default.fileExists(atPath: url(for: path).path) {
+            guard let current = try? read(path) else { throw CorrectionError.notText }
+            before = current
+        } else {
+            before = nil
+        }
+        if let basedOn, (before ?? "") != basedOn { throw CorrectionError.changedOnDisk(current: before ?? "") }
         guard before != text else { return nil }
         return try history.recordManualEdits(title: title, projectSlug: Self.projectSlug(of: path),
                                              files: [(path, before, text)])
@@ -320,12 +354,13 @@ public extension VaultStore {
 public extension BrainEngine {
     /// Saves the owner's edit of `path` (Historial entry "Editaste: …", undoable). Refused with `EngineError.busy`
     /// while Claude is editing the brain (its snapshot would swallow this edit).
+    /// `basedOn`: the text the editor started from; a page changed on disk since then is refused (`changedOnDisk`).
     @discardableResult
-    func saveHandEdit(path: String, text: String) throws -> HistoryEntry? {
+    func saveHandEdit(path: String, text: String, basedOn: String? = nil) throws -> HistoryEntry? {
         guard Corrections.isEditable(path) else { throw CorrectionError.notEditable }
         guard !claudeIsEditing else { throw EngineError.busy }
         let title = lang.t("Editaste: \(vault.title(of: path))", "You edited: \(vault.title(of: path))")
-        let entry = try vault.saveHandEdit(path: path, text: text, title: title, history: history)
+        let entry = try vault.saveHandEdit(path: path, text: text, title: title, history: history, basedOn: basedOn)
         if let entry { onEvent?(.historyAdded(entry)) }
         return entry
     }
@@ -372,7 +407,10 @@ public extension BrainEngine {
     /// Appends one confirmed fact to `facts.md` (e.g. "Javier Ruiz no forma parte de 🚀 Kickoff" from a project's
     /// Personas tab), as an undoable Historial entry. `about`: page names to link when the fact has no wikilink.
     @discardableResult
+    /// Refused with `EngineError.busy` while Claude is editing the brain (its Historial entry would swallow the line,
+    /// and undoing it would erase the fact).
     func recordFact(_ fact: String, about: [String] = [], projectSlug: String? = nil) throws -> HistoryEntry? {
+        guard !claudeIsEditing else { throw EngineError.busy }
         guard let line = Corrections.factLine(fact, date: Date(), fallbackLinks: about) else { return nil }
         let existing = try? vault.read(Corrections.factsPath)
         let result = Corrections.appending([line], to: existing, date: Date(), lang: lang)
@@ -385,8 +423,9 @@ public extension BrainEngine {
         return entry
     }
 
-    /// Claude is changing vault files right now (a hand edit would land in its Historial snapshot).
-    private var claudeIsEditing: Bool {
+    /// Claude is changing vault files right now (a hand edit would land in its Historial snapshot). The app checks it
+    /// before any write of its own to the vault (a hand edit, a fact, a person added to a project, a saved answer).
+    var claudeIsEditing: Bool {
         runningAnywhere { [.ingest, .lint, .saveAnswer, .reformat, .makeTemplate].contains($0.kind) }
     }
 }

@@ -23,6 +23,7 @@ struct FactsSelfTestCmd: AsyncParsableCommand {
         t.group("facts-template") { testFactsTemplate(t, root: root.appendingPathComponent("template")) }
         t.group("facts-parse") { testFactsParse(t) }
         t.group("facts-apply") { testFactsApply(t, root: root.appendingPathComponent("apply")) }
+        t.group("facts-safety") { testFactsSafety(t, root: root.appendingPathComponent("safety")) }
         print("\n\(t.passed) passed, \(t.failures.count) failed")
         for f in t.failures { print("  ✗ \(f)") }
         if !t.failures.isEmpty { throw ExitCode(1) }
@@ -247,4 +248,98 @@ struct FactsSelfTestCmd: AsyncParsableCommand {
         try? history.undo(entryId: id)
         t.check(!fm.fileExists(atPath: vault.url(for: "facts.md").path), "undo removes the created facts.md")
     }
+}
+
+/// What must never silently lose the owner's or Claude's text: whole-line matching of proposed edits, a page changed
+/// on disk while the editor was open, a page that isn't UTF-8, a multi-file write that fails half-way, and a
+/// `project.json` with a partial `people`.
+@MainActor func testFactsSafety(_ t: Tester, root: URL) {
+    let fm = FileManager.default
+    let vaultURL = root.appendingPathComponent("vault")
+    let vault = VaultStore(root: vaultURL)
+    let history = HistoryStore(vaultRoot: vaultURL, historyDir: root.appendingPathComponent("history"))
+    try? fm.createDirectory(at: vaultURL.appendingPathComponent("people"), withIntermediateDirectories: true)
+    func write(_ path: String, _ text: String) {
+        try? fm.createDirectory(at: vault.url(for: path).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? text.write(to: vault.url(for: path), atomically: true, encoding: .utf8)
+    }
+    func read(_ path: String) -> String { (try? vault.read(path)) ?? "<missing>" }
+
+    // 1. `before` is whole lines: "- Ana" never matches inside "- Ana María (CFO)".
+    let team = "# Equipo\n- Ana María (CFO)\n- Ana\n- Luis\n"
+    let edit = ProposedEdit(path: "x.md", before: "- Ana", after: "- Ana (ya no está en el equipo)")
+    t.eq(Corrections.applying(edit, to: team), "# Equipo\n- Ana María (CFO)\n- Ana (ya no está en el equipo)\n- Luis\n",
+         "edit applied to the whole line, not inside a longer one")
+    t.check(Corrections.applying(ProposedEdit(path: "x.md", before: "Ana María", after: "x"), to: team) == nil,
+            "an excerpt from the middle of a line is not applied")
+    t.eq(Corrections.applying(ProposedEdit(path: "x.md", before: "- Luis\n", after: "- Luis Pérez\n"), to: team),
+         "# Equipo\n- Ana María (CFO)\n- Ana\n- Luis Pérez\n", "a before ending in a newline still matches")
+    t.eq(Corrections.applying(ProposedEdit(path: "x.md", before: "- Ana", after: "- Ana B"), to: "- Ana  \r\n- Ana María\r\n"),
+         "- Ana B\n- Ana María\r\n", "trailing spaces / CRLF fall back to the line-by-line match")
+    t.check(Corrections.applying(ProposedEdit(path: "x.md", before: "- Ana", after: "x"), to: "- Ana María\n") == nil,
+            "only a longer line → nothing to apply")
+
+    // 2. A page changed on disk while the editor was open is refused, nothing written.
+    let original = "---\ntype: person\ntitle: \"Ana\"\n---\n\n# Ana\n\n- Rol: CFO\n"
+    write("people/ana.md", original)
+    let byIngest = original + "- Nuevo: viene del ingest\n"
+    write("people/ana.md", byIngest)
+    do {
+        _ = try vault.saveHandEdit(path: "people/ana.md", text: original.replacingOccurrences(of: "CFO", with: "CEO"),
+                                   title: "x", history: history, basedOn: original)
+        t.check(false, "a stale editor save is refused")
+    } catch CorrectionError.changedOnDisk(let current) {
+        t.eq(current, byIngest, "the conflict carries the page as it is now")
+    } catch {
+        t.check(false, "stale save: unexpected \(error)")
+    }
+    t.eq(read("people/ana.md"), byIngest, "the ingest's additions are kept")
+    let ok = try? vault.saveHandEdit(path: "people/ana.md", text: byIngest + "- Mano\n", title: "x", history: history, basedOn: byIngest)
+    t.check(ok != nil, "a save based on the current page goes through")
+
+    // 3. A page that isn't UTF-8 is never replaced.
+    let latin1 = Data([0x72, 0x65, 0x75, 0x6E, 0x69, 0xF3, 0x6E, 0x0A])   // "reunión" in Latin-1
+    let latinURL = vault.url(for: "people/latin.md")
+    try? latin1.write(to: latinURL)
+    do {
+        _ = try vault.saveHandEdit(path: "people/latin.md", text: "nuevo", title: "x", history: history)
+        t.check(false, "a non-UTF-8 page is refused")
+    } catch CorrectionError.notText {
+        t.check(true, "non-UTF-8 page refused")
+    } catch {
+        t.check(false, "non-UTF-8: unexpected \(error)")
+    }
+    t.eq(try? Data(contentsOf: latinURL), latin1, "non-UTF-8 page untouched")
+
+    // 4. A multi-file write that fails half-way leaves nothing changed and no Historial entry.
+    write("people/b.md", "B\n")
+    write("blocker.md", "a file, not a folder\n")
+    let entriesBefore = history.entries().count
+    do {
+        _ = try history.recordManualEdits(title: "x", projectSlug: nil,
+                                          files: [("people/ana.md", read("people/ana.md"), "cambiado\n"),
+                                                  ("people/b.md", "B\n", "B2\n"),
+                                                  ("blocker.md/dentro.md", nil, "no se puede\n")])
+        t.check(false, "a write under a file fails")
+    } catch {
+        t.check(true, "failed write throws")
+    }
+    t.eq(read("people/b.md"), "B\n", "earlier file rolled back")
+    t.check(read("people/ana.md") != "cambiado\n", "first file rolled back")
+    t.eq(history.entries().count, entriesBefore, "no Historial entry for a failed write")
+    let leftovers = ((try? fm.contentsOfDirectory(atPath: root.appendingPathComponent("history").path)) ?? [])
+        .filter { !fm.fileExists(atPath: root.appendingPathComponent("history/\($0)/entry.json").path) && !$0.hasPrefix(".") }
+    t.eq(leftovers, [], "no partial history folder left")
+
+    // 5. project.json with only one of include/exclude keeps the project.
+    let projectDir = vaultURL.appendingPathComponent("projects/kickoff")
+    try? fm.createDirectory(at: projectDir, withIntermediateDirectories: true)
+    let json = #"{"slug":"kickoff","name":"Kickoff","description":"","emoji":"🚀","createdAt":"2026-10-27T10:00:00Z","people":{"include":["ana"]}}"#
+    try? Data(json.utf8).write(to: projectDir.appendingPathComponent("project.json"))
+    let pm = ProjectManager(vaultRoot: vaultURL)
+    t.eq(pm.get("kickoff")?.people?.include, ["ana"], "people with only include decodes")
+    t.eq(pm.get("kickoff")?.people?.exclude, [], "missing exclude = []")
+    let bad = #"{"slug":"kickoff","name":"Kickoff","description":"","emoji":"🚀","createdAt":"2026-10-27T10:00:00Z","people":"ana"}"#
+    try? Data(bad.utf8).write(to: projectDir.appendingPathComponent("project.json"))
+    t.check(pm.get("kickoff") != nil && pm.get("kickoff")?.people == nil, "a malformed people field never hides the project")
 }

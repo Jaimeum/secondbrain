@@ -38,10 +38,21 @@ extension AppState {
             return false
         }
         recordingIntro = RecordingIntroRequest(start: start)
-        // From the menu bar or ⌥⌘R the window may be behind other apps: the sheet lives on the main window.
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true }?.makeKeyAndOrderFront(nil)
+        // From the menu bar or ⌥⌘R the window may be behind other apps, or closed: the sheet lives on the main window.
+        showMainWindow()
         return true
+    }
+
+    /// Brings the main window forward, reopening it when the user closed it (the app lives on in the menu bar).
+    func showMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true && $0.isVisible }) {
+            window.makeKeyAndOrderFront(nil)
+        } else if let open = openMainWindowAction {
+            open()
+        } else {
+            NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true }?.makeKeyAndOrderFront(nil)
+        }
     }
 }
 

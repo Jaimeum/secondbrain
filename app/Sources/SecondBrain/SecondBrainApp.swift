@@ -166,6 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
 struct RootView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -177,14 +178,19 @@ struct RootView: View {
             }
         }
         .frame(minWidth: 920, minHeight: 620)   // CONTRACT §15.3
+        // The scene's openWindow outlives this window: ⌥⌘R / the menu bar can reopen it once closed.
+        .onAppear { state.openMainWindowAction = { [openWindow] in openWindow(id: "main") } }
     }
 }
 
 /// The brand symbol in the menu bar (an 18 pt template image); while recording, the same symbol plus a `record` dot.
 struct MenuBarLabel: View {
+    @Environment(\.openWindow) private var openWindow
     let isRecording: Bool
 
     var body: some View {
         Image(nsImage: isRecording ? BrandMenuBarIcon.recording : BrandMenuBarIcon.idle)
+            // Always on screen, so the main window can be reopened from anywhere (`AppState.showMainWindow`).
+            .onAppear { AppState.shared.openMainWindowAction = { openWindow(id: "main") } }
     }
 }

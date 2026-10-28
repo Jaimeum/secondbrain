@@ -114,6 +114,9 @@ final class AppState {
     var editingPage: String?
     /// The first "Grabar" waiting for RecordingIntroSheet (§16.11; MainView presents it while set).
     var recordingIntro: RecordingIntroRequest?
+    /// SwiftUI's `openWindow(id: "main")`, left by the menu bar icon (always on screen): the main window can be
+    /// reopened from code that has no view (⌥⌘R, the menu bar's Grabar) after the user closed it.
+    @ObservationIgnored var openMainWindowAction: (() -> Void)?
     /// "Historial" over any screen (MainView presents `ActivitySheet`).
     var historyRequest: HistoryRequest?
     /// "Enlace…" from the sidebar's "+ Agregar".

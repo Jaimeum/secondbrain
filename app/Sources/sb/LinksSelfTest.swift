@@ -141,6 +141,10 @@ import Foundation
             let manifest = SessionManifest(id: SessionManifest.newId(at: event.start), title: event.title, projectSlug: acme.slug,
                                            startedAt: event.start, micCaptured: true, calendarEventId: event.id, attendees: nil)
             engine.recordingStarted(manifest)
+            var asBefore = event
+            asBefore.webLink = nil   // v0.6 linked the event without keeping its link
+            engine.linkCalendarEvent(sourceId: manifest.id, event: asBefore)
+            t.eq(engine.source(manifest.id)?.calendarEventId, event.id, "old recording: tied to its event")
             t.eq(engine.source(manifest.id)?.webLink, nil, "old recording: no link yet")
             let filled = await engine.fillMeetingWebLink(sourceId: manifest.id, accounts: [account]) { _ in demo }
             t.check(filled && engine.source(manifest.id)?.webLink == event.webLink, "old recording: the event's link found and kept")

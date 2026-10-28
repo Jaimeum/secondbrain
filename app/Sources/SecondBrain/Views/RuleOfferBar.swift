@@ -18,6 +18,8 @@ final class RuleOffer {
         /// «¿Mandar siempre lo de **@acme.com** a 🚀 Acme?» (who in bold).
         var question: AttributedString
         var phase: Phase = .asking
+        /// v0.7 backfill: a mail rule offers "Traer anteriores…" once created (§17.6).
+        var kind: RoutingSubject.Kind = .mail
     }
 
     private(set) var current: Current?
@@ -45,7 +47,7 @@ final class RuleOffer {
     func show(_ rule: RoutingRule, projectLabel: String, kind: RoutingSubject.Kind = .mail) {
         if let other = Self.active, other !== self { other.dismiss() }
         Self.active = self
-        current = Current(rule: rule, question: Self.question(for: rule, projectLabel: projectLabel, kind: kind))
+        current = Current(rule: rule, question: Self.question(for: rule, projectLabel: projectLabel, kind: kind), kind: kind)
         schedule(Self.askSeconds)
     }
 
@@ -72,6 +74,11 @@ final class RuleOffer {
             current?.phase = .failed(FriendlyError.message(error))
             schedule(Self.doneSeconds)
         }
+    }
+
+    /// v0.7 backfill: "Traer anteriores…" is open — the line stays until its sheet closes (then `dismiss()`).
+    func hold() {
+        timer?.cancel()
     }
 
     /// "Solo esta vez", or the action it was about was undone.
@@ -136,6 +143,7 @@ struct RuleOfferBar: View {
     @Environment(AppState.self) private var state
     let offer: RuleOffer
     var compact = false
+    @ViewState private var backfill: RuleBackfillItem?   // MARK: v0.7 backfill
 
     var body: some View {
         if let current = offer.current {
@@ -160,15 +168,30 @@ struct RuleOfferBar: View {
                         }
                     }
                 case .created:
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.color.success)
-                        Text(L("rules.offer.created")).foregroundStyle(Brand.color.text).lineLimit(1)
-                        Text(verbatim: "·").foregroundStyle(Brand.color.text3)
-                        Button(L("rules.offer.undo")) { offer.undo(state: state) }
-                            .buttonStyle(.plain)
-                            .font(Brand.callout)
-                            .foregroundStyle(Brand.color.accent)
-                        Spacer(minLength: 0)
+                    // MARK: v0.7 backfill — §17.6 "Traer anteriores…" right after "Sí, siempre" (wraps when narrow).
+                    let earlier = current.kind == .mail && canBackfill(current.rule, state: state)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            createdLabel
+                            if earlier {
+                                Text(verbatim: "·").foregroundStyle(Brand.color.text3)
+                                bringEarlier(current.rule)
+                            }
+                            Text(verbatim: "·").foregroundStyle(Brand.color.text3)
+                            undoButton
+                            Spacer(minLength: 0)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            createdLabel
+                            HStack(spacing: 8) {
+                                if earlier {
+                                    bringEarlier(current.rule)
+                                    Text(verbatim: "·").foregroundStyle(Brand.color.text3)
+                                }
+                                undoButton
+                                Spacer(minLength: 0)
+                            }
+                        }
                     }
                 case .failed(let message):
                     Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -183,7 +206,34 @@ struct RuleOfferBar: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
             .transition(.opacity)
+            .sheet(item: $backfill, onDismiss: { offer.dismiss() }) { RuleBackfillSheet(rule: $0.rule) }
         }
+    }
+
+    private var createdLabel: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.color.success)
+            Text(L("rules.offer.created")).foregroundStyle(Brand.color.text).lineLimit(1)
+        }
+    }
+
+    private var undoButton: some View {
+        Button(L("rules.offer.undo")) { offer.undo(state: state) }
+            .buttonStyle(.plain)
+            .font(Brand.callout)
+            .foregroundStyle(Brand.color.accent)
+    }
+
+    /// v0.7 backfill: "Traer anteriores…" keeps the line on screen while its sheet is open.
+    private func bringEarlier(_ rule: RoutingRule) -> some View {
+        Button(L("batch.bringEarlier")) {
+            offer.hold()
+            backfill = RuleBackfillItem(rule: rule)
+        }
+        .buttonStyle(.plain)
+        .font(Brand.callout)
+        .foregroundStyle(Brand.color.accent)
+        .lineLimit(1)
     }
 
     private var icon: some View {

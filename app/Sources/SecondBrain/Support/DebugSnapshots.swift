@@ -23,6 +23,7 @@ enum DebugSnapshots {
             // light and dark, at the default size and at the minimum window size (where layouts break first).
             if ProcessInfo.processInfo.environment["SB_SNAPSHOT_WINDOW"] == "1" {
                 await renderWindows(state: state, dir: dir)
+                await BackfillSnapshots.render(state: state, dir: dir)   // MARK: v0.7 backfill
                 NSApp.terminate(nil)
                 return
             }

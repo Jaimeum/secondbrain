@@ -631,6 +631,7 @@ final class AppState {
     // MARK: Queue status
 
     func queueStatus(now: Date = Date()) -> QueueStatus? {
+        if let saving = MailBatchSaver.shared.status { return saving }   // MARK: v0.7 backfill — §17.6 progress
         let jobs = engine.jobs
         if let job = jobs.first(where: { $0.status == .running }) {
             let title = engine.sources.first { $0.id == job.sourceId }?.title ?? ""

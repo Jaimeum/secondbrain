@@ -422,5 +422,168 @@
 			<string>%ld actualizaciones esta semana</string>
 		</dict>
 	</dict>
+	<!-- v0.7 backfill -->
+	<key>batch.title.selection</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Guardar %ld hilo</string>
+			<key>many</key>
+			<string>Guardar %ld hilos</string>
+			<key>other</key>
+			<string>Guardar %ld hilos</string>
+		</dict>
+	</dict>
+	<key>batch.title.rule</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Encontré %ld correo anterior</string>
+			<key>many</key>
+			<string>Encontré %ld correos anteriores</string>
+			<key>other</key>
+			<string>Encontré %ld correos anteriores</string>
+		</dict>
+	</dict>
+	<key>batch.days</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld día</string>
+			<key>many</key>
+			<string>%ld días</string>
+			<key>other</key>
+			<string>%ld días</string>
+		</dict>
+	</dict>
+	<key>batch.save</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Guardar %ld correo</string>
+			<key>many</key>
+			<string>Guardar %ld correos</string>
+			<key>other</key>
+			<string>Guardar %ld correos</string>
+		</dict>
+	</dict>
+	<key>batch.attachments</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld adjunto</string>
+			<key>many</key>
+			<string>%ld adjuntos</string>
+			<key>other</key>
+			<string>%ld adjuntos</string>
+		</dict>
+	</dict>
+	<key>batch.alreadySaved</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld hilo ya guardado</string>
+			<key>many</key>
+			<string>%ld hilos ya guardados</string>
+			<key>other</key>
+			<string>%ld hilos ya guardados</string>
+		</dict>
+	</dict>
+	<key>batch.row.messages</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld correo</string>
+			<key>many</key>
+			<string>%ld correos</string>
+			<key>other</key>
+			<string>%ld correos</string>
+		</dict>
+	</dict>
+	<key>batch.row.new</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld nuevo</string>
+			<key>many</key>
+			<string>%ld nuevos</string>
+			<key>other</key>
+			<string>%ld nuevos</string>
+		</dict>
+	</dict>
+	<key>batch.selected</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld seleccionado</string>
+			<key>many</key>
+			<string>%ld seleccionados</string>
+			<key>other</key>
+			<string>%ld seleccionados</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

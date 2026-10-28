@@ -241,6 +241,7 @@ struct WikiPagePane: View {
     @ViewState private var threadKey: String?
     @ViewState private var loadedTitle: String?
     @ViewState private var width: CGFloat = 800
+    @ViewState private var height: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -248,13 +249,14 @@ struct WikiPagePane: View {
             Rectangle().fill(Brand.color.line).frame(height: 1)
             // v0.7 (§17.4): a thread page opened in Contenido shows its conversation on top too.
             if let key = selection.flatMap(ThreadConversationView.threadKey(forPage:)) {
-                ThreadConversationView(threadKey: key)
+                ThreadConversationView(threadKey: key, paneHeight: height)
             }
             // The header already names the page: the "Tipo" chip would only repeat it.
             WikiWebView(vault: state.engine.vault, path: selection, hideType: true) { path in navigate(to: path) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .task(id: selection) { await loadTitle() }
         .onChange(of: selection) { old, new in
             if goingBack {

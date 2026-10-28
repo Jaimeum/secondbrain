@@ -10,6 +10,9 @@ struct ThreadConversationView: View {
     @Environment(AppState.self) private var state
     let threadKey: String
     var scope: Scope = .brain
+    /// Height of the pane it sits in (0 = unknown): the conversation takes at most 40 % of it, so Claude's page keeps
+    /// most of a short window.
+    var paneHeight: CGFloat = 0
 
     struct Loaded: Equatable {
         var info: ThreadInfo
@@ -22,6 +25,11 @@ struct ThreadConversationView: View {
     @AppStorage("thread.conversation.expanded") private var expanded = true
 
     static let maxHeight: CGFloat = 340
+
+    private var cap: CGFloat {
+        guard paneHeight > 0 else { return Self.maxHeight }
+        return min(Self.maxHeight, max(120, (paneHeight * 0.4).rounded()))
+    }
 
     var body: some View {
         Group {
@@ -43,16 +51,17 @@ struct ThreadConversationView: View {
 
     private func load() async {
         let vault = state.engine.vault, key = threadKey
-        // §17.7 lazy migration: mail saved before v0.7 gets its link once per session (bumps the vault when it adds any).
-        if await state.engine.fillMissingWebLinks(threadKey: key) > 0 { state.bumpVault(); return }
         let result = await Task.detached(priority: .userInitiated) { () -> Loaded? in
             guard let info = vault.threadInfo(key: key) else { return nil }
             var texts: [String: String] = [:]
             for m in info.messages { texts[m.file] = vault.newText(of: m, in: info) }
             return Loaded(info: info, texts: texts)
         }.value
-        guard !Task.isCancelled, result != loaded else { return }
-        loaded = result
+        guard !Task.isCancelled else { return }
+        if result != loaded { loaded = result }
+        // §17.7 lazy migration: mail saved before v0.7 gets its link once per session, after the conversation is on
+        // screen (bumps the vault when it adds any, which reloads it with the buttons).
+        if await state.engine.fillMissingWebLinks(threadKey: key) > 0, !Task.isCancelled { state.bumpVault() }
     }
 
     // MARK: Bar
@@ -105,7 +114,7 @@ struct ThreadConversationView: View {
                 .padding(.bottom, Brand.spacing.m)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
-            .frame(height: min(max(contentHeight, 1), Self.maxHeight))
+            .frame(height: min(max(contentHeight, 1), cap))
             .onAppear { if let last = list.last { proxy.scrollTo(last.file, anchor: .bottom) } }
             .onChange(of: list.count) { if let last = list.last { proxy.scrollTo(last.file, anchor: .bottom) } }
         }
@@ -113,7 +122,7 @@ struct ThreadConversationView: View {
 }
 
 /// One email of the conversation: who and when, what's new in it (folded past a few lines), its saved attachments and
-/// "Abrir en Outlook/Gmail". Mine: "Tú", on the accent background, set in from the left.
+/// "Abrir en Outlook/Gmail". Mine: "Tú", on a different background with an accent outline, set in from the left.
 struct ThreadMessageCard: View {
     @Environment(AppState.self) private var state
     let message: ThreadInfo.Message
@@ -177,10 +186,12 @@ struct ThreadMessageCard: View {
             }
         }
         .padding(Brand.spacing.m)
+        // Mine: `cardAlt` (clearly apart from the others' `card` in light and dark, and text2 stays AA on it) with an
+        // accent outline.
         .background(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
-            .fill(message.isFromOwner ? Brand.color.accentSoft : Brand.color.card))
+            .fill(message.isFromOwner ? Brand.color.cardAlt : Brand.color.card))
         .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
-            .strokeBorder(message.isFromOwner ? Color.clear : Brand.color.line))
+            .strokeBorder(message.isFromOwner ? Brand.color.accent.opacity(0.55) : Brand.color.line))
         .padding(.leading, message.isFromOwner ? 32 : 0)
         .padding(.trailing, message.isFromOwner ? 0 : 32)
         .accessibilityElement(children: .contain)

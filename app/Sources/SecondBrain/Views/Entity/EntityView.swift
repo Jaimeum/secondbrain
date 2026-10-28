@@ -25,6 +25,7 @@ struct EntityView: View {
     @ViewState private var pageHeadings: [String] = []
     /// v0.7 (§17.2): the files this ficha lists (Archivos section).
     @ViewState private var files: [FileEntry] = []
+    @ViewState private var paneHeight: CGFloat = 0
 
     private var entity: Entity? { snapshot.entity(path) }
 
@@ -43,7 +44,7 @@ struct EntityView: View {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
             if let threadKey = ThreadConversationView.threadKey(forPage: path) {   // v0.7 (§17.4)
-                ThreadConversationView(threadKey: threadKey, scope: scope)
+                ThreadConversationView(threadKey: threadKey, scope: scope, paneHeight: paneHeight)
             }
             WikiWebView(vault: state.engine.vault, path: path, hideType: true, showsChrome: false,
                         appendix: loaded ? EntityMarkdown.sections(
@@ -54,6 +55,7 @@ struct EntityView: View {
             }
         }
         .background(Brand.color.surface)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { paneHeight = $0 }
         .navigationTitle(shownTitle)
         .task(id: "\(path)-\(state.vaultRevision)-\(state.tasksRevision)-\(state.projects.hashValue)") {
             let vault = state.engine.vault, page = path

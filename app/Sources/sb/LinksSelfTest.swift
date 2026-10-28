@@ -71,16 +71,22 @@ import Foundation
         t.check(info?.messages.allSatisfy { $0.webLink == nil } == true, "links stripped (pre-v0.7 thread)")
         t.check(info.flatMap { OriginalLinks.latestLink(in: $0) } == nil, "Outlook mail without link → no button yet")
         let counter = CountingProvider(demo)
-        let filled = await engine.fillMissingWebLinks(threadKey: key, accounts: [account]) { _ in counter }
+        counter.offline = true
+        let offline = await engine.fillMissingWebLinks(threadKey: key, accounts: [account]) { _ in counter }
+        t.check(offline.added == 0 && offline.retry, "offline: nothing filled, tried again later")
+        counter.offline = false
+        counter.reset()
+        let filled = await engine.fillMissingWebLinks(threadKey: key, accounts: [account]) { _ in counter }.added
+        t.check(!(await engine.fillMissingWebLinks(threadKey: key, accounts: [account]) { _ in counter }).retry, "filled: nothing to retry")
         t.eq(filled, thread.count, "lazy fill: every missing link")
         t.eq(counter.fetches, thread.count, "one call per missing message")
         info = engine.vault.threadInfo(key: key)
         t.check(info?.messages.allSatisfy { $0.webLink?.hasPrefix("https://outlook.office.com/mail/inbox/id/") == true } == true,
                 "lazy fill persisted in _thread.json")
-        let again = await engine.fillMissingWebLinks(threadKey: key, accounts: [account]) { _ in counter }
+        let again = await engine.fillMissingWebLinks(threadKey: key, accounts: [account]) { _ in counter }.added
         t.check(again == 0 && counter.fetches == thread.count, "nothing missing → no calls")
         stripWebLinks(folder)
-        let none = await engine.fillMissingWebLinks(threadKey: key, accounts: []) { _ in counter }
+        let none = await engine.fillMissingWebLinks(threadKey: key, accounts: []) { _ in counter }.added
         t.check(none == 0 && counter.fetches == thread.count, "Outlook account not connected → skipped")
 
         // --- Gmail: the link is built, no call needed; without a link the button still has the conversation URL.
@@ -100,7 +106,7 @@ import Foundation
                      OriginalLinks.gmailThread(accountEmail: gAccount.email, threadId: g.threadId.isEmpty ? g.id : g.threadId),
                      "Gmail without link → conversation URL fallback")
                 let gCounter = CountingProvider(gDemo)
-                let gFilled = await engine.fillMissingWebLinks(threadKey: gKey, accounts: [gAccount]) { _ in gCounter }
+                let gFilled = await engine.fillMissingWebLinks(threadKey: gKey, accounts: [gAccount]) { _ in gCounter }.added
                 t.check(gFilled == 1 && gCounter.fetches == 0, "Gmail lazy fill builds the URL without calls")
                 t.eq(engine.vault.threadInfo(key: gKey)?.messages.first?.webLink,
                      OriginalLinks.gmailThread(accountEmail: gAccount.email, threadId: g.id), "Gmail lazy link uses the account")
@@ -148,7 +154,11 @@ private func stripWebLinks(_ folder: URL) {
 /// Counts the message fetches of a wrapped provider (the lazy fill makes one per missing link).
 private final class CountingProvider: MailCalendarProvider, @unchecked Sendable {
     let inner: MailCalendarProvider
-    var fetches = 0
+    private let lock = NSLock()
+    private var count = 0
+    var offline = false
+    var fetches: Int { lock.withLock { count } }
+    func reset() { lock.withLock { count = 0 } }
     init(_ inner: MailCalendarProvider) { self.inner = inner }
     var account: ConnectedAccount { inner.account }
     func profile() async throws -> ConnectedAccount { try await inner.profile() }
@@ -158,7 +168,11 @@ private final class CountingProvider: MailCalendarProvider, @unchecked Sendable 
     func searchMessages(_ query: String, pageToken: String?) async throws -> (messages: [MailMessageSummary], next: String?) {
         try await inner.searchMessages(query, pageToken: pageToken)
     }
-    func fetchMessage(id: String) async throws -> MailMessageFull { fetches += 1; return try await inner.fetchMessage(id: id) }
+    func fetchMessage(id: String) async throws -> MailMessageFull {
+        if offline { throw AccountError.network("offline") }
+        lock.withLock { count += 1 }
+        return try await inner.fetchMessage(id: id)
+    }
     func fetchThread(id: String) async throws -> [MailMessageFull] { try await inner.fetchThread(id: id) }
     func events(from: Date, to: Date) async throws -> [CalendarEvent] { try await inner.events(from: from, to: to) }
     func listAttachments(messageId: String) async throws -> [AttachmentInfo] { try await inner.listAttachments(messageId: messageId) }

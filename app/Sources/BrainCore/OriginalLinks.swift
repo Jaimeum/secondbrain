@@ -104,14 +104,15 @@ public extension VaultStore {
 
 public extension BrainEngine {
     /// Messages of `threadKey` that came from a connected account (`externalId`) but have no `webLink` get one, saved in
-    /// `_thread.json`: Outlook asks Graph (one call per message), Gmail builds the conversation URL, other providers
-    /// (the demo) read the message. Accounts no longer connected are skipped. Returns how many links were added.
+    /// `_thread.json`: Outlook asks Graph (one call per message, a few at a time), Gmail builds the conversation URL, other
+    /// providers (the demo) read the message. Accounts no longer connected are skipped. Returns how many links were added
+    /// and whether a call failed for a reason that may pass (network, expired session: worth trying again later).
     @discardableResult
     func fillMissingWebLinks(threadKey: String, accounts: [ConnectedAccount],
-                             provider: (ConnectedAccount) -> MailCalendarProvider) async -> Int {
-        guard let thread = vault.threadInfo(key: threadKey) else { return 0 }
+                             provider: (ConnectedAccount) -> MailCalendarProvider) async -> (added: Int, retry: Bool) {
+        guard let thread = vault.threadInfo(key: threadKey) else { return (0, false) }
         let missing = thread.messages.filter { $0.webLink == nil && OriginalLinks.split(externalId: $0.externalId) != nil }
-        guard !missing.isEmpty else { return 0 }
+        guard !missing.isEmpty else { return (0, false) }
         let participants = Set(thread.participants.compactMap { $0.email?.lowercased() })
         func account(for p: AccountProvider) -> ConnectedAccount? {
             let list = accounts.filter { $0.provider == p }
@@ -119,6 +120,7 @@ public extension BrainEngine {
             return list.first { participants.contains($0.email) } ?? list.first
         }
         var links: [String: String] = [:]
+        var remote: [(file: String, provider: MailCalendarProvider, messageId: String)] = []
         for m in missing {
             guard let ext = OriginalLinks.split(externalId: m.externalId) else { continue }
             let acc = account(for: ext.provider)
@@ -128,34 +130,60 @@ public extension BrainEngine {
                 continue
             }
             guard let acc else { continue }
-            let p = provider(acc)
-            do {
-                let link: String?
-                if let graph = p as? MicrosoftGraphProvider {
-                    link = try await graph.webLink(messageId: ext.messageId)
-                } else {
-                    link = try await p.fetchMessage(id: ext.messageId).summary.webLink
+            remote.append((m.file, provider(acc), ext.messageId))
+        }
+        var retry = false
+        // A few calls at a time: a long thread saved before v0.7 doesn't wait for one call after another.
+        for start in stride(from: 0, to: remote.count, by: 6) {
+            let slice = Array(remote[start..<min(start + 6, remote.count)])
+            let results = await withTaskGroup(of: (String, String?, Bool).self) { group -> [(String, String?, Bool)] in
+                for job in slice {
+                    let p = job.provider, file = job.file, id = job.messageId
+                    group.addTask {
+                        do {
+                            let link: String?
+                            if let graph = p as? MicrosoftGraphProvider {
+                                link = try await graph.webLink(messageId: id)
+                            } else {
+                                link = try await p.fetchMessage(id: id).summary.webLink
+                            }
+                            return (file, link, false)
+                        } catch {
+                            Log.info("webLink of \(file) in \(threadKey) not available: \(error)")
+                            switch error as? AccountError {
+                            case .network, .unauthorized: return (file, nil, true)
+                            default: return (file, nil, error is URLError)
+                            }
+                        }
+                    }
                 }
-                if let link { links[m.file] = link }
-            } catch {
-                Log.info("webLink of \(m.file) in \(threadKey) not available: \(error)")
+                var out: [(String, String?, Bool)] = []
+                for await r in group { out.append(r) }
+                return out
+            }
+            for (file, link, transient) in results {
+                if let link { links[file] = link }
+                if transient { retry = true }
             }
         }
-        do { return try vault.setWebLinks(links, threadKey: threadKey) } catch {
+        do { return (try vault.setWebLinks(links, threadKey: threadKey), retry) } catch {
             Log.error("webLink: could not save _thread.json of \(threadKey): \(error)")
-            return 0
+            return (0, true)
         }
     }
 
-    /// Same, with the connected accounts. Once per thread per session (opening it again doesn't call again).
+    /// Same, with the connected accounts. Once per thread per session (opening it again doesn't call again), unless a
+    /// call failed for a reason that may pass (offline, session to renew): then the next opening tries again.
     @discardableResult
     func fillMissingWebLinks(threadKey: String) async -> Int {
         guard !WebLinkFill.tried.contains(threadKey) else { return 0 }
         WebLinkFill.tried.insert(threadKey)
         let store = accounts
-        return await fillMissingWebLinks(threadKey: threadKey, accounts: store.accounts.filter(\.provider.hasMail)) {
+        let result = await fillMissingWebLinks(threadKey: threadKey, accounts: store.accounts.filter(\.provider.hasMail)) {
             store.provider(for: $0)
         }
+        if result.retry { WebLinkFill.tried.remove(threadKey) }
+        return result.added
     }
 }
 

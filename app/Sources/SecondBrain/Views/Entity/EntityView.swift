@@ -376,7 +376,7 @@ enum EntityStyle {
         case .org: "building.2"
         case .project: "sparkles"
         case .meeting: "waveform"
-        case .email: "envelope"
+        case .emailThread: "envelope"
         case .document: "doc.text"
         case .note: "note.text"
         case .url: "link"

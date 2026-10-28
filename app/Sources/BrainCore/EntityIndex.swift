@@ -10,7 +10,7 @@ import Foundation
 // resolution and backlinks are recomputed in memory (cheap) because one new page can change what a name resolves to.
 
 public enum EntityKind: String, Codable, Sendable, CaseIterable {
-    case person, org, project, meeting, email, document, note, url, topic, decision, question, repo, facts, page
+    case person, org, project, meeting, emailThread, document, note, url, topic, decision, question, repo, facts, page   // v0.7 (§17.4)
 }
 
 /// One wiki page as the ficha sees it.
@@ -163,7 +163,7 @@ public final class EntityIndex: @unchecked Sendable {
                 switch e.kind {
                 case .project: continue   // in Proyectos
                 case .meeting: section = .meetings
-                case .email: section = .emails
+                case .emailThread: section = .emails
                 case .document, .note, .url: section = .documents
                 case .decision: section = .decisions
                 default: section = .related
@@ -243,7 +243,7 @@ public final class EntityIndex: @unchecked Sendable {
                 for n in neighbors(of: e.path) {
                     guard let other = entities[n], other.projectSlug == slug else { continue }
                     switch other.kind {
-                    case .meeting, .email:
+                    case .meeting, .emailThread:
                         count += 1
                         if let d = other.eventDate, d > (last ?? .distantPast) { last = d }
                     case .document, .note, .url:
@@ -441,7 +441,7 @@ public final class EntityIndex: @unchecked Sendable {
         switch page.kind {
         case .person: kind = .person
         case .meeting: kind = .meeting
-        case .email: kind = .email
+        case .emailThread: kind = .emailThread
         case .document: kind = .document
         case .note: kind = .note
         case .url: kind = .url

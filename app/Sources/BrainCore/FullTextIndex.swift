@@ -8,7 +8,7 @@ import Foundation
 
 /// What a page is, by its folder (the ⌘K group it goes to).
 public enum SearchPageKind: String, Sendable, Hashable, CaseIterable {
-    case person, org, topic, decision, meeting, email, note, question, repo
+    case person, org, topic, decision, meeting, emailThread, note, question, repo   // v0.7 (§17.4)
     /// A page at the root of a project's wiki (overview, timeline…).
     case project
 }
@@ -199,7 +199,7 @@ public final class FullTextIndex: @unchecked Sendable {
             if parts.count == 4 { return .project }
             switch parts[3] {
             case "meetings": return .meeting
-            case "emails": return .email
+            case "emails": return .emailThread
             case "sources": return .note
             case "decisions": return .decision
             case "questions": return .question

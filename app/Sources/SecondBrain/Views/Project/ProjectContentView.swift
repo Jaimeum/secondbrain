@@ -292,6 +292,7 @@ struct ProjectContentView: View {
     }
 
     private func caption(_ entry: TimelineEntry) -> String {
+        if let thread = entry.thread { return ThreadText.caption(thread, last: entry.date) }   // v0.7 (§17.4)
         let date = Fmt.dayTime(entry.date, hasTime: entry.hasTime)
         return entry.kind == .task || entry.kind == .decision || entry.kind == .milestone
             ? "\(entry.kind.label) · \(date)" : date

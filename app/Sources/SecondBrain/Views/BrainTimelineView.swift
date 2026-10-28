@@ -344,6 +344,12 @@ private struct EntryRow: View {
                             .help(L("content.fromCalendar"))
                     }
                 }
+                if let thread = entry.thread {   // v0.7 (§17.4): one row per thread
+                    Text(ThreadText.caption(count: thread.messageCount, last: nil, senders: thread.senders))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                }
                 if (showProject && state.project(entry.projectSlug) != nil) || addedLater {
                     HStack(spacing: 6) {
                         if showProject, let project = state.project(entry.projectSlug) {

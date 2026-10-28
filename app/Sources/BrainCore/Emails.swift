@@ -117,7 +117,7 @@ extension VaultStore {
     /// `_thread.json`, or one rebuilt from the message files when it is missing.
     func threadMeta(at folder: String) -> ThreadMeta? {
         let dir = url(for: folder)
-        if let meta = ThreadMeta.load(from: dir) { return meta }
+        if let meta = ThreadMetaCache.load(from: dir) { return meta }   // v0.7: cached by the file's mtime and size
         let files = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).filter { $0.hasSuffix(".md") }.sorted()
         guard !files.isEmpty else { return nil }
         var meta = ThreadMeta(key: (folder as NSString).lastPathComponent, subject: "", participants: [], messages: [], createdAt: Date())
@@ -128,7 +128,8 @@ extension VaultStore {
             meta.messages.append(.init(file: file, date: Frontmatter.field("date", in: text).flatMap { SBDate.parseISO($0)?.date },
                                        from: from, sourceId: Frontmatter.field("source_id", in: text),
                                        bodyHash: EmailParser.bodyFingerprint(Self.emailBody(text).body), added: nil,
-                                       externalId: Frontmatter.field("external_id", in: text)))
+                                       externalId: Frontmatter.field("external_id", in: text),
+                                       webLink: Frontmatter.field("web_link", in: text)))
             meta.addParticipants([from].compactMap { $0 })
         }
         return meta
@@ -246,7 +247,7 @@ public extension BrainEngine {
     /// same message again throws `EngineError.duplicateEmail`.
     @discardableResult
     func addEmail(_ email: ParsedEmail, threadKey: String?, projectSlug: String?, externalId: String?,
-                  routeIfUnassigned: Bool = true) throws -> SourceRecord {
+                  routeIfUnassigned: Bool = true, origin: MailOrigin? = nil) throws -> SourceRecord {
         guard !email.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(email.quotedHistory ?? "").isEmpty else {
             throw EngineError.emptyEmail
         }
@@ -322,7 +323,12 @@ public extension BrainEngine {
         if meta.subject.isEmpty { meta.subject = EmailParser.normalizeSubject(email.subject ?? "") }
         meta.addParticipants([email.from].compactMap { $0 } + email.to + email.cc)
         meta.messages.append(.init(file: file.lastPathComponent, date: email.date, from: email.from, sourceId: id,
-                                   bodyHash: EmailParser.bodyFingerprint(email.body), added: added, externalId: externalId))
+                                   bodyHash: EmailParser.bodyFingerprint(email.body), added: added, externalId: externalId,
+                                   webLink: origin?.webLink, isFromOwner: email.isFromOwner))
+        // v0.7 (§17.4): this provider conversation now lives here; later mail of it always joins this thread.
+        if let origin, let pid = origin.providerThreadId, !pid.isEmpty {
+            meta.providerThreadIds = (meta.providerThreadIds ?? [:]).merging([origin.accountId: pid]) { _, new in new }
+        }
         meta.messages.sort { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }
         try meta.save(to: dir)
 

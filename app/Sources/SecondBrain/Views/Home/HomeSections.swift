@@ -119,6 +119,8 @@ struct HomeRecentItem: Identifiable {
     var sortDate: Date
     var source: SourceRecord?
     var pagePath: String?
+    /// v0.7: the email thread this card stands for.
+    var threadKey: String?
     var sourceId: String? { source?.id }
 
     init(source: SourceRecord) {
@@ -148,10 +150,38 @@ struct HomeRecentItem: Identifiable {
         source = latest
     }
 
+    /// v0.7 (§17.4): one email thread (`mails` newest first, never empty): its subject, "7 correos · último hace 2 h ·
+    /// Ana, Tú, Luis", opening the thread through its newest email. Senders come from the source titles
+    /// ("Asunto — Ana"), so no file is read while Inicio draws.
+    init(thread mails: [SourceRecord], now: Date = Date()) {
+        let latest = mails[0]
+        id = "thread:" + (latest.threadKey ?? latest.id)
+        symbol = latest.kind.symbol
+        kindLabel = L("thread.kind")
+        let parts = { (s: SourceRecord) in s.title.components(separatedBy: " — ") }
+        title = parts(latest).first ?? latest.title
+        var senders: [String] = []
+        for mail in mails.reversed() {
+            let who = parts(mail).dropFirst().joined(separator: " — ")
+            let name = ["tú", "you"].contains(who.lowercased()) ? L("thread.you") : (who.split(separator: " ").first.map(String.init) ?? "")
+            if !name.isEmpty, !senders.contains(name) { senders.append(name) }
+        }
+        detail = ThreadText.caption(count: mails.count, last: latest.timelineDate, senders: senders, now: now)
+        projectSlug = latest.projectSlug
+        date = latest.timelineDate
+        sortDate = mails.map(\.updatedAt).max() ?? latest.updatedAt
+        source = latest
+        threadKey = latest.threadKey
+    }
+
     @MainActor init(entry: TimelineEntry) {
         id = "entry:" + entry.id
         symbol = entry.kind.symbol
-        kindLabel = entry.kind.label
+        kindLabel = entry.thread == nil ? entry.kind.label : L("thread.kind")
+        if let thread = entry.thread {
+            detail = ThreadText.caption(thread, last: entry.date)
+            threadKey = thread.key
+        }
         title = entry.title
         projectSlug = entry.projectSlug
         date = entry.date

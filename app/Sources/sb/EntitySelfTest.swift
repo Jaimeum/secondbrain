@@ -89,7 +89,7 @@ struct EntitySelfTestCmd: AsyncParsableCommand {
     t.check(!meetings.isEmpty, "meetings indexed")
     t.check(meetings.allSatisfy { $0.eventDate != nil }, "every meeting has an event date")
     t.check(snap.entities.values.contains { $0.kind == .decision }, "decisions indexed")
-    t.check(snap.entities.values.contains { $0.kind == .email }, "email threads indexed")
+    t.check(snap.entities.values.contains { $0.kind == .emailThread }, "email threads indexed")
 
     // --- Backlinks and links.
     let back = snap.backlinks[andres] ?? []

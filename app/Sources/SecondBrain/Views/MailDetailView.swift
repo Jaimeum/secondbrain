@@ -238,8 +238,11 @@ struct MailDetailView: View {
                 }
             }
         } else {
+            // v0.7 (§17.4): a saved conversation reads "✓ En 🚀 Acme · Ver hilo" and opens the thread's ficha.
+            let isThread = source.threadKey != nil
             let open = Button { model.open(source) } label: {
-                Label(L("mail.saved") + " · " + L("mail.seeInProject"), systemImage: "checkmark")
+                Label(isThread ? L("mail.inProjectSeeThread", dest) : L("mail.saved") + " · " + L("mail.seeInProject"),
+                      systemImage: "checkmark")
                     .lineLimit(1)
             }
             .buttonStyle(.brandSecondary)
@@ -247,7 +250,7 @@ struct MailDetailView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Brand.spacing.m) {
                     open
-                    Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                    if !isThread { Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1) }
                     Spacer(minLength: 0)
                     SavedMoreMenu(source: source, model: model)
                 }
@@ -257,7 +260,7 @@ struct MailDetailView: View {
                         Spacer(minLength: 0)
                         SavedMoreMenu(source: source, model: model)
                     }
-                    Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
+                    if !isThread { Text(dest).font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1) }
                 }
             }
         }

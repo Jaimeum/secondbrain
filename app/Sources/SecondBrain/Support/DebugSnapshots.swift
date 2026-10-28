@@ -343,6 +343,12 @@ enum DebugSnapshots {
                 fichas["entity-home"] = .entity("index.md", .brain)
                 items.append(("entity-home", .home, nil))
             }
+            // v0.7 threads (§17.4): a thread's ficha with its conversation on top (the longest saved thread).
+            if let thread = state.engine.vault.allThreads().filter({ $0.pagePath.map { snap.entity($0) != nil } ?? false })
+                .max(by: { $0.messageCount < $1.messageCount }), let page = thread.pagePath {
+                fichas["entity-thread"] = .entity(page, .brain)
+                items.append(("entity-thread", .home, nil))
+            }
         }
         // v0.6 tasks: Pendientes with Proyecto / Persona / Buscar set (§16.13 "Pendientes con filtros").
         items.append(("tasks-filtered", .tasks, nil))

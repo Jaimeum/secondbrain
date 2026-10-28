@@ -43,7 +43,7 @@ enum SearchGroup: String, CaseIterable, Hashable {
         case .topic: (.topics, "tag")
         case .decision: (.decisions, "checkmark.seal")
         case .meeting: (.meetings, "waveform")
-        case .email: (.mail, "envelope")
+        case .emailThread: (.mail, "envelope")
         case .note: (.notes, "doc.text")
         case .question: (.questions, "questionmark.bubble")
         case .repo: (.repos, "chevron.left.forwardslash.chevron.right")
@@ -266,6 +266,7 @@ final class SearchIndex {
 
         // Sources: meetings, notes/documents/links, and one row per email thread (its newest message).
         var threads: [String: SourceRecord] = [:]
+        var threadCounts: [String: Int] = [:]
         func sourceItem(_ source: SourceRecord, group: SearchGroup, symbol: String) -> SearchItem {
             let sub = projectLabel(source.projectSlug) + " · " + Fmt.dayTime(source.timelineDate)
             if let page = summaryPage(of: source) {
@@ -288,14 +289,17 @@ final class SearchIndex {
                 out.append(sourceItem(source, group: .notes, symbol: source.kind.symbol))
             case .email:
                 let key = source.threadKey ?? source.id
+                threadCounts[key, default: 0] += 1
                 if let current = threads[key], current.timelineDate >= source.timelineDate { continue }
                 threads[key] = source
             case .github:
                 continue
             }
         }
-        for source in threads.values {
-            out.append(sourceItem(source, group: .mail, symbol: "envelope"))
+        for (key, source) in threads {
+            var item = sourceItem(source, group: .mail, symbol: "envelope")
+            item.subtitle += " · " + L("thread.count", threadCounts[key] ?? 1)   // v0.7 (§17.4): "· 7 correos"
+            out.append(item)
         }
 
         // Pages no source row stands for (people, companies, topics, decisions, saved questions, repos, facts.md, and

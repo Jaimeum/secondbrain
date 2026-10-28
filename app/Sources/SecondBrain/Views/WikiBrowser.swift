@@ -246,6 +246,10 @@ struct WikiPagePane: View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
+            // v0.7 (§17.4): a thread page opened in Contenido shows its conversation on top too.
+            if let key = selection.flatMap(ThreadConversationView.threadKey(forPage:)) {
+                ThreadConversationView(threadKey: key)
+            }
             // The header already names the page: the "Tipo" chip would only repeat it.
             WikiWebView(vault: state.engine.vault, path: selection, hideType: true) { path in navigate(to: path) }
         }

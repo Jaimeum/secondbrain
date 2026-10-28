@@ -21,6 +21,7 @@ struct SB: AsyncParsableCommand {
                       + [ChatCmd.self]  // MARK: v0.6 ask
                       + [SearchCmd.self]  // MARK: v0.6 search
                       + [AttachmentsCmd.self]  // v0.7 attach
+                      + [ThreadsCmd.self]  // MARK: v0.7 threads
     )
 }
 

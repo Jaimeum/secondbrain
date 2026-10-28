@@ -6,7 +6,7 @@ import Foundation
 // MARK: - Knowledge graph (§12.2)
 
 public enum GraphNodeKind: String, Codable, Sendable {
-    case project, meeting, email, document, note, url, person, topic, decision, question, task, page
+    case project, meeting, emailThread, document, note, url, person, topic, decision, question, task, page   // v0.7 (§17.4): emailThread = one node per thread
     case repo   // MARK: v0.4 github — wiki/repos/
     case org    // v0.6 (§16.4): global companies, orgs/<slug>.md
 }

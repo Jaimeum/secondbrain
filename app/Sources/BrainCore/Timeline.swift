@@ -25,10 +25,19 @@ struct TimelineBuilder {
     func build(sources: [SourceRecord], projectSlugs: [String]) -> [TimelineEntry] {
         var entries: [TimelineEntry] = []
         var knownKeys: Set<String> = []          // source keys / thread keys / decision names already listed
+        var threads: [String: [SourceRecord]] = [:]   // v0.7 (§17.4): one entry per email thread
         for src in sources {
-            entries.append(entry(for: src))
+            if src.kind == .email, let key = src.threadKey {
+                threads[key, default: []].append(src)
+            } else {
+                entries.append(entry(for: src))
+            }
             if let raw = src.rawPath { knownKeys.insert(((raw as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()) }
             if let thread = src.threadKey { knownKeys.insert(thread.lowercased()) }
+        }
+        if !threads.isEmpty {
+            let owners = Set(vault.ownerEmails())
+            for (key, members) in threads { entries.append(threadEntry(key: key, members: members, owners: owners)) }
         }
         let owner = vault.ownerInfo()
         for slug in projectSlugs {
@@ -73,6 +82,34 @@ struct TimelineBuilder {
         let hasTime = src.kind == .meeting || src.kind == .email || !SBDate.looksDateOnly(date)
         return TimelineEntry(id: "source:\(src.id)", date: date, hasTime: hasTime, addedAt: src.createdAt, kind: kind, title: title,
                              projectSlug: src.projectSlug, pagePath: page ?? src.rawPath, sourceId: src.id)
+    }
+
+    /// One row for a whole email thread (§17.4): its subject, dated by its newest message, opening the thread page.
+    /// `sourceId` = the newest learned message (so a reply still being learned doesn't hide the thread), else the newest.
+    private func threadEntry(key: String, members: [SourceRecord], owners: Set<String>) -> TimelineEntry {
+        let sorted = members.sorted { $0.timelineDate < $1.timelineDate }
+        let newest = sorted[sorted.count - 1]
+        let anchor = sorted.last { $0.status == .done } ?? newest
+        let info = vault.threadInfo(folder: (newest.rawPath as NSString?)?.deletingLastPathComponent ?? "", owners: owners)
+            ?? vault.threadInfo(key: key)
+        let you = lang.t("Tú", "You")
+        var title = info?.subject ?? ""
+        if title.isEmpty { title = newest.title.components(separatedBy: " — ").first ?? newest.title }
+        if title.isEmpty { title = lang.t("(sin asunto)", "(no subject)") }
+        let count = max(info?.messageCount ?? 0, members.count)
+        var senders = info?.senderNames(you: you) ?? []
+        if senders.isEmpty {
+            // No `_thread.json` (yet): the sender is the part after " — " of each source title.
+            for m in sorted {
+                let who = m.title.components(separatedBy: " — ").dropFirst().joined(separator: " — ")
+                let name = who.lowercased() == lang.t("tú", "you") ? you : (who.split(separator: " ").first.map(String.init) ?? "")
+                if !name.isEmpty, !senders.contains(name) { senders.append(name) }
+            }
+        }
+        let page = pagePath(for: newest)
+        return TimelineEntry(id: "thread:\(key)", date: newest.timelineDate, hasTime: true, addedAt: newest.createdAt, kind: .email,
+                             title: title, projectSlug: newest.projectSlug, pagePath: page ?? newest.rawPath, sourceId: anchor.id,
+                             thread: .init(key: key, messageCount: count, senders: senders))
     }
 
     private func pagePath(for src: SourceRecord) -> String? {

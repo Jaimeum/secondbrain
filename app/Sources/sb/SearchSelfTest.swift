@@ -75,7 +75,7 @@ private func write(_ root: URL, _ path: String, _ text: String) {
     t.eq(FullTextIndex.kind(of: "facts.md"), .note, "kind facts.md")
     t.eq(FullTextIndex.kind(of: "projects/k/wiki/overview.md"), .project, "kind project page")
     t.eq(FullTextIndex.kind(of: "projects/k/wiki/meetings/m.md"), .meeting, "kind meeting")
-    t.eq(FullTextIndex.kind(of: "projects/k/wiki/emails/e.md"), .email, "kind email")
+    t.eq(FullTextIndex.kind(of: "projects/k/wiki/emails/e.md"), .emailThread, "kind email")
     t.eq(FullTextIndex.kind(of: "projects/k/wiki/sources/s.md"), .note, "kind source")
     t.eq(FullTextIndex.kind(of: "projects/k/wiki/decisions/d.md"), .decision, "kind decision")
     t.eq(FullTextIndex.kind(of: "projects/k/wiki/topics/x.md"), .topic, "kind topic")

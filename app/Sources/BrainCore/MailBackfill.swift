@@ -127,6 +127,12 @@ extension BrainEngine {
                 return (key, src.projectSlug)
             }
         }
+        // §17.4: the provider's conversation id wins even when none of these messages is stored yet.
+        for id in Set(messages.map(\.summary.threadId)) where !id.isEmpty {
+            if let key = vault.threadKey(accountId: account.id, providerThreadId: id) {
+                return (key, vault.threadInfo(key: key)?.projectSlug)
+            }
+        }
         return nil
     }
 
@@ -155,11 +161,14 @@ extension BrainEngine {
     /// v0.7 integration point (backfill → attach): saves the attachments the user left ticked in the backwards sheet
     /// (`confirmed`, attachment ids) of `message`, stored as `emailSource`; the unticked ones are the user's discards.
     /// Returns how many were saved.
-    // v0.7: filled in by attach — forward to its `saveAttachments(…, .confirmed(ids))`. Until then nothing is saved.
     public func backfillSaveAttachments(_ attachments: [AttachmentInfo], confirmed: Set<String>, of message: MailMessageFull,
                                         emailSource: SourceRecord, account: ConnectedAccount,
                                         provider: MailCalendarProvider) async throws -> Int {
-        guard attachments.contains(where: { confirmed.contains($0.id) }) else { return 0 }
-        throw AttachmentError.notImplemented
+        guard !attachments.isEmpty else { return 0 }
+        // Ticked ids are saved; the unticked downloadable ones go to Descartados ("nada útil se pierde").
+        let ids = attachments.map(\.id).filter { confirmed.contains($0) }
+        let report = try await saveAttachments(for: message, account: account, mode: .confirmed(ids),
+                                               provider: provider, attachments: attachments)
+        return report.saved.count
     }
 }

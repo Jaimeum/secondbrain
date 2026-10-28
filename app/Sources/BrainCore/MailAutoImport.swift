@@ -269,7 +269,6 @@ public extension BrainEngine {
                         }
                     }
                     budget -= added.count
-                    if !added.isEmpty { await saveNewAttachments(for: [full], account: account, provider: provider) }   // v0.7 §17.1
                 } catch EngineError.emptyEmail, EngineError.duplicateEmail {
                     // Nothing to add, now or later.
                 } catch {
@@ -353,19 +352,11 @@ extension BrainEngine {
         do { try meta.save(to: dir) } catch { Log.error("follow: _thread.json of \(key) not saved: \(error)") }
     }
 
-    /// §17.1 forward: the attachments of a message the cycle just added (by rule or by following its thread).
-    // v0.7 integration: the attach area's automatic save (triage → keep / Claude for the ambiguous / Descartados) plugs
-    // in here. Until then this only asks the provider for the list (the v0.7 stubs throw `.notImplemented`).
+    /// §17.1 forward: the attachments of a message the cycle just added (by rule or by following its thread), saved
+    /// automatically (triage → keep / Claude for the ambiguous / Descartados). A failure is logged; the message stays.
     func saveIncomingAttachments(_ message: MailMessageFull, source: SourceRecord, account: ConnectedAccount,
                                  provider: MailCalendarProvider) async {
         guard message.summary.hasAttachments else { return }
-        do {
-            let list = try await provider.listAttachments(messageId: message.summary.id)
-            if !list.isEmpty { Log.info("follow: \(list.count) attachment(s) on \(source.id), not saved yet") }
-        } catch AttachmentError.notImplemented {
-            // Attachments not available yet.
-        } catch {
-            Log.error("follow: attachments of \(source.id) not listed: \(error)")
-        }
+        await saveNewAttachments(for: [message], account: account, provider: provider)
     }
 }

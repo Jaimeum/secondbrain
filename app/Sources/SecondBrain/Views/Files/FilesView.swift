@@ -294,18 +294,14 @@ struct FilesView: View {
         }
     }
 
-    /// "Rescatar": out of the store and into the brain, as if it had been saved (into its project, else Sin asignar).
+    /// "Rescatar": out of the store and into the brain, as if it had been saved — back into its email thread when it
+    /// still exists, else as a document/image of its project (or Sin asignar).
     private func rescue(_ item: DiscardedItem) {
-        let store = model.discardedStore(state)
         busy.insert(item.id)
         Task {
             defer { busy.remove(item.id) }
             do {
-                guard let (rescued, file) = try store.rescue(id: item.id) else { return }
-                // The engine imports it as a document of the project (raw/docs; an image goes through the same
-                // pipeline); the temporary copy goes away after.
-                try await state.engine.importFileAsync(file, projectSlug: rescued.project)
-                try? FileManager.default.removeItem(at: file)
+                _ = try state.engine.rescueDiscarded(id: item.id)
                 state.bumpVault()
                 await model.refresh(state: state, force: true)
             } catch {
@@ -315,12 +311,16 @@ struct FilesView: View {
     }
 
     private func delete(_ item: DiscardedItem) {
-        let store = model.discardedStore(state)
-        store.delete(id: item.id)
+        state.engine.deleteDiscarded(id: item.id)
         Task { await model.refresh(state: state, force: true) }
     }
 
     // MARK: Words
+
+    /// The account an email file came from (its message's `externalId`, else its link's host).
+    static func provider(of entry: FileEntry) -> AccountProvider? {
+        OriginalLinks.split(externalId: entry.externalId)?.provider ?? OriginalLinks.provider(forLink: entry.webLink)
+    }
 
     static func label(_ type: FileType) -> String { L("files.type.\(type.rawValue)") }
     static func label(_ origin: FileOrigin) -> String { L("files.origin.\(origin.rawValue)") }
@@ -385,11 +385,20 @@ private struct FileRow: View {
                     .foregroundStyle(Brand.color.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(FilesView.originLine(entry))
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                HStack(spacing: 4) {
+                    Text(FilesView.originLine(entry))
+                        .font(Brand.caption)
+                        .foregroundStyle(Brand.color.text2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if entry.origin == .email {
+                        // §17.7: the email it came with, in Outlook/Gmail (nothing for pasted mail).
+                        OpenOriginalButton(link: entry.webLink, provider: FilesView.provider(of: entry), iconOnly: true,
+                                           style: .link)
+                            .font(Brand.caption)
+                            .frame(width: 18, height: 14)   // inline with the caption: the row keeps its height
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
@@ -529,9 +538,7 @@ private struct FilePanel: View {
 
     @ViewState private var copied = false
 
-    private var provider: AccountProvider? {
-        entry.externalId.flatMap { $0.split(separator: ":").first }.flatMap { AccountProvider(rawValue: String($0)) }
-    }
+    private var provider: AccountProvider? { FilesView.provider(of: entry) }
 
     var body: some View {
         VStack(spacing: 0) {

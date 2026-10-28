@@ -96,7 +96,9 @@ import Foundation
                 stripWebLinks(engine.vault.url(for: gInfo.folderPath))
                 let stripped = engine.vault.threadInfo(key: gKey)
                 t.eq(stripped.flatMap { OriginalLinks.latestLink(in: $0)?.link },
-                     OriginalLinks.gmailThread(accountEmail: nil, threadId: g.id), "Gmail without link → conversation URL fallback")
+                     // v0.7 threads writes providerThreadIds: the fallback knows the account and the real thread id.
+                     OriginalLinks.gmailThread(accountEmail: gAccount.email, threadId: g.threadId.isEmpty ? g.id : g.threadId),
+                     "Gmail without link → conversation URL fallback")
                 let gCounter = CountingProvider(gDemo)
                 let gFilled = await engine.fillMissingWebLinks(threadKey: gKey, accounts: [gAccount]) { _ in gCounter }
                 t.check(gFilled == 1 && gCounter.fetches == 0, "Gmail lazy fill builds the URL without calls")

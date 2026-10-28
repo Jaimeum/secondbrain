@@ -1789,3 +1789,7 @@
 "capture.inPerson" = "Reunión presencial";
 "capture.inPersonHelp" = "Guardo el texto como la minuta de una reunión en persona en el proyecto elegido";
 "capture.inPersonNeedsProject" = "Elige un proyecto para guardar una reunión presencial.";
+
+/* v0.7 integration */
+"attach.checklist.save" = "Guardar los marcados (%ld)";
+"attach.checklist.hint" = "Marqué lo que parece útil. Lo que no marques queda 30 días en Descartados.";

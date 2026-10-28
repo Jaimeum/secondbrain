@@ -36,7 +36,7 @@ final class FilesModel {
         let store = discardedStore(state)
         let snapshot = await EntityIndex.snapshot(vaultRoot: root)
         let (files, gone) = await Task.detached(priority: .userInitiated) {
-            (FileIndex.shared(vaultRoot: root).refresh(sources: sources, entities: snapshot), store.list())
+            (FileIndex.shared(vaultRoot: root).refresh(sources: sources, entities: snapshot), { _ = store.expire(); return store.list() }())
         }.value
         entries = files
         discarded = gone

@@ -202,7 +202,8 @@ struct RulesPanel: View {
                 .labelsHidden()
                 .frame(maxWidth: 240)
             }
-            if store.rules.contains(where: \.autoAddMail) {
+            // v0.7 (§17.5): the switch also drives following saved threads, so it shows with any mail account.
+            if store.rules.contains(where: \.autoAddMail) || state.engine.accounts.accounts.contains(where: \.provider.hasMail) {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("rules.autoImport")).foregroundStyle(Brand.color.text)

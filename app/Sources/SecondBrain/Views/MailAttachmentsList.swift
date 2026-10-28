@@ -5,6 +5,8 @@ import SwiftUI
 // v0.7 attach (CONTRACT §17.1): the attachments of the message open in Correo, each with where it stands —
 // Guardado · Descartado (razón) · No guardado · Muy grande — and "Guardar" for what isn't in the brain yet (only once
 // the email itself is saved: an attachment always lives next to its email). Read-only on the mailbox.
+// Backwards (§17.1, a hand-saved email): what is still undecided gets a checkbox ticked by the triage (keep and
+// ambiguous ✓, discard ☐ with its reason) and "Guardar los marcados (n)"; the unticked ones go to Descartados.
 struct MailAttachmentsList: View {
     @Environment(AppState.self) private var state
     let message: MailMessageFull
@@ -17,6 +19,10 @@ struct MailAttachmentsList: View {
     @ViewState private var loadError: String?
     @ViewState private var saving: Set<String> = []
     @ViewState private var saveError: String?
+    /// The backwards checklist: ticked ids (seeded once per attachment from the triage).
+    @ViewState private var checked: Set<String> = []
+    @ViewState private var seeded: Set<String> = []
+    @ViewState private var savingBatch = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -35,6 +41,9 @@ struct MailAttachmentsList: View {
                 if source == nil, attachments.contains(where: { if case .notSaved = states[$0.id] { true } else { false } }) {
                     Text(L("attach.saveEmailFirst")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                if source != nil, !pending.isEmpty {
+                    confirmBar
                 }
             } else if let loadError {
                 Text(L("attach.failed", loadError)).font(Brand.caption).foregroundStyle(Brand.color.text2)
@@ -58,9 +67,41 @@ struct MailAttachmentsList: View {
 
     // MARK: Row
 
+    /// Undecided attachments of a saved email (the checklist).
+    private var pending: [AttachmentInfo] {
+        guard source != nil else { return [] }
+        return (attachments ?? []).filter { if case .notSaved = states[$0.id] { $0.isDownloadable } else { false } }
+    }
+
+    private var confirmBar: some View {
+        let n = pending.filter { checked.contains($0.id) }.count
+        return HStack(alignment: .firstTextBaseline, spacing: Brand.spacing.s) {
+            Text(L("attach.checklist.hint"))
+                .font(Brand.caption).foregroundStyle(Brand.color.text2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if savingBatch {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(L("attach.checklist.save", n)) { saveChecked() }
+                    .buttonStyle(.brandPrimary)
+                    .fixedSize()
+            }
+        }
+    }
+
     private func row(_ a: AttachmentInfo) -> some View {
         let st = states[a.id] ?? .notSaved(.ask)
+        let isPending: Bool = { if source != nil, a.isDownloadable, case .notSaved = st { return true }; return false }()
         return HStack(spacing: Brand.spacing.s) {
+            if isPending {
+                Toggle("", isOn: Binding(get: { checked.contains(a.id) },
+                                         set: { if $0 { checked.insert(a.id) } else { checked.remove(a.id) } }))
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    .disabled(savingBatch)
+                    .accessibilityLabel(a.name)
+            }
             Image(systemName: Self.symbol(a))
                 .font(.system(size: 14))
                 .foregroundStyle(Brand.color.text2)
@@ -80,7 +121,7 @@ struct MailAttachmentsList: View {
                     .truncationMode(.tail)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            action(a, st)
+            if !isPending { action(a, st) }
         }
         .padding(.horizontal, Brand.spacing.m)
         .padding(.vertical, 7)
@@ -116,6 +157,10 @@ struct MailAttachmentsList: View {
     /// "182 KB · Guardado", "4 KB · Descartado (logo o firma)", "30 MB · Muy grande".
     private func detail(_ a: AttachmentInfo, _ st: AttachmentState) -> String {
         let size = a.size > 0 ? ByteCountFormatter.string(fromByteCount: Int64(a.size), countStyle: .file) + " · " : ""
+        // The checklist says why an unticked one would be discarded ("logo o firma").
+        if source != nil, case .notSaved(let decision) = st, case .discard(let reason) = decision {
+            return size + Self.stateLabel(st) + " · " + reason.label
+        }
         return size + Self.stateLabel(st)
     }
 
@@ -172,6 +217,33 @@ struct MailAttachmentsList: View {
         guard let attachments else { return }
         states = state.engine.attachmentStates(messageSourceId: source?.id, attachments: attachments,
                                                inlineContentIds: message.inlineContentIds)
+        for a in attachments where !seeded.contains(a.id) {
+            guard case .notSaved(let decision) = states[a.id] else { continue }
+            seeded.insert(a.id)
+            if a.isDownloadable, decision.preselected { checked.insert(a.id) }
+        }
+    }
+
+    /// The checklist's "Guardar los marcados": ticked ones saved, the rest of the undecided ones to Descartados.
+    private func saveChecked() {
+        let list = pending
+        guard source != nil, !list.isEmpty, !savingBatch else { return }
+        savingBatch = true
+        saveError = nil
+        let ids = list.map(\.id).filter { checked.contains($0) }
+        let engine = state.engine
+        Task {
+            defer { savingBatch = false }
+            do {
+                let report = try await engine.saveAttachments(for: message, account: account, mode: .confirmed(ids),
+                                                              attachments: list)
+                if let name = report.failed.first { saveError = L("attach.saveFailed", name) }
+                state.bumpVault()
+            } catch {
+                saveError = FriendlyError.message(error)
+            }
+            refreshStates()
+        }
     }
 
     private func save(_ a: AttachmentInfo) {
@@ -182,8 +254,9 @@ struct MailAttachmentsList: View {
         Task {
             defer { saving.remove(a.id) }
             do {
+                // Only this one: `.confirmed` sends the unticked rest of the list to Descartados.
                 let report = try await engine.saveAttachments(for: message, account: account, mode: .confirmed([a.id]),
-                                                              attachments: attachments)
+                                                              attachments: [a])
                 if !report.failed.isEmpty { saveError = L("attach.saveFailed", a.name) }
                 state.bumpVault()
             } catch {

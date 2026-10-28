@@ -308,7 +308,7 @@ public final class FileIndex: @unchecked Sendable {
                         plain.append((rel, md))   // a text document kept as markdown
                     }
                 }
-                for name in names where !name.lowercased().hasSuffix(".md") {
+                for name in names where !name.lowercased().hasSuffix(".md") && !DocumentText.isSidecar(name) {   // x.docx.txt: its text
                     let rel = "\(dir)/\(name)"
                     guard !isDir(rel) else { continue }
                     let attrs = attributes(rel)
@@ -370,6 +370,7 @@ public final class FileIndex: @unchecked Sendable {
                 let participants = (meta?.participants ?? []).filter { !ownerEmails.contains($0.email ?? "") }
                 for rel in files.sorted() {
                     if rel.lowercased().hasSuffix(".md"), let md = markdown(rel), md.originalFile != nil { continue }
+                    if DocumentText.isSidecar((rel as NSString).lastPathComponent) { continue }   // its text sidecar
                     let attrs = attributes(rel)
                     let listedEntry = listed[rel]
                     let messageFolder = ((rel as NSString).deletingLastPathComponent as NSString).lastPathComponent
@@ -438,7 +439,8 @@ public final class FileIndex: @unchecked Sendable {
         return ParsedMarkdown(title: title, type: Frontmatter.field("type", in: text),
                               sourceId: Frontmatter.field("source_id", in: text),
                               originalFile: Frontmatter.field("original_file", in: text),
-                              via: Frontmatter.field("via", in: text),
+                              // "Agregar al proyecto" writes `origin: dump` (§17.3); `via:` is the older spelling.
+                              via: Frontmatter.field("via", in: text) ?? Frontmatter.field("origin", in: text),
                               date: date("event_date") ?? date("date"), added: date("added"),
                               sources: sources, excerpt: excerpt, folded: fold(parts.body))
     }

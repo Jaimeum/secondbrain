@@ -43,6 +43,8 @@ struct ThreadConversationView: View {
 
     private func load() async {
         let vault = state.engine.vault, key = threadKey
+        // §17.7 lazy migration: mail saved before v0.7 gets its link once per session (bumps the vault when it adds any).
+        if await state.engine.fillMissingWebLinks(threadKey: key) > 0 { state.bumpVault(); return }
         let result = await Task.detached(priority: .userInitiated) { () -> Loaded? in
             guard let info = vault.threadInfo(key: key) else { return nil }
             var texts: [String: String] = [:]
@@ -81,10 +83,7 @@ struct ThreadConversationView: View {
             .buttonStyle(.plain)
             .help(expanded ? L("thread.collapse") : L("thread.expand"))
             Spacer(minLength: Brand.spacing.s)
-            // The ficha's header link opens the newest email (§17.7).
-            if let last = info.messages.last(where: { $0.webLink != nil }) {
-                OpenOriginalButton(link: last.webLink, provider: last.provider, iconOnly: true)
-            }
+            // The newest email's "Abrir en …" is the page header's (EntityOriginalButton, §17.7); each card has its own.
         }
         .padding(.horizontal, Brand.spacing.l)
         .padding(.vertical, Brand.spacing.s)
@@ -155,7 +154,7 @@ struct ThreadMessageCard: View {
                         .lineLimit(1)
                         .help(Fmt.date(date))
                 }
-                OpenOriginalButton(link: message.webLink, provider: message.provider, iconOnly: true)
+                OpenOriginalButton(message: message, in: thread, iconOnly: true)   // Gmail falls back to the conversation URL
                     .controlSize(.small)
             }
             Text(text.isEmpty ? L("thread.noNewText") : text)

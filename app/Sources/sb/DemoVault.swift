@@ -657,6 +657,7 @@ enum DemoVault {
 
         let rules = try addSampleRules(root: root, projects: created, today: today)
         try DemoFiles.add(root: root)   // v0.7 files (§17.2)
+        try DemoThreads.enrich(root: root)   // v0.7 (§17.8): a long thread with my reply and its Outlook links
 
         return "Created \(root.path): \(created.count) projects, \(pageCount) project pages, \(people.count) people, \(orgs.count) companies, \(rules) routing rules"
             + (scale > 0 ? ", plus \(scale) synthetic meetings per project" : "")

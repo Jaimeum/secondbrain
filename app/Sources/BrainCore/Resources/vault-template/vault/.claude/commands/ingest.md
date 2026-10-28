@@ -14,7 +14,9 @@ questions, never stop halfway.
 
 ## 1. Orient
 
-1. If `CLAUDE.md` (vault root) is not already in your context, Read it.
+1. If `CLAUDE.md` (vault root) is not already in your context, Read it. Then Read `facts.md`
+   (vault root, if it exists): facts the owner confirmed. They are binding — never write
+   anything that contradicts them; if this source contradicts one, follow CLAUDE.md §17.
 2. Parse the arguments: `<raw path>` optionally followed by ` | template=templates/<id>.md`
    (split on the first `|`; trim spaces).
 3. From the raw path, get:

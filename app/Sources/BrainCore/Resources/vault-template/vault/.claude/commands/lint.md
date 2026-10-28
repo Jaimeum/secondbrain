@@ -12,6 +12,9 @@ can act on. Follow `CLAUDE.md` at the vault root. **Never invent facts**: you ca
 link and flag, but every content change must come from what the wiki or raw sources already say.
 Never ask questions. Never touch `raw/` or `_inbox/`.
 
+Read `facts.md` (vault root) first: facts the owner confirmed (CLAUDE.md §17). They are true; a
+page that says otherwise is wrong. Never edit `facts.md`.
+
 ## Scope
 
 - A project slug → the pages under `projects/<slug>/wiki/` plus the `people/` pages of people in
@@ -72,6 +75,10 @@ Never ask questions. Never touch `raw/` or `_inbox/`.
     callouts still open); repo pages missing from the index `## Repositorios`; repo/branch pages
     whose `## Cambios recientes` keeps days older than ~60 days (report; condensing is not a
     trivial fix); people with `github:` duplicated on two pages.
+17. **Confirmed facts** (`facts.md`, CLAUDE.md §17): pages in the scope that state something a
+    confirmed fact contradicts (e.g. a person page that still puts Javier on Angela's team after
+    the owner confirmed he is not); global scope: also `people/` and `orgs/` pages. Keep the
+    `## Contradicen hechos confirmados` bullets of the previous report while the source still says it.
 
 ## Fix (only trivial, safe things)
 
@@ -87,6 +94,10 @@ Never ask questions. Never touch `raw/` or `_inbox/`.
   without a full day → move it to the overview's "Próximos hitos y fechas"; a 📅 line that
   repeats a task → remove it.
   Wrong dates in frontmatter that the raw `date:` makes obvious → fix them.
+- A sentence that contradicts a confirmed fact (check 17) and is not a citation of what a source
+  said → rewrite it to agree with the fact, citing `([[facts|Hechos confirmados]])`; a source page
+  that reports what was said keeps it, with the `> [!warning] Esto contradice un hecho que
+  confirmaste: …` callout under its "En breve" (CLAUDE.md §17).
 - Template comments left in a page → remove them.
 - Orphan topic/decision → link it from the most relevant topic or the overview if the connection
   is clear from content.
@@ -113,6 +124,9 @@ language: es
 
 ## Arreglado automáticamente
 - …
+
+## Contradicen hechos confirmados
+- 2026-10-28 · [[2026-10-28-1000-revision]] dice que Javier está en el equipo de Angela — contradice: «Javier Ruiz no forma parte del equipo de Angela Torres»
 
 ## Para revisar
 - **Contradicción:** … (links)

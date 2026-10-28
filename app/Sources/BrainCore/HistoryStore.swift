@@ -177,6 +177,38 @@ public final class HistoryStore: @unchecked Sendable {
         return entry
     }
 
+    /// v0.6 (§16.6): several files edited by the app in one go (the owner's hand edit applied across the brain, plus
+    /// `facts.md`): writes each `after` and records ONE `.manualEdit` entry, so a single Deshacer reverts them all.
+    /// `before == nil` means the file is new. Files whose text doesn't change are left out; nil when nothing changed.
+    @discardableResult
+    public func recordManualEdits(title: String, projectSlug: String?,
+                                  files: [(path: String, before: String?, after: String)]) throws -> HistoryEntry? {
+        let files = files.filter { $0.before != $0.after }
+        guard !files.isEmpty else { return nil }
+        let id = SessionManifest.newId()
+        let dir = historyDir.appendingPathComponent(id)
+        let fm = FileManager.default
+        var changes: [FileChange] = []
+        for file in files {
+            let target = vaultRoot.appendingPathComponent(file.path)
+            if let before = file.before {
+                let b = dir.appendingPathComponent("before/\(file.path)")
+                try fm.createDirectory(at: b.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try before.write(to: b, atomically: true, encoding: .utf8)
+            }
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try file.after.write(to: target, atomically: true, encoding: .utf8)
+            try copy(target, to: dir.appendingPathComponent("after/\(file.path)"))
+            changes.append(FileChange(path: file.path, change: file.before == nil ? .added : .modified))
+        }
+        let entry = HistoryEntry(id: id, title: title, kind: .manualEdit, sourceId: nil, projectSlug: projectSlug,
+                                 changes: changes.sorted { $0.path < $1.path }, createdAt: Date(), undone: false)
+        try save(entry)
+        gitCommit(message: title)
+        Log.info("history \(id): manual edit of \(changes.count) files — \(title)")
+        return entry
+    }
+
     /// Drops a snapshot without recording anything.
     public func discard(_ snapshot: HistorySnapshot) {
         let dir = historyDir.appendingPathComponent(snapshot.id)

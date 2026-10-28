@@ -275,5 +275,42 @@
 			<string>Save the rest of the thread (%ld)</string>
 		</dict>
 	</dict>
+	<!-- v0.6 facts -->
+	<key>editor.propertiesLines</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld line</string>
+			<key>many</key>
+			<string>%ld lines</string>
+			<key>other</key>
+			<string>%ld lines</string>
+		</dict>
+	</dict>
+	<key>corrections.apply</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>Apply %ld</string>
+			<key>many</key>
+			<string>Apply %ld</string>
+			<key>other</key>
+			<string>Apply %ld</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

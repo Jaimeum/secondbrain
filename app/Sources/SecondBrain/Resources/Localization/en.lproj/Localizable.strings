@@ -1433,3 +1433,25 @@
 "page.openHelp" = "Open where it lives";
 "entity.edit" = "Edit";
 "entity.editHelp" = "Fix this page by hand";
+
+/* v0.6 facts — edit, propagate, confirmed facts */
+"editor.save" = "Save";
+"editor.saveHelp" = "Save (⌘S) and look for other pages that say the same";
+"editor.notEditable" = "Original sources can't be edited.";
+"editor.properties" = "Properties";
+"editor.propagateHint" = "When you save, I look for other pages in the brain that say what you corrected and show them before changing them.";
+"corrections.title" = "Review changes in the brain";
+"corrections.subtitle" = "You corrected “%@”";
+"corrections.searching" = "Looking for other pages that say the same…";
+"corrections.searchingDetail" = "Your change is saved. You can close this: I'll show you when I'm done.";
+"corrections.background" = "Keep going in background";
+"corrections.intro" = "These pages still say what you corrected. Choose which ones I change:";
+"corrections.factsTitle" = "I'll keep this as a confirmed fact";
+"corrections.onlyThisPage" = "Only this page";
+"corrections.onlyThisPageHelp" = "Don't change other pages; just keep the confirmed fact";
+"corrections.nothing" = "I didn't find other pages that said it.";
+"corrections.nothingDetail" = "Your change is saved.";
+"corrections.factSaved" = "Your change is saved and I noted it in Confirmed facts: I'll never write the opposite.";
+"corrections.failed" = "I couldn't check the rest of the brain. Your change is saved.";
+"corrections.retry" = "Try again";
+"corrections.done" = "Done";

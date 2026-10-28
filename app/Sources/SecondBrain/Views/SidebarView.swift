@@ -216,12 +216,10 @@ private struct SidebarFooter: View {
             || MeetingBanner.recordableNow(state: state, now: MeetingsModel.shared.now) != nil
         VStack(alignment: .leading, spacing: 4) {
             if recordTakesOver {
+                // §16.1: Grabar takes the footer; "+ Agregar" stays a real button, secondary, right under it.
                 RecordControl(placement: .sidebar)
-                HStack(spacing: 6) {
-                    QueueStatusLine(showsProgressBar: false)
-                    Spacer(minLength: 4)
-                    AddControl(compact: true)
-                }
+                AddControl(secondary: true)
+                QueueStatusLine(showsProgressBar: false)
             } else {
                 AddControl()
                 QueueStatusLine(showsProgressBar: false)
@@ -238,11 +236,13 @@ private struct SidebarFooter: View {
 }
 
 /// "+ Agregar" (§16.1): Nota · Archivo… · Enlace… · Pegar correo ⌘⇧V · Grabar, into the project on screen (else
-/// Sin asignar / classified). `compact` = a "+" only (beside the queue line while recording takes the footer).
+/// Sin asignar / classified). `compact` = a "+" only; `secondary` = full width but regular size (under the Grabar
+/// card while a meeting is on or recording).
 /// v0.6: G1 may reuse it in the menu bar.
 struct AddControl: View {
     @Environment(AppState.self) private var state
     var compact = false
+    var secondary = false
     @ViewState private var error: String?
 
     var body: some View {
@@ -272,7 +272,7 @@ struct AddControl: View {
         .menuStyle(.button)
         .menuIndicator(compact ? .hidden : .visible)
         .buttonStyle(.bordered)
-        .controlSize(compact ? .small : .large)
+        .controlSize(compact ? .small : secondary ? .regular : .large)
         .frame(maxWidth: compact ? nil : .infinity)
         .fixedSize(horizontal: compact, vertical: false)
         .help(L("add.help"))

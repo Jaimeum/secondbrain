@@ -135,6 +135,13 @@ struct WikiWebView: NSViewRepresentable {
                     let resolved = vault.resolveWikilinks(targets, from: path)  // already off the main thread
                     var links: [String: Any] = [:]
                     for target in targets { links[target] = resolved[target] ?? NSNull() }
+                    // A [[slug]] without a label reads as its page's title ("Andrés Silva", not "andres-silva").
+                    var titles: [String: String] = [:]
+                    for target in Set(targets) {
+                        guard let resolvedPath = resolved[target] else { continue }
+                        let title = vault.title(of: resolvedPath)
+                        if !title.isEmpty, title != target { titles[target] = title }
+                    }
                     let backlinks = !chrome ? [] : vault.backlinks(to: path).filter { $0.path != path }.map { ["path": $0.path, "title": $0.title] }
                     // Project and people chips show names, not slugs.
                     let head = markdown.hasPrefix("---") ? String(markdown.prefix(4000)) : ""
@@ -146,7 +153,7 @@ struct WikiWebView: NSViewRepresentable {
                     if head.contains("\npeople:") {
                         for p in MeetingPeopleIndex.load(vault: vault).people { peopleNames[p.slug] = p.title }
                     }
-                    return ["markdown": markdown, "links": links, "backlinks": backlinks,
+                    return ["markdown": markdown, "links": links, "titles": titles, "backlinks": backlinks,
                             "projectNames": projectNames, "peopleNames": peopleNames]
                 }.value
                 guard generation == renderGeneration, path == shownPath, let webView = self.webView else { return }

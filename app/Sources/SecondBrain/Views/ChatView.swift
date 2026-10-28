@@ -281,6 +281,8 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
 
     /// Citations that point at emails get an envelope symbol so it's clear the answer comes from a mail.
     @ViewState private var emailTargets: Set<String> = []
+    /// Page titles of the answer's unlabeled citations ("andres-silva" → "Andrés Silva").
+    @ViewState private var citationTitles: [String: String] = [:]
 
     var body: some View {
         switch message.role {
@@ -302,7 +304,7 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
                         .animation(Brand.motion.fast, value: message.steps.count)
                 }
                 if !message.text.isEmpty {
-                    MarkdownText(markdown: message.text, emailTargets: emailTargets)
+                    MarkdownText(markdown: message.text, emailTargets: emailTargets, titles: citationTitles)
                         .environment(\.openURL, OpenURLAction { url in
                             guard url.scheme == "sbwiki" else { return .systemAction }
                             let target = url.absoluteString.replacingOccurrences(of: "sbwiki://link/", with: "")
@@ -356,8 +358,17 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
         guard !message.isStreaming, !message.text.isEmpty else { return }
         let targets = WikiWebView.Coordinator.wikilinkTargets(in: message.text)
         guard !targets.isEmpty else { return }
-        let resolved = await state.engine.vault.resolveWikilinksAsync(targets, from: baseRelPath)
+        let vault = state.engine.vault
+        let resolved = await vault.resolveWikilinksAsync(targets, from: baseRelPath)
         emailTargets = Set(resolved.filter { $0.value.contains("/emails/") }.keys)
+        citationTitles = await Task.detached {
+            var titles: [String: String] = [:]
+            for (target, path) in resolved {
+                let title = vault.title(of: path)
+                if !title.isEmpty, title != target { titles[target] = title }
+            }
+            return titles
+        }.value
     }
 
     @ViewBuilder private func failureView(_ failure: ChatMessage.Failure) -> some View {
@@ -388,6 +399,8 @@ struct MarkdownText: View {
     let markdown: String
     /// Wikilink targets that resolve to emails: shown with an envelope symbol.
     var emailTargets: Set<String> = []
+    /// Titles of resolved targets: an unlabeled `[[slug]]` reads as its page's title, never the bare slug.
+    var titles: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -474,21 +487,31 @@ struct MarkdownText: View {
         }
         let matches = text.matches(of: Self.wikilink)
         guard matches.contains(where: { Self.isEmail($0.output.1, emailTargets) }) else {
-            return parse(Self.linkifyWikilinks(text, emailTargets: emailTargets))
+            return parse(Self.linkifyWikilinks(text, titles: titles))
         }
         // Split around email citations so the symbol can sit inside the text (markdown can't carry images).
         var result = Text("")
         var cursor = text.startIndex
         for match in matches where Self.isEmail(match.output.1, emailTargets) {
             let before = String(text[cursor..<match.range.lowerBound])
-            if !before.isEmpty { result = result + parse(Self.linkifyWikilinks(before, emailTargets: emailTargets)) }
+            if !before.isEmpty { result = result + parse(Self.linkifyWikilinks(before, titles: titles)) }
             result = result + Text(Image(systemName: "envelope")).foregroundStyle(Brand.color.text2) + Text(" ")
-                + parse(Self.linkifyWikilinks(String(text[match.range]), emailTargets: emailTargets))
+                + parse(Self.linkifyWikilinks(String(text[match.range]), titles: titles))
             cursor = match.range.upperBound
         }
         let rest = String(text[cursor...])
-        if !rest.isEmpty { result = result + parse(Self.linkifyWikilinks(rest, emailTargets: emailTargets)) }
+        if !rest.isEmpty { result = result + parse(Self.linkifyWikilinks(rest, titles: titles)) }
         return result
+    }
+
+    /// A title inside `[label](…)`: brackets and markdown emphasis characters are escaped.
+    private static func escapeLabel(_ s: String) -> String {
+        var out = ""
+        for ch in s {
+            if "\\[]*_`".contains(ch) { out.append("\\") }
+            out.append(ch)
+        }
+        return out
     }
 
     private static func isEmail(_ rawTarget: Substring, _ emailTargets: Set<String>) -> Bool {
@@ -497,12 +520,13 @@ struct MarkdownText: View {
         return emailTargets.contains(target) || emailTargets.contains(raw) || target.contains("emails/")
     }
 
-    /// `[[target|label]]` → `[label](sbwiki://link/target)` (resolved on click). The envelope for email citations is
-    /// added by `inline`; `emailTargets` stays for source compatibility.
-    static func linkifyWikilinks(_ text: String, emailTargets: Set<String> = []) -> String {
+    /// `[[target|label]]` → `[label](sbwiki://link/target)` (resolved on click); `[[target]]` takes the page's title
+    /// from `titles`. The envelope for email citations is added by `inline`.
+    static func linkifyWikilinks(_ text: String, titles: [String: String] = [:]) -> String {
         text.replacing(wikilink) { match in
             let target = String(match.1).split(separator: "#").first.map(String.init) ?? String(match.1)
-            let label = match.2.map(String.init) ?? target
+            let key = target.trimmingCharacters(in: .whitespaces)
+            let label = match.2.map(String.init) ?? titles[key].map(escapeLabel) ?? target
             let encoded = target.trimmingCharacters(in: .whitespaces)
                 .addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? target
             return "[\(label)](sbwiki://link/\(encoded))"

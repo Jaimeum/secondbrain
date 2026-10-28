@@ -12,6 +12,7 @@
   let lang = "es";
 
   let links = {};
+  let titles = {};
 
   function escapeHTML(s) {
     return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -57,14 +58,16 @@
         const label = (bar >= 0 ? inner.slice(bar + 1) : inner).trim();
         const target = rawTarget.split("#")[0].trim();
         const token = state.push("wikilink", "", 0);
-        token.meta = { target, label: label || target };
+        token.meta = { target, label: label || target, labeled: bar >= 0 && label.length > 0 };
       }
       state.pos = end + 2;
       return true;
     });
     md.renderer.rules.wikilink = function (tokens, idx) {
-      const { target, label } = tokens[idx].meta;
+      const { target, labeled } = tokens[idx].meta;
       const path = links[target];
+      // An unlabeled [[slug]] shows its page's title (payload.titles), never the bare slug.
+      const label = labeled ? tokens[idx].meta.label : (titles[target] || tokens[idx].meta.label);
       if (path) {
         return '<a class="wikilink" href="' + PAGE_PREFIX + encodeURIComponent(path) + '">' + escapeHTML(label) + "</a>";
       }
@@ -157,6 +160,7 @@
     },
     render(payload) {
       links = payload.links || {};
+      titles = payload.titles || {};
       lang = payload.lang === "en" ? "en" : "es";
       document.documentElement.lang = lang;
       if (payload.theme) document.documentElement.dataset.theme = payload.theme;

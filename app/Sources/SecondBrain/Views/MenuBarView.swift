@@ -2,12 +2,14 @@ import AppKit
 import BrainCore
 import SwiftUI
 
-/// The menu bar panel (CONTRACT §15.2): brand header, the same `RecordControl` as the sidebar, "Detalles ▸"
-/// (project, format, title; opened by itself while recording), "Pegar correo…", Abrir · Salir.
+/// The menu bar panel (CONTRACT §16.10): brand header, the capture field first (the same one ⌃⌥Space opens), then
+/// recording as one more option (the sidebar's `RecordControl`), "Detalles ▸" (project, format, title; opened by
+/// itself while recording), Abrir · Salir.
 struct MenuBarView: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
     @ViewState private var detailsOpen = false
+    @ViewState private var capture = QuickCaptureModel(state: AppState.shared)
 
     var body: some View {
         @Bindable var state = state
@@ -16,6 +18,10 @@ struct MenuBarView: View {
                 .help(state.config.hotkeyEnabled ? L("record.hotkeyHint") : "")
 
             if state.config.onboardingComplete {
+                QuickCaptureView(model: capture, embedded: true)
+
+                Rectangle().fill(Brand.color.line).frame(height: 1)
+
                 RecordControl(placement: .menuBar)
 
                 if state.isRecording {
@@ -83,17 +89,6 @@ struct MenuBarView: View {
 
             Rectangle().fill(Brand.color.line).frame(height: 1)
 
-            if state.config.onboardingComplete {
-                Button {
-                    openMain()
-                    state.requestEmail()
-                } label: {
-                    Label(L("email.pasteMenu"), systemImage: "envelope")
-                        .foregroundStyle(Brand.color.text)
-                }
-                .buttonStyle(.plain)
-            }
-
             HStack {
                 Button(L("menu.open"), action: openMain)
                 Spacer()
@@ -104,7 +99,7 @@ struct MenuBarView: View {
         }
         .font(Brand.body)
         .padding(16)
-        .frame(width: 320)
+        .frame(width: 360)
         .background(Brand.color.bg)
         .onAppear { if state.isRecording { detailsOpen = true } }
         .onChange(of: state.isRecording) { _, recording in

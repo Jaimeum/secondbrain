@@ -169,7 +169,7 @@ struct TaskCmd: AsyncParsableCommand {
 
 struct TemplatesCmd: AsyncParsableCommand {
     static let configuration = CommandConfiguration(commandName: "templates", abstract: "List page formats (templates).")
-    @Option(help: "meeting | email | any") var scope: String?
+    @Option(help: "meeting | email | note | document | any") var scope: String?
     @MainActor func run() async throws {
         let engine = makeEngine()
         let list = engine.templates(scope: scope.flatMap(TemplateScope.init(rawValue:)))

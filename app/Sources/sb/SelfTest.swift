@@ -35,6 +35,7 @@ struct SelfTest: AsyncParsableCommand {
         await t.groupAsync("routing-mail") { await testRoutingMail(t, root: root.appendingPathComponent("routing-mail")) }   // MARK: v0.4 routing mail
         await t.groupAsync("routing-meetings") { await testRoutingMeetings(t, root: root.appendingPathComponent("routing-meetings")) }   // MARK: v0.4 rules UI
         await t.groupAsync("routing-review") { await testRoutingReview(t, root: root.appendingPathComponent("routing-review")) }   // MARK: v0.4 review fixes
+        await t.groupAsync("capture") { await testCapture(t, root: root.appendingPathComponent("capture")) }   // MARK: v0.6 capture
         if let v01 {
             await t.groupAsync("migration") { await testMigration(t, source: URL(fileURLWithPath: v01), root: root.appendingPathComponent("v01")) }
         }

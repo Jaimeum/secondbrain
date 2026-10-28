@@ -99,7 +99,7 @@ final class RuleOffer {
         let value = condition.value.trimmingCharacters(in: .whitespaces)
         let isEmail = value.contains("@") && !value.hasPrefix("@")
         let who = isEmail || value.hasPrefix("@") ? value : "@" + value
-        let key: String
+        var key: String
         switch (kind, condition.field) {
         case (.meeting, .organizerEmail), (.meeting, .senderEmail), (.meeting, .senderDomain): key = "rules.meetingOffer.organizer"
         case (.meeting, _): key = "rules.meetingOffer.with"
@@ -107,6 +107,8 @@ final class RuleOffer {
         case (.mail, .attendeeEmail), (.mail, .attendeeDomain): key = "rules.offer.with"
         case (.mail, _): key = "rules.offer.from"
         }
+        // v0.6 (§16.10): a mail rule saves the next ones by itself, and the offer says so.
+        if kind == .mail, rule.autoAddMail { key += "Auto" }
         // "☁️ Migración a la nube" stays on one line (the project reads as one name); a very long name is shortened so
         // it can never overflow the line.
         let short = projectLabel.count > 32

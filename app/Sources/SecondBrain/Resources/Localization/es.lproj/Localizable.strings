@@ -1433,3 +1433,27 @@
 "page.openHelp" = "Abrir en su lugar";
 "entity.edit" = "Editar";
 "entity.editHelp" = "Corregir esta página a mano";
+
+/* v0.6 capture — captura rápida, barra de menús, correo automático, formatos */
+"capture.title" = "Captura rápida";
+"capture.placeholder" = "Escribe una nota, pega un enlace o un correo, o suelta archivos aquí…";
+"capture.kind.note" = "Nota";
+"capture.kind.link" = "Enlace";
+"capture.kind.email" = "Correo";
+"capture.kind.files" = "Archivos: %ld";
+"capture.kindHelp" = "Lo detecto solo: un enlace se lee como página, un correo pegado se guarda en su hilo y el resto queda como nota.";
+"capture.destination" = "Guardar en";
+"capture.destinationHelp" = "Lo sugieren tus reglas; si ninguna aplica, va a Sin asignar y lo clasifico yo.";
+"capture.save" = "Guardar";
+"capture.saved" = "Guardado en %@";
+"capture.hint" = "⌘↩ guardar · esc cerrar";
+"capture.removeFile" = "Quitar";
+"capture.moreFiles" = "y %ld más";
+"capture.thread" = "Se suma al hilo «%@»";
+"capture.failed" = "No pude guardarlo. Inténtalo de nuevo.";
+"settings.captureHotkey" = "Atajo ⌃⌥Espacio para captura rápida";
+"tpl.scope.note" = "Notas";
+"tpl.scope.document" = "Documentos y enlaces";
+"rules.offer.fromAuto" = "¿Mandar siempre lo de %1$@ a %2$@ y guardar solos los próximos?";
+"rules.offer.toAuto" = "¿Mandar siempre lo que va para %1$@ a %2$@ y guardar solos los próximos?";
+"rules.offer.withAuto" = "¿Mandar siempre lo que incluya a %1$@ a %2$@ y guardar solos los próximos?";

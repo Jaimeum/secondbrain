@@ -27,6 +27,9 @@ public struct AppConfig: Codable, Equatable, Sendable {
     // MARK: v0.4 github
     /// Minutes between automatic GitHub syncs (CONTRACT §13.4); 0 = only by hand.
     public var githubSyncMinutes: Int = 60
+    // MARK: v0.6 capture
+    /// Global ⌃⌥Space opens "Captura rápida" (CONTRACT §16.10).
+    public var captureHotkeyEnabled: Bool = true
 
     public static let `default` = AppConfig(
         vaultPath: "~/Documents/SecondBrain",
@@ -45,18 +48,20 @@ public struct AppConfig: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case vaultPath, dataPath, whisperModel, claudePath, ingestModel, queryModel, uiLanguage, captureMic, gitEnabled,
              hotkeyEnabled, onboardingComplete, appearance, oauth, lastMailProjectSlug,
-             githubSyncMinutes  // MARK: v0.4 github
+             githubSyncMinutes,  // MARK: v0.4 github
+             captureHotkeyEnabled  // MARK: v0.6 capture
     }
 
     public init(vaultPath: String, dataPath: String, whisperModel: String, claudePath: String?, ingestModel: String,
                 queryModel: String, uiLanguage: String, captureMic: Bool, gitEnabled: Bool, hotkeyEnabled: Bool,
                 onboardingComplete: Bool, appearance: String = "system", oauth: OAuthAppRegistration = .empty,
-                lastMailProjectSlug: String? = nil, githubSyncMinutes: Int = 60) {
+                lastMailProjectSlug: String? = nil, githubSyncMinutes: Int = 60, captureHotkeyEnabled: Bool = true) {
         self.vaultPath = vaultPath; self.dataPath = dataPath; self.whisperModel = whisperModel; self.claudePath = claudePath
         self.ingestModel = ingestModel; self.queryModel = queryModel; self.uiLanguage = uiLanguage; self.captureMic = captureMic
         self.gitEnabled = gitEnabled; self.hotkeyEnabled = hotkeyEnabled; self.onboardingComplete = onboardingComplete
         self.appearance = appearance; self.oauth = oauth; self.lastMailProjectSlug = lastMailProjectSlug
         self.githubSyncMinutes = githubSyncMinutes   // MARK: v0.4 github
+        self.captureHotkeyEnabled = captureHotkeyEnabled   // MARK: v0.6 capture
     }
 
     /// v0.1 fields are required; everything added later falls back to its default when missing, so an older
@@ -88,6 +93,8 @@ public struct AppConfig: Codable, Equatable, Sendable {
         } else {
             githubSyncMinutes = 60
         }
+        // MARK: v0.6 capture
+        captureHotkeyEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .captureHotkeyEnabled)) ?? true
     }
 
     public static var configURL: URL {

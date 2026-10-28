@@ -625,7 +625,8 @@ public enum RuleMatcher {
         }
         guard let condition else { return nil }
         let name = projectName.map { generatedName(conditions: [condition], projectLabel: $0, language: language) } ?? ""
-        return RoutingRule(name: name, conditions: [condition], projectSlug: projectSlug)
+        // v0.6 (§16.10): a new mail rule also saves the next matching mail by itself (§14.5).
+        return RoutingRule(name: name, conditions: [condition], projectSlug: projectSlug, autoAddMail: subject.kind == .mail)
     }
 
     /// §14.3: the rule offered after `subject` was put in `projectSlug` by hand, or nil: no project, nothing sensible to

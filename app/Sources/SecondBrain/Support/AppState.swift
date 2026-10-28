@@ -161,6 +161,7 @@ final class AppState {
         if !snapshot {
             Notifier.requestAuthorization()
             applyHotKey()
+            QuickCapturePanel.shared.applyHotKey(state: self)   // MARK: v0.6 capture — ⌃⌥Space (§16.10)
         }
         if config.onboardingComplete {
             startEngine()
@@ -274,6 +275,7 @@ final class AppState {
             Self.applyMenuLanguage(next.uiLanguage)
         }
         if next.hotkeyEnabled != old.hotkeyEnabled { applyHotKey() }
+        if next.captureHotkeyEnabled != old.captureHotkeyEnabled { QuickCapturePanel.shared.applyHotKey(state: self) }   // MARK: v0.6 capture
         if next.appearance != old.appearance { Self.applyAppearance(next.appearance) }
 
         let modelChanged = next.whisperModel != old.whisperModel

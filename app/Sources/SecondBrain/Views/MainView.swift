@@ -16,6 +16,9 @@ struct MainView: View {
             } detail: {
                 detail
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    // The banners float over the detail column only, as rounded cards: the sidebar stays calm and no
+                    // full-width slab of color sits under the blended titlebar (§15.1 calm surfaces).
+                    .safeAreaInset(edge: .top, spacing: 0) { banner }
                     .background(Brand.color.surface)
             }
             if state.searchPresented {
@@ -64,18 +67,20 @@ struct MainView: View {
         .task(id: "\(state.vaultRevision)-\(state.tasksRevision)-\(state.accountsRevision)-\(state.projects.count)-\(state.config.uiLanguage)") {
             SearchIndex.shared.refresh(state: state)
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if state.isSwitchingVault {
-                VaultSwitchingNotice()
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Brand.color.accentSoft)
-            } else if state.restartNeeded {
-                RestartBanner()
-            } else if let notice = state.migrationNotice {
-                MigrationBanner(notice: notice)
-            }
+    }
+
+    /// Vault switching, restart or migration notice (one at a time), each a floating `BannerCard`.
+    @ViewBuilder private var banner: some View {
+        if state.isSwitchingVault {
+            VaultSwitchingNotice()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .modifier(BannerCard(tone: Brand.color.accentSoft))
+        } else if state.restartNeeded {
+            RestartBanner()
+                .modifier(BannerCard(tone: Brand.color.warningSoft))
+        } else if let notice = state.migrationNotice {
+            MigrationBanner(notice: notice)
+                .modifier(BannerCard(tone: Brand.color.accentSoft))
         }
     }
 
@@ -127,9 +132,6 @@ struct RestartBanner: View {
                 .disabled(state.isRecording)
                 .help(state.isRecording ? L("restart.whileRecording") : "")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Brand.color.warningSoft)
     }
 }
 
@@ -149,7 +151,8 @@ struct MigrationBanner: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
                 Button(expanded ? L("migration.less") : L("migration.more")) { expanded.toggle() }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
+                    .font(Brand.callout)
                     .foregroundStyle(Brand.color.accent)
                 Button(L("migration.dismiss")) { state.dismissMigrationNotice() }
                     .buttonStyle(.brandSecondary)
@@ -161,9 +164,22 @@ struct MigrationBanner: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Brand.color.accentSoft)
+    }
+}
+
+/// A window banner as a floating rounded card: its tone (`accentSoft`, `warningSoft`) in a continuous `card` radius,
+/// inset from the column's edges, never a square full-width band.
+private struct BannerCard: ViewModifier {
+    let tone: Color
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(tone, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
+            .padding(.horizontal, Brand.spacing.m)
+            .padding(.top, Brand.spacing.s)
+            .padding(.bottom, Brand.spacing.xs)
     }
 }
 

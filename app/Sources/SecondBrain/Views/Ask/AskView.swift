@@ -29,13 +29,13 @@ struct AskView: View {
                 if showList {
                     ConversationList(conversations: conversations, onRename: startRename, onDelete: { deleting = $0 })
                         .frame(width: listWidth)
-                    Rectangle().fill(Brand.color.line).frame(width: 1)
+                    ContentLayout.columnRule
                 }
                 ChatView(model: conversations.current, projectSlug: scope.projectSlug,
                          onOpenPage: { inspect($0) }, onSave: save, onNew: newConversation)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if inspecting {
-                    Rectangle().fill(Brand.color.line).frame(width: 1)
+                    ContentLayout.columnRule
                     CitationInspector(conversations: conversations, scope: scope)
                         .frame(width: inspectorWidth)
                         .transition(.move(edge: .trailing))
@@ -167,7 +167,6 @@ private struct ConversationList: View {
             .buttonStyle(.brandSecondary)
             .help(L("ask.newHelp"))
             .padding(Brand.spacing.m)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if conversations.loaded && conversations.threads.isEmpty {
                 Text(L("ask.listEmpty"))
                     .font(Brand.caption)
@@ -221,9 +220,10 @@ private struct ConversationRow: View {
         .padding(.horizontal, Brand.spacing.s)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-            .fill(isSelected ? Brand.color.accentSoft : (hovering ? Brand.color.cardAlt.opacity(0.55) : Color.clear)))
+            .fill(isSelected ? Brand.color.accentSoft : (hovering ? Brand.color.hover : Color.clear)))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
         .help(thread.title)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
@@ -244,7 +244,6 @@ private struct CitationInspector: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             EntityView(path: shown, scope: scope, onOpen: { next in
                 if next != shown { conversations.inspected.append(next) }
                 if conversations.inspected.count > 50 { conversations.inspected.removeFirst() }
@@ -258,11 +257,8 @@ private struct CitationInspector: View {
             if conversations.inspected.count > 1 {
                 Button { _ = conversations.inspected.popLast() } label: {
                     Image(systemName: "chevron.left")
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(Brand.color.text2)
+                .buttonStyle(.brandIcon)
                 .keyboardShortcut("[", modifiers: .command)
                 .help(L("wiki.back"))
             }
@@ -283,11 +279,8 @@ private struct CitationInspector: View {
             }
             Button { conversations.inspected = [] } label: {
                 Image(systemName: "xmark")
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(Brand.color.text2)
+            .buttonStyle(.brandIcon)
             .help(L("ask.closeInspector"))
             .accessibilityLabel(Text(L("ask.closeInspector")))
         }

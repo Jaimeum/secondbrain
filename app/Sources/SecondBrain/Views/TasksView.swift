@@ -284,7 +284,6 @@ struct TasksView: View {
                     .padding(.horizontal, Brand.spacing.content)
                     .padding(.bottom, Brand.spacing.m)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             content(snap)
         }
         .background(Brand.color.surface)
@@ -449,19 +448,15 @@ struct TasksView: View {
                 }
             }
         } label: {
-            if compact && selected == nil {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-            } else {
-                Text(selected.map { label($0).title } ?? L("tasks.from"))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
+            BrandMenuChip(text: compact && selected == nil ? nil : (selected.map { label($0).title } ?? L("tasks.from")),
+                          symbol: compact && selected == nil ? "line.3.horizontal.decrease" : nil,
+                          active: selected != nil)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(compact && selected == nil ? .hidden : .visible)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .frame(maxWidth: selected == nil ? nil : 180)
         .fixedSize(horizontal: selected == nil, vertical: false)
-        .foregroundStyle(selected == nil ? Brand.color.text2 : Brand.color.accent)
         .disabled(sources.isEmpty)
         .help(L("tasks.fromHelp"))
     }
@@ -527,9 +522,12 @@ struct TasksView: View {
                                     onToggle: { model.toggle(task, state: state) },
                                     onOpen: openSource)
                                 .overlay {
-                                    // The task the router pointed at, outlined for a moment.
+                                    // The task the router pointed at, lit for a moment: a soft `accentSoft` wash with a
+                                    // `focusBorder` edge, never a dark outline.
                                     RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-                                        .strokeBorder(Brand.color.accent, lineWidth: 1.5)
+                                        .fill(Brand.color.accentSoft)
+                                        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+                                            .strokeBorder(Brand.color.focusBorder, lineWidth: 1))
                                         .opacity(highlightedTaskId == task.id ? 1 : 0)
                                         .allowsHitTesting(false)
                                 }
@@ -576,7 +574,7 @@ struct TasksView: View {
             .padding(.horizontal, Brand.spacing.m)
             .padding(.vertical, 8)
             .background(Capsule().fill(Brand.color.card))
-            .overlay(Capsule().strokeBorder(Brand.color.line))
+            .overlay(Capsule().strokeBorder(Brand.color.lineSoft))
             .shadow(color: Brand.color.shadow, radius: 12, y: 4)
             .padding(.bottom, Brand.spacing.m)
             .transition(.opacity)
@@ -690,12 +688,12 @@ private struct TaskFilterBar: View {
                 }
             }
         } label: {
-            menuLabel(projectTitle, symbol: "folder", compact: compact && picked.isEmpty)
+            menuLabel(projectTitle, symbol: "folder", compact: compact && picked.isEmpty, active: !picked.isEmpty)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(compact && picked.isEmpty ? .hidden : .visible)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()   // the title is capped (`menuLabel`), so the menu hugs it instead of stretching
-        .foregroundStyle(picked.isEmpty ? Brand.color.text2 : Brand.color.accent)
         .help(L("tasks.filter.projectHelp"))
     }
 
@@ -735,12 +733,12 @@ private struct TaskFilterBar: View {
                 }
             }
         } label: {
-            menuLabel(personTitle, symbol: "person", compact: compact && picked == nil)
+            menuLabel(personTitle, symbol: "person", compact: compact && picked == nil, active: picked != nil)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(compact && picked == nil ? .hidden : .visible)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()   // the title is capped (`menuLabel`), so the menu hugs it instead of stretching
-        .foregroundStyle(picked == nil ? Brand.color.text2 : Brand.color.accent)
         .help(L("tasks.filter.personHelp"))
     }
 
@@ -754,38 +752,51 @@ private struct TaskFilterBar: View {
         }
     }
 
-    /// A borderless menu either fills what it's offered or hugs its title; it hugs a title cut to a few words.
-    @ViewBuilder private func menuLabel(_ title: String, symbol: String, compact: Bool) -> some View {
-        if compact {
-            Image(systemName: symbol)
-        } else {
-            Text(title.count > 26 ? String(title.prefix(25)) + "…" : title).lineLimit(1)
-        }
+    /// A filter menu's chip (`BrandMenuChip`: symbol, title cut to a few words, faint chevron; `accentSoft` while the
+    /// filter is on). Compact toolbars keep the symbol alone.
+    private func menuLabel(_ title: String, symbol: String, compact: Bool, active: Bool) -> some View {
+        BrandMenuChip(text: compact ? nil : (title.count > 26 ? String(title.prefix(25)) + "…" : title),
+                      symbol: symbol, active: active)
     }
 
     // MARK: Buscar
 
     private func searchField(_ text: Binding<String>) -> some View {
+        TaskSearchField(text: text)
+    }
+}
+
+/// Buscar in the filter bar: `card` with a `lineSoft` edge at rest and the brand focus halo while typing (§15.1).
+private struct TaskSearchField: View {
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(Brand.caption)
                 .foregroundStyle(Brand.color.text3)
-            TextField(L("tasks.filter.search"), text: text)
+            TextField(L("tasks.filter.search"), text: $text)
                 .textFieldStyle(.plain)
                 .font(Brand.callout)
                 .lineLimit(1)
-            if !text.wrappedValue.isEmpty {
-                Button { text.wrappedValue = "" } label: {
+                .focused($focused)
+                .focusEffectDisabled()
+            if !text.isEmpty {
+                Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(Brand.color.text3)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(L("tasks.filter.clear")))
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .frame(height: 26)
-        .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).fill(Brand.color.card))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+        .background(shape.fill(Brand.color.card))
+        .overlay(shape.strokeBorder(focused ? Brand.color.focusBorder : Brand.color.lineSoft))
+        .brandFocusHalo(focused)
+        .animation(Brand.motion.fast, value: focused)
     }
 }
 
@@ -837,10 +848,10 @@ private struct TaskSegmentControl<Value: Hashable>: View {
                     .frame(height: 24)
                     .background {
                         if selected {
+                            // A lifted `card` with a soft shadow, no outline.
                             RoundedRectangle(cornerRadius: Brand.radius.control - 2, style: .continuous)
                                 .fill(Brand.color.card)
-                                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control - 2, style: .continuous)
-                                    .strokeBorder(Brand.color.line, lineWidth: 1))
+                                .shadow(color: Brand.color.shadow.opacity(0.5), radius: 2, y: 1)
                         }
                     }
                     .contentShape(Rectangle())
@@ -852,8 +863,8 @@ private struct TaskSegmentControl<Value: Hashable>: View {
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).fill(Brand.color.cardAlt))
-        // The hairline keeps the track readable in dark mode, where sand is almost the surface's tone.
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+        // A `lineSoft` edge keeps the track readable in dark mode, where sand is almost the surface's tone.
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.lineSoft))
         .fixedSize()
     }
 }
@@ -940,9 +951,9 @@ struct TaskRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        // accentSoft reads both on the surface (Pendientes) and inside a card (Inicio).
+        // `hover`, not `accentSoft`: hover never looks like selection (it reads on the surface and inside a card).
         .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-            .fill(hovering && canOpen ? Brand.color.accentSoft : Color.clear))
+            .fill(hovering && canOpen ? Brand.color.hover : Color.clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture {
@@ -1074,7 +1085,6 @@ struct SourceTasksSheet: View {
                 .disabled(model.tasks.isEmpty)
             }
             .padding(Brand.spacing.xxl)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: Brand.spacing.xl) {
                     if !model.loaded {
@@ -1096,7 +1106,6 @@ struct SourceTasksSheet: View {
                 .padding(Brand.spacing.xxl)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             HStack {
                 Spacer()
                 Button(L("common.close")) { dismiss() }

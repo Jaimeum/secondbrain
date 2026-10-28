@@ -62,7 +62,6 @@ struct FilesView: View {
             } else {
                 VStack(spacing: 0) {
                     toolbar
-                    Rectangle().fill(Brand.color.line).frame(height: 1)
                     if showDiscarded {
                         discardedList
                     } else {
@@ -70,7 +69,7 @@ struct FilesView: View {
                             HStack(spacing: 0) {
                                 fileList
                                     .frame(maxWidth: .infinity)
-                                Rectangle().fill(Brand.color.line).frame(width: 1)
+                                ContentLayout.columnRule
                                 panel
                                     .frame(width: Self.panelWidth(for: geo.size.width))
                             }
@@ -180,11 +179,12 @@ struct FilesView: View {
                 filterOptions(title: L("files.filter.project"), all: L("files.filter.anyProject"), value: $project, options: projectOptions)
             }
         } label: {
-            BrandChip(text: activeFilters > 0 ? L("files.filtersActive", activeFilters) : L("files.filters"),
-                      symbol: "line.3.horizontal.decrease", active: activeFilters > 0)
+            BrandMenuChip(text: activeFilters > 0 ? L("files.filtersActive", activeFilters) : L("files.filters"),
+                          symbol: "line.3.horizontal.decrease", active: activeFilters > 0)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
         .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
         .help(L("files.filters"))
     }
@@ -212,7 +212,7 @@ struct FilesView: View {
             Button(L("files.clear")) {
                 query = ""; type = nil; origin = nil; person = nil; project = nil
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .font(Brand.font(11, .medium))
             .foregroundStyle(Brand.color.accent)
             .fixedSize()
@@ -237,10 +237,11 @@ struct FilesView: View {
         return Menu {
             filterItems(all: all, value: value, options: options)
         } label: {
-            BrandChip(text: shown ?? title, symbol: "chevron.down", active: current != nil)
+            BrandMenuChip(text: shown ?? title, active: current != nil)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
         .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
         .help(title)
     }
@@ -253,10 +254,11 @@ struct FilesView: View {
                 }
             }
         } label: {
-            BrandChip(text: Self.label(sort), symbol: "arrow.up.arrow.down")
+            BrandMenuChip(text: Self.label(sort), symbol: "arrow.up.arrow.down")
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
         .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
         .help(L("files.sort.help"))
     }
@@ -544,13 +546,13 @@ private struct DiscardedRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if busy {
-                ProgressView().controlSize(.small)
+                BrandLoader(size: 16)
             } else {
                 Button(L("files.discarded.rescue"), action: onRescue)
                     .buttonStyle(.brandSecondary)
                     .help(L("files.discarded.rescueHelp"))
                 Button(action: onDelete) { Image(systemName: "trash") }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .foregroundStyle(Brand.color.danger)
                     .help(L("files.discarded.delete"))
                     .accessibilityLabel(L("files.discarded.delete"))
@@ -571,7 +573,7 @@ struct FileThumbnail: View {
     @ViewState private var image: NSImage?
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
         ZStack {
             shape.fill(Brand.color.cardAlt)
             if let image {
@@ -586,7 +588,7 @@ struct FileThumbnail: View {
         }
         .frame(width: side, height: side)
         .clipShape(shape)
-        .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
+        .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
         .task(id: url) { image = await FileThumbnails.shared.image(for: url, side: side) }
         .accessibilityHidden(true)
     }
@@ -608,17 +610,22 @@ private struct FilePanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // The preview is an inset rounded tile on `surface`, not a full-bleed white block (§15.1 calm surfaces).
+            let tile = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
             FilePreview(url: url)
-                .frame(height: 230)
-                .background(Brand.color.card)
+                .frame(maxWidth: .infinity)
+                .frame(height: 210)
+                .background(Brand.color.card, in: tile)
+                .clipShape(tile)
+                .overlay(tile.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
                 .overlay(alignment: .bottomTrailing) {
                     Button(action: onQuickLook) { Image(systemName: "eye") }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(Brand.color.text2)
+                        .buttonStyle(.brandIcon)
+                        .background(Circle().fill(Brand.color.card))
                         .padding(Brand.spacing.s)
                         .help(L("files.action.quickLook"))
                 }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+                .padding(Brand.spacing.m)
             ScrollView {
                 VStack(alignment: .leading, spacing: Brand.spacing.m) {
                     VStack(alignment: .leading, spacing: 4) {

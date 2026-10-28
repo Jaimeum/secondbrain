@@ -39,14 +39,11 @@ struct PageSheet: View {
         HStack(spacing: Brand.spacing.s) {
             Button { _ = stack.popLast() } label: {
                 Image(systemName: "chevron.left")
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(Brand.color.text2)
+            .buttonStyle(.brandIcon)
             .keyboardShortcut("[", modifiers: .command)
             .disabled(stack.isEmpty)
-            .opacity(stack.isEmpty ? 0 : 1)   // keeps its 22 pt: the title never shifts
+            .opacity(stack.isEmpty ? 0 : 1)   // keeps its 28 pt: the title never shifts
             .accessibilityHidden(stack.isEmpty)
             .help(L("wiki.back"))
             Image(systemName: SourceLabels.symbol(forPath: shown)).foregroundStyle(Brand.color.text2)

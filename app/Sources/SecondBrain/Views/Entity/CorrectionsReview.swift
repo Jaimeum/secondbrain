@@ -216,7 +216,6 @@ struct CorrectionsReviewSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if let session = model.session {
                 switch session.phase {
                 case .searching:
@@ -229,7 +228,6 @@ struct CorrectionsReviewSheet: View {
                 case .failed(let error):
                     message(icon: "exclamationmark.triangle", title: L("corrections.failed"), detail: error)
                 }
-                Rectangle().fill(Brand.color.line).frame(height: 1)
                 footer(session)
             }
         }
@@ -261,7 +259,7 @@ struct CorrectionsReviewSheet: View {
             if let icon {
                 Image(systemName: icon).font(Brand.font(24)).foregroundStyle(Brand.color.text2)
             } else {
-                ProgressView().controlSize(.regular)
+                BrandLoader(size: 24)
             }
             Text(title)
                 .font(Brand.callout)
@@ -412,10 +410,16 @@ private struct EditRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Brand.spacing.s) {
-            Toggle("", isOn: Binding(get: { checked }, set: { _ in toggle() }))
-                .toggleStyle(.checkbox)
-                .labelsHidden()
-                .padding(.top, 1)
+            // A brand check (as in a task row) instead of the native checkbox, which fills with the system accent.
+            Button(action: toggle) {
+                Image(systemName: checked ? "checkmark.circle.fill" : "circle")
+                    .font(Brand.font(16))
+                    .foregroundStyle(checked ? Brand.color.accent : Brand.color.text3)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(edit.reason))
+            .accessibilityAddTraits(checked ? [.isSelected] : [])
             VStack(alignment: .leading, spacing: Brand.spacing.xs) {
                 if !edit.reason.isEmpty {
                     Text(edit.reason)
@@ -448,7 +452,7 @@ private struct EditRow: View {
                 .font(Brand.mono)
                 .textSelection(.enabled)
                 .clipShape(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.lineSoft))
             }
             .opacity(checked ? 1 : 0.55)
         }

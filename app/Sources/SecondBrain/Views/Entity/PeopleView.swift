@@ -24,7 +24,7 @@ struct PeopleView: View {
                     EmptyStateView(symbol: "person.2", title: L("people.emptyTitle"), message: L("people.emptyMessage"))
                 } else {
                     list.frame(width: ContentLayout.listWidth(for: geo.size.width))
-                    Rectangle().fill(Brand.color.line).frame(width: 1)
+                    ContentLayout.columnRule
                     if stack.isEmpty {
                         EmptyStateView(symbol: "person", title: L("people.pick"), message: "")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -46,7 +46,6 @@ struct PeopleView: View {
         VStack(spacing: 0) {
             SearchFieldRow(placeholder: L("people.search"), text: $query)
                 .padding(Brand.spacing.m)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if people.isEmpty {
                 Text(L("people.noMatch"))
                     .font(Brand.body)
@@ -109,18 +108,24 @@ enum PersonSearch {
     }
 }
 
-/// 🔍 field in a list column (the same look as Correo's).
+/// 🔍 field in a list column: `card` with a `lineSoft` edge at rest and the brand focus halo (a `focusRing` glow and a
+/// `focusBorder` edge) while typing, like `brandField`. Never the system focus ring.
 struct SearchFieldRow: View {
     let placeholder: String
     @Binding var text: String
 
+    @FocusState private var focused: Bool
+
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass").foregroundStyle(Brand.color.text3)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .font(Brand.body)
                 .foregroundStyle(Brand.color.text)
+                .focused($focused)
+                .focusEffectDisabled()
             if !text.isEmpty {
                 Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(Brand.color.text3)
@@ -129,11 +134,12 @@ struct SearchFieldRow: View {
                 .help(L("mail.clearSearch"))
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .frame(height: 28)
-        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-            .strokeBorder(Brand.color.line, lineWidth: 1))
+        .background(Brand.color.card, in: shape)
+        .overlay(shape.strokeBorder(focused ? Brand.color.focusBorder : Brand.color.lineSoft, lineWidth: 1))
+        .brandFocusHalo(focused)
+        .animation(Brand.motion.fast, value: focused)
     }
 }
 
@@ -184,9 +190,10 @@ struct PersonRow: View {
         .padding(.horizontal, Brand.spacing.s)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-            .fill(isSelected ? Brand.color.accentSoft : (hovering ? Brand.color.cardAlt.opacity(0.55) : Color.clear)))
+            .fill(isSelected ? Brand.color.accentSoft : (hovering ? Brand.color.hover : Color.clear)))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
         .onTapGesture(perform: action)
         .help(person.title)
         .accessibilityElement(children: .combine)

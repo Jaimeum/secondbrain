@@ -7,7 +7,7 @@ struct ChatMessage: Identifiable {
     enum Role { case user, assistant }
     enum Failure: Equatable { case notConnected, rateLimited(Date?), other }
 
-    let id = UUID()
+    var id = UUID()
     let role: Role
     var text: String
     var question = ""
@@ -15,6 +15,8 @@ struct ChatMessage: Identifiable {
     var isStreaming = false
     var failure: Failure?
     var saved = false
+    /// v0.6: the page "Guardar como página" wrote (§16.3), opened from "Guardada · Ver".
+    var savedPath: String?
     /// The project an answer was asked in (nil = the whole brain): its [[links]] resolve from there and "Guardar"
     /// files it there.
     var projectSlug: String?
@@ -29,6 +31,13 @@ final class ChatModel {
     var draft = ""
     private(set) var isAsking = false
     @ObservationIgnored private var task: Task<Void, Never>?
+    // MARK: v0.6 ask — a saved conversation (§16.3). Unset for the meeting preparation's chats (not saved).
+    /// The saved conversation's id (`ChatThread.id`); nil until its first question is saved.
+    var threadId: String?
+    var title = ""
+    @ObservationIgnored var createdAt = Date()
+    /// Called after a question is asked and after its answer ends (done, failed or stopped): `Conversations` saves it.
+    @ObservationIgnored var onUpdate: ((ChatModel) -> Void)?
 
     func ask(engine: BrainEngine, projectSlug: String?) {
         let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -38,6 +47,7 @@ final class ChatModel {
         messages.append(ChatMessage(role: .assistant, text: "", question: question, isStreaming: true, projectSlug: projectSlug))
         let index = messages.count - 1
         isAsking = true
+        onUpdate?(self)
 
         task = Task {
             do {
@@ -75,14 +85,17 @@ final class ChatModel {
             guard !Task.isCancelled, messages.indices.contains(index) else { return }
             messages[index].isStreaming = false
             isAsking = false
+            onUpdate?(self)
         }
     }
 
     func stop() {
+        let wasAsking = isAsking
         task?.cancel()
         task = nil
         isAsking = false
         if let last = messages.indices.last { messages[last].isStreaming = false }
+        if wasAsking { onUpdate?(self) }
     }
 
     func clear() {
@@ -116,20 +129,23 @@ final class ChatModel {
 }
 
 /// "Preguntar": ask the wiki questions, answers cite pages with clickable [[links]]. The place fixes the scope
-/// (§16: no "Este proyecto | Todo el cerebro" switch): `projectSlug` nil = the whole brain. Hosted by `AskView`.
+/// (§16: no "Este proyecto | Todo el cerebro" switch): `projectSlug` nil = the whole brain. Hosted by `AskView`, which
+/// keeps the saved conversations, saves answers as pages and shows citations in its inspector (§16.3).
 struct ChatView: View {
     @Environment(AppState.self) private var state
     @Bindable var model: ChatModel
     let projectSlug: String?
     var onOpenPage: (String) -> Void
+    /// "Guardar como página" of an answer.
+    var onSave: (ChatMessage) -> Void
+    /// "Nueva conversación" (shown in the top bar while there is a conversation).
+    var onNew: () -> Void
 
     @ViewState private var showReconnect = false
 
-    private var effectiveScope: String? { projectSlug }
-
     var body: some View {
         VStack(spacing: 0) {
-            // Only "Borrar" lives here now (no scope switch, §16): no empty band before the first question.
+            // The conversation's title and "Nueva conversación": no empty band before the first question.
             if !model.messages.isEmpty {
                 topBar
                 Rectangle().fill(Brand.color.line).frame(height: 1)
@@ -140,7 +156,8 @@ struct ChatView: View {
                         if model.messages.isEmpty { suggestions }
                         ForEach(model.messages) { message in
                             MessageView(message: message, baseRelPath: message.baseRelPath, onOpenPage: onOpenPage,
-                                        onSave: { save(message) }, onReconnect: { showReconnect = true })
+                                        onSave: { onSave(message) }, onReconnect: { showReconnect = true },
+                                        onOpenSaved: message.savedPath.map { path in { onOpenPage(path) } })
                                 .id(message.id)
                         }
                     }
@@ -149,6 +166,9 @@ struct ChatView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: model.messages.last?.text) {
+                    if let last = model.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+                .onAppear {
                     if let last = model.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
@@ -163,18 +183,22 @@ struct ChatView: View {
 
     private var topBar: some View {
         HStack(spacing: Brand.spacing.m) {
+            Text(model.title.isEmpty ? L("ask.untitled") : model.title)
+                .font(Brand.section)
+                .foregroundStyle(Brand.color.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(model.title)
             Spacer(minLength: Brand.spacing.s)
-            if !model.messages.isEmpty {
-                Button { model.clear() } label: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(Brand.color.text2)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .help(L("chat.clear"))
-                .accessibilityLabel(Text(L("chat.clear")))
+            Button(action: onNew) {
+                Image(systemName: "square.and.pencil")
+                    .foregroundStyle(Brand.color.text2)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.borderless)
+            .help(L("ask.new"))
+            .accessibilityLabel(Text(L("ask.new")))
         }
         .padding(.horizontal, Brand.spacing.l)
         .frame(height: 44)
@@ -185,14 +209,14 @@ struct ChatView: View {
             Text(L("chat.emptyTitle"))
                 .font(Brand.title)
                 .foregroundStyle(Brand.color.text)
-            Text(L("chat.emptyMessage"))
+            Text(L(projectSlug == nil ? "chat.emptyMessage" : "ask.emptyMessageProject"))
                 .font(Brand.body)
                 .foregroundStyle(Brand.color.text2)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(["chat.suggestion1", "chat.suggestion2", "chat.suggestion3"], id: \.self) { key in
                 Button {
                     model.draft = L(key)
-                    model.ask(engine: state.engine, projectSlug: effectiveScope)
+                    model.ask(engine: state.engine, projectSlug: projectSlug)
                 } label: {
                     HStack(spacing: Brand.spacing.s) {
                         Image(systemName: "sparkle").foregroundStyle(Brand.color.accent)
@@ -221,7 +245,7 @@ struct ChatView: View {
                 .padding(.vertical, 9)
                 .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
-                .onSubmit { model.ask(engine: state.engine, projectSlug: effectiveScope) }
+                .onSubmit { model.ask(engine: state.engine, projectSlug: projectSlug) }
             if model.isAsking {
                 Button { model.stop() } label: {
                     Image(systemName: "stop.circle.fill").font(Brand.font(26))
@@ -230,7 +254,7 @@ struct ChatView: View {
                 .buttonStyle(.plain)
                 .help(L("chat.stop"))
             } else {
-                Button { model.ask(engine: state.engine, projectSlug: effectiveScope) } label: {
+                Button { model.ask(engine: state.engine, projectSlug: projectSlug) } label: {
                     Image(systemName: "arrow.up.circle.fill").font(Brand.font(26))
                         .foregroundStyle(Brand.color.accent)
                 }
@@ -243,11 +267,6 @@ struct ChatView: View {
         .padding(.horizontal, Brand.spacing.l)
         .padding(.vertical, Brand.spacing.m)
     }
-
-    private func save(_ message: ChatMessage) {
-        state.engine.saveAnswer(question: message.question, answer: message.text, projectSlug: message.projectSlug)
-        if let i = model.messages.firstIndex(where: { $0.id == message.id }) { model.messages[i].saved = true }
-    }
 }
 
 struct MessageView: View {   // v0.3: also used by MeetingPrepView
@@ -257,6 +276,8 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
     var onOpenPage: (String) -> Void
     var onSave: () -> Void
     var onReconnect: () -> Void
+    /// v0.6 (§16.3): set once the answer was saved as a page — "Guardada · Ver" opens it.
+    var onOpenSaved: (() -> Void)? = nil
 
     /// Citations that point at emails get an envelope symbol so it's clear the answer comes from a mail.
     @ViewState private var emailTargets: Set<String> = []
@@ -300,11 +321,18 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
                 if let failure = message.failure { failureView(failure) }
                 if !message.isStreaming, message.failure == nil, !message.text.isEmpty {
                     HStack(spacing: Brand.spacing.s) {
-                        Button(action: onSave) {
-                            Label(message.saved ? L("chat.saved") : L("chat.saveToWiki"),
-                                  systemImage: message.saved ? "checkmark" : "square.and.arrow.down")
+                        if let onOpenSaved {
+                            Button(action: onOpenSaved) {
+                                Label(L("ask.savedOpen"), systemImage: "checkmark")
+                            }
+                            .help(L("ask.savedOpenHelp"))
+                        } else {
+                            Button(action: onSave) {
+                                Label(message.saved ? L("ask.saved") : L("ask.saveAsPage"),
+                                      systemImage: message.saved ? "checkmark" : "doc.badge.plus")
+                            }
+                            .disabled(message.saved)
                         }
-                        .disabled(message.saved)
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(message.text, forType: .string)

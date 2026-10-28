@@ -1433,3 +1433,23 @@
 "page.openHelp" = "Open where it lives";
 "entity.edit" = "Edit";
 "entity.editHelp" = "Fix this page by hand";
+
+/* v0.6 ask — Ask: saved conversations, citation panel, save as page */
+"ask.new" = "New conversation";
+"ask.newHelp" = "Start a new conversation (earlier ones stay saved)";
+"ask.untitled" = "Conversation";
+"ask.listEmpty" = "Your conversations are saved here.";
+"ask.emptyMessageProject" = "I answer from what's in this project and tell you where I found it.";
+"ask.rename" = "Rename";
+"ask.renameTitle" = "Rename conversation";
+"ask.renamePlaceholder" = "Name";
+"ask.delete" = "Delete";
+"ask.deleteTitle" = "Delete this conversation?";
+"ask.deleteMessage" = "“%@” is removed from the list. Pages you saved from it stay in your brain.";
+"ask.saveAsPage" = "Save as page";
+"ask.saved" = "Saving…";
+"ask.savedOpen" = "Saved · View";
+"ask.savedOpenHelp" = "View the saved page";
+"ask.saveFailed" = "I couldn't save the answer as a page.";
+"ask.savedHistoryTitle" = "Saved an answer: “%@”";
+"ask.closeInspector" = "Close the panel";

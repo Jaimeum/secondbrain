@@ -138,19 +138,22 @@ enum DebugSnapshots {
             shots.append(("search-text", CGSize(width: 760, height: 620), AnyView(SearchPalette(initialQuery: "presupuesto"))))
             shots.append(("search-narrow", CGSize(width: 480, height: 600), AnyView(SearchPalette(initialQuery: "presupuesto"))))
             // The sidebar footer at its default width (220): the meeting card, a plain "Grabar", recording, an error.
+            // When Grabar takes the footer (a meeting on, recording), "+ Agregar" sits under it as a secondary button
+            // (§16.1), as in SidebarFooter.
             func footer(_ preview: RecordControlPreview?) -> AnyView {
                 AnyView(VStack(alignment: .leading, spacing: 4) {
                     RecordControl(placement: .sidebar, preview: preview)
+                    if preview != .plain { AddControl(secondary: true) }
                     QueueStatusLine(showsProgressBar: false)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .background(Brand.color.bg))
             }
-            shots.append(("record-control", CGSize(width: 220, height: 130), footer(nil)))
-            shots.append(("record-control-280", CGSize(width: 280, height: 130), footer(nil)))
+            shots.append(("record-control", CGSize(width: 220, height: 170), footer(nil)))
+            shots.append(("record-control-280", CGSize(width: 280, height: 170), footer(nil)))
             shots.append(("record-control-plain", CGSize(width: 220, height: 130), footer(.plain)))
-            shots.append(("record-control-recording", CGSize(width: 220, height: 130), footer(.recording)))
+            shots.append(("record-control-recording", CGSize(width: 220, height: 170), footer(.recording)))
             shots.append(("record-control-error", CGSize(width: 220, height: 170), footer(.plain)))
             shots.append(("new-project", CGSize(width: 480, height: 440), AnyView(NewProjectSheet())))
             if let project {

@@ -369,6 +369,9 @@ private final class FakeAttachProvider: MailCalendarProvider, @unchecked Sendabl
         let states3 = engine.attachmentStates(messageSourceId: engine.emailSource(externalId: "microsoft:t3")?.id,
                                               attachments: try await fake.listAttachments(messageId: "t3"))
         if case .notSaved = states3["x"] { t.check(true, "unticked → No guardado") } else { t.check(false, "unticked state: \(String(describing: states3["x"]))") }
+        // The email's own checklist (reviewed): the unticked one is decided → Descartados as the user's choice.
+        let r6b = try await engine.saveAttachments(for: t3, account: account, mode: .reviewed([]), provider: fake)
+        t.eq(r6b.discarded.map(\.reason), [.user], "checklist: unticked → Descartados (user)")
 
         // Two attachments with the same name: Claude's verdict and the saved state are per file.
         let t5 = msg("t5", 3, body: "Fotos de la pizarra y el banner.")

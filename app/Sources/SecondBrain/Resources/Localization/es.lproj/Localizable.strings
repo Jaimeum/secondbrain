@@ -1792,10 +1792,13 @@
 
 /* v0.7 integration */
 "attach.checklist.save" = "Guardar los marcados (%ld)";
-"attach.checklist.hint" = "Marqué lo que parece útil. Lo que no marques se queda en tu correo y puedes guardarlo después.";
+"attach.checklist.hint" = "Marqué lo que parece útil. Lo que no marques queda 30 días en Descartados.";
 
 /* v0.7 fix */
 "graph.kinds.emailThread" = "Hilos de correo";
 "dump.folderEmpty" = "No hay archivos en la carpeta «%@».";
 "files.filters" = "Filtros";
 "files.filtersActive" = "Filtros (%ld)";
+"attach.review.title" = "¿Qué adjuntos guardo?";
+"attach.review.hint" = "Ya guardé el correo. Marqué los adjuntos que parecen útiles: revisa y confirma con «Guardar los marcados».";
+"attach.review.done" = "Listo";

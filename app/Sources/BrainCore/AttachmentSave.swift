@@ -10,9 +10,13 @@ import Foundation
 public enum AttachmentSaveMode: Sendable, Equatable {
     /// Forward: rules, then Claude for the ambiguous ones; > 25 MB is never downloaded.
     case automatic
-    /// Backwards: exactly these attachment ids are saved (the save sheet's ticks, "Guardar", "Guardar de todos modos").
-    /// The unticked ones are not downloaded: they stay in the mailbox, "No guardado" in the reader, to save later.
+    /// Backwards: exactly these attachment ids are saved (the save sheets' ticks, "Guardar", "Guardar de todos modos").
+    /// The unticked ones are not downloaded: they stay in the mailbox, "No guardado" in the reader, to save later (a
+    /// 200-message "Traer anteriores" doesn't download every logo).
     case confirmed([String])
+    /// The checklist of one hand-saved email: the ticked ids are saved and the unticked downloadable ones go to
+    /// Descartados with the triage's reason (decided, so the checklist closes; still rescuable for 30 days).
+    case reviewed([String])
 }
 
 /// What `saveAttachments` did.
@@ -136,7 +140,13 @@ public extension BrainEngine {
 
         let states = attachmentStates(messageSourceId: email.id, attachments: list, inlineContentIds: message.inlineContentIds)
         let context = AttachmentTriage.Context(inlineContentIds: message.inlineContentIds.map(Set.init))
-        let chosen: Set<String>? = { if case .confirmed(let ids) = mode { return Set(ids) } else { return nil } }()
+        let chosen: Set<String>? = {
+            switch mode {
+            case .automatic: return nil
+            case .confirmed(let ids), .reviewed(let ids): return Set(ids)
+            }
+        }()
+        let discardUnticked: Bool = { if case .reviewed = mode { return true } else { return false } }()
         let project = threadFolder(email.threadKey ?? "").flatMap(VaultStore.projectSlug(of:))
         let duplicateDirs = [rawDir(.document, project), rawDir(.image, project)]
         var taken: Set<String>?
@@ -156,7 +166,7 @@ public extension BrainEngine {
                 fromStore = item
             default: break
             }
-            if wanted == false {
+            if wanted == false, !discardUnticked {
                 // Unticked in the save sheet: not downloaded; it stays in the mailbox ("No guardado").
                 report.skipped.append(info)
                 continue
@@ -205,8 +215,11 @@ public extension BrainEngine {
                 discard(info, data: data, reason: r, email: email, into: store, report: &report)
             case (nil, .ask):
                 ambiguous.append((info, data, hash))
-            case (.some(false), _):
-                report.skipped.append(info)
+            case (.some(false), let d):
+                // Unticked in the email's checklist: kept 30 days in Descartados, with the rules' reason when they had one.
+                var reason = DiscardReason.user
+                if case .discard(let r) = d { reason = r }
+                discard(info, data: data, reason: reason, email: email, into: store, report: &report)
             }
         }
 

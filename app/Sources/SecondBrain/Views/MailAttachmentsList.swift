@@ -235,7 +235,7 @@ struct MailAttachmentsList: View {
         Task {
             defer { savingBatch = false }
             do {
-                let report = try await engine.saveAttachments(for: message, account: account, mode: .confirmed(ids),
+                let report = try await engine.saveAttachments(for: message, account: account, mode: .reviewed(ids),
                                                               attachments: list)
                 if let name = report.failed.first { saveError = L("attach.saveFailed", name) }
                 state.bumpVault()
@@ -274,6 +274,25 @@ struct MailAttachmentsList: View {
 extension MailModel {
     /// Snapshot (`mail-attachments`): the demo contract email saved, its attachments triaged forward (Claude simulated:
     /// it keeps the whiteboard photo) → Guardado · Descartado (logo o firma) · Guardado. Writes to the scratch vault.
+    /// The review sheet right after "Guardar" on the demo contract email (writes the email to the vault).
+    static func snapshotAttachmentReview(state: AppState) async -> (AttachmentReview, MailModel)? {
+        state.engine.autoProcess = false
+        let model = MailModel()
+        model.start(state: state)
+        await model.waitUntilReady()
+        guard let target = model.messages.first(where: { $0.hasAttachments && $0.id == "demo-m11" }) ?? model.messages.first(where: \.hasAttachments)
+        else { return nil }
+        model.select(target.id)
+        await model.waitUntilReady()
+        if model.source(for: target.id) == nil { model.add(onlyThis: true) }
+        model.dismissToast()
+        guard let review = model.attachmentReview else { return nil }
+        model.attachmentReview = nil
+        state.bumpVault()
+        try? await Task.sleep(for: .milliseconds(300))
+        return (review, model)
+    }
+
     static func snapshotAttachments(state: AppState) async -> MailModel? {
         state.engine.autoProcess = false
         let model = MailModel()
@@ -286,6 +305,7 @@ extension MailModel {
         await model.waitUntilReady()
         if model.source(for: target.id) == nil { model.add(onlyThis: true) }
         model.dismissToast()
+        model.attachmentReview = nil   // the review sheet has its own shot
         guard let message = model.detail?.message else { return model }
         _ = try? await state.engine.saveAttachments(for: message, account: account, mode: .automatic) { _, candidates, _ in
             candidates.map { AttachmentTriageVerdict(name: $0.name, keep: true, reason: nil) }

@@ -53,6 +53,9 @@ struct MailDetailView: View {
         .background(Brand.color.card)
         .animation(Brand.motion.animation(reduceMotion: reduceMotion), value: model.toast)
         .animation(Brand.motion.animation(reduceMotion: reduceMotion), value: model.ruleOffer.current)
+        .sheet(item: Binding(get: { model.attachmentReview }, set: { model.attachmentReview = $0 })) { review in
+            MailAttachmentReviewSheet(review: review) { model.source(for: $0) }
+        }
     }
 
     // MARK: Message

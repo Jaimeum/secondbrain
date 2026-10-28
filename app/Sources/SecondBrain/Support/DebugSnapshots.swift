@@ -214,6 +214,14 @@ enum DebugSnapshots {
                 await render(MailView(model: mail).environment(state), size: CGSize(width: 1000, height: 640),
                              to: dir.appendingPathComponent("mail-rule-routed.png"))
             }
+            // v0.7 fix (§17.1 backwards): the sheet "Guardar" opens on an email with attachments (writes the email).
+            if only.isEmpty || "mail-attach-review".hasPrefix(only), let (review, mail) = await MailModel.snapshotAttachmentReview(state: state) {
+                for dark in [false, true] {
+                    await render(MailAttachmentReviewSheet(review: review) { mail.source(for: $0) }.environment(state),
+                                 size: CGSize(width: 560, height: 460), dark: dark,
+                                 to: dir.appendingPathComponent("mail-attach-review\(dark ? "-dark" : "").png"))
+                }
+            }
             // v0.7 attach (§17.1): the reader's attachment list after saving the demo contract email (writes to the vault).
             if only.isEmpty || "mail-attachments".hasPrefix(only), let mail = await MailModel.snapshotAttachments(state: state) {
                 for (suffix, size) in [("", CGSize(width: 1000, height: 640)), ("-min", CGSize(width: 760, height: 560))] {

@@ -47,6 +47,7 @@ struct FilesSelfTestCmd: AsyncParsableCommand {
         t.group("files-kinds") { testFileKinds(t) }
         t.group("files-index") { testFileIndex(t, root: root.appendingPathComponent("vault")) }
         t.group("files-demo") { testDemoFiles(t, root: root.appendingPathComponent("demo")) }
+        await t.groupAsync("files-capture") { await testCaptureOrigin(t, root: root.appendingPathComponent("capture")) }
         print("\n\(t.passed) passed, \(t.failures.count) failed")
         for f in t.failures { print("  ✗ \(f)") }
         if !t.failures.isEmpty { throw ExitCode(1) }
@@ -307,4 +308,37 @@ private func putData(_ root: URL, _ path: String, _ data: Data) {
     t.check(all.contains { $0.type == .image }, "demo: an image")
     t.check(all.contains { $0.origin == .dump }, "demo: something added with Agregar al proyecto")
     t.check(all.contains { $0.summary != nil }, "demo: a file with its En breve")
+}
+
+/// A file saved from the quick capture is tagged `origin: capture` and shows as "Captura" in Archivos.
+@MainActor private func testCaptureOrigin(_ t: Tester, root: URL) async {
+    var config = AppConfig.default
+    config.vaultPath = root.appendingPathComponent("vault").path
+    config.dataPath = root.appendingPathComponent("data").path
+    config.uiLanguage = "es"
+    let engine = BrainEngine(config: config, transcriber: FilesNoTranscriber())
+    engine.autoProcess = false
+    engine.start()
+    do {
+        let acme = try engine.projects.create(name: "Acme", description: "Cliente", emoji: "🚀")
+        let file = root.appendingPathComponent("minuta-captura.txt")
+        try "Minuta rápida de la visita.".write(to: file, atomically: true, encoding: .utf8)
+        try await engine.importFileAsync(file, projectSlug: acme.slug, origin: "capture")
+        let other = root.appendingPathComponent("subido.txt")
+        try "Otro documento.".write(to: other, atomically: true, encoding: .utf8)
+        try await engine.importFileAsync(other, projectSlug: acme.slug)
+        let all = FileIndex(vaultRoot: engine.vault.root).refresh(entities: EntityIndex(vaultRoot: engine.vault.root).refresh())
+        t.eq(all.first { $0.name.contains("minuta-captura") }?.origin, .capture, "quick capture file = Captura")
+        t.eq(all.first { $0.name.contains("subido") }?.origin, .upload, "plain import = Subido")
+    } catch {
+        t.check(false, "files-capture: \(error)")
+    }
+}
+
+private final class FilesNoTranscriber: Transcribing, @unchecked Sendable {
+    func prepare(progress: @escaping @Sendable (ModelPrepProgress) -> Void) async throws {}
+    var isReady: Bool { true }
+    func transcribe(sessionDir: URL, manifest: SessionManifest, progress: @escaping @Sendable (Double, String) -> Void) async throws -> Transcript {
+        Transcript(language: "es", durationSeconds: 0, segments: [])
+    }
 }

@@ -211,12 +211,13 @@ enum SourceImport {
 
     /// Files (documents, audio, video) and links. Extraction and copying run off the main thread; audio and
     /// video become meetings that get transcribed by the queue. Returns the failures, one line each.
-    static func importURLs(_ urls: [URL], projectSlug: String?, state: AppState) async -> [String] {
+    /// `origin` = the raw wrapper's `origin:` (v0.7 Archivos › Origen: `capture` from the quick capture).
+    static func importURLs(_ urls: [URL], projectSlug: String?, state: AppState, origin: String? = nil) async -> [String] {
         var failed: [String] = []
         for url in urls {
             do {
                 if url.isFileURL {
-                    try await state.engine.importFileAsync(url, projectSlug: projectSlug)
+                    try await state.engine.importFileAsync(url, projectSlug: projectSlug, origin: origin)
                 } else {
                     try await state.engine.importURL(url, projectSlug: projectSlug)
                 }

@@ -287,7 +287,15 @@ private final class ConfigBox: @unchecked Sendable {
         try await importFileAsync(url, projectSlug: projectSlug, eventDate: nil, templateId: nil)
     }
 
-    public func importFileAsync(_ url: URL, projectSlug: String?, eventDate: Date?, templateId: String? = nil) async throws {
+    /// v0.7 (§17.2): `origin` is written to the raw wrapper (`origin: capture` from the quick capture) so Archivos
+    /// shows where the file came from. Media files keep their own path (a meeting).
+    public func importFileAsync(_ url: URL, projectSlug: String?, origin: String?) async throws {
+        try await importFileAsync(url, projectSlug: projectSlug, eventDate: nil, templateId: nil,
+                                  extra: origin.map { [("origin", $0)] } ?? [])
+    }
+
+    public func importFileAsync(_ url: URL, projectSlug: String?, eventDate: Date?, templateId: String? = nil,
+                                extra: [(String, String)] = []) async throws {
         let project = validProject(projectSlug)
         if await Task.detached(operation: { AudioPrep.isMedia(url) }).value {
             try importMedia(url, project: project, eventDate: eventDate, templateId: templateId)
@@ -295,9 +303,9 @@ private final class ConfigBox: @unchecked Sendable {
         }
         let dir = rawDir(.document, project)
         let imported = Importer.mainThreadText.contains(url.pathExtension.lowercased())
-            ? try Importer.importFile(url, into: dir, project: project, eventDate: eventDate)
+            ? try Importer.importFile(url, into: dir, project: project, eventDate: eventDate, extra: extra)
             : try await Task.detached(priority: .userInitiated) {
-                try Importer.importFile(url, into: dir, project: project, eventDate: eventDate)
+                try Importer.importFile(url, into: dir, project: project, eventDate: eventDate, extra: extra)
             }.value
         addImported(kind: .document, imported, project: project, templateId: templateId)
     }

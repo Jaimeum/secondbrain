@@ -180,7 +180,7 @@ final class QuickCaptureModel {
         var failures: [String] = []
         var failedFiles: [URL] = []
         for url in savingFiles {
-            let failed = await SourceImport.importURLs([url], projectSlug: slug, state: state)
+            let failed = await SourceImport.importURLs([url], projectSlug: slug, state: state, origin: "capture")   // Archivos › Captura
             if !failed.isEmpty {
                 failures += failed
                 failedFiles.append(url)
@@ -273,6 +273,9 @@ struct QuickCaptureView: View {
                     .foregroundStyle(Brand.color.text2)
                     .lineLimit(1)
                     .truncationMode(.tail)
+            }
+            if embedded, case .note = model.kind, model.hasText, model.savedMessage == nil {   // v0.7 (§17.3)
+                inPersonToggle
             }
             if model.inPersonActive, model.projectSlug == nil {   // v0.7 (§17.3)
                 Label(L("capture.inPersonNeedsProject"), systemImage: "info.circle")
@@ -429,16 +432,21 @@ struct QuickCaptureView: View {
             .frame(minWidth: 120, maxWidth: embedded ? 150 : 220)
             .help(L("capture.destinationHelp"))
             if !embedded, case .note = model.kind {   // v0.7 (§17.3)
-                Toggle(L("capture.inPerson"), isOn: $model.inPerson)
-                    .toggleStyle(.checkbox)
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .disabled(!model.hasText)
-                    .help(model.projectSlug == nil ? L("capture.inPersonNeedsProject") : L("capture.inPersonHelp"))
+                inPersonToggle
             }
         }
+    }
+
+    /// "Reunión presencial" (v0.7, §17.3): in the panel's footer; in the narrow menu bar, on its own line.
+    private var inPersonToggle: some View {
+        Toggle(L("capture.inPerson"), isOn: $model.inPerson)
+            .toggleStyle(.checkbox)
+            .font(Brand.caption)
+            .foregroundStyle(Brand.color.text2)
+            .lineLimit(1)
+            .fixedSize()
+            .disabled(!model.hasText)
+            .help(model.projectSlug == nil ? L("capture.inPersonNeedsProject") : L("capture.inPersonHelp"))
     }
 
     private var saveButton: some View {

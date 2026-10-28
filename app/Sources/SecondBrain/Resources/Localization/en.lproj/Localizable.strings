@@ -1650,3 +1650,6 @@
 "mail.inProjectSeeThread" = "In %@ · See thread";
 "graph.kind.emailThread" = "Email thread";
 "entity.kind.emailThread" = "Email thread";
+
+/* v0.7 links */
+"original.help" = "%@ (opens in your browser)";

@@ -442,7 +442,7 @@ private func gmailHeaders(_ pairs: [(String, String)]) -> String {
         t.eq(s.date, utcDate(2026, 10, 26, 14), "Gmail internalDate")
         t.check(!s.isRead, "Gmail UNREAD → not read")
         t.check(s.hasAttachments, "Gmail multipart/mixed → attachments")
-        t.check(s.webLink?.contains("#all/t1") == true && s.webLink?.contains("authuser=demo%40gmail.com") == true, "Gmail webLink \(s.webLink ?? "-")")
+        t.eq(s.webLink, "https://mail.google.com/mail/u/demo@gmail.com/#all/t1", "Gmail webLink (§17.7)")
     } catch { t.check(false, "Gmail metadata parses: \(error)") }
 
     let plain = "SG9sYSBBbmEsDQoNCsK_UmV2aXNhcyBlbCBjb250cmF0bz8gVmEgY29uIGFuZXhvcyA-PiBvay4NCg0KQ2FybG9z"

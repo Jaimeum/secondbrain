@@ -22,6 +22,8 @@ public struct ParsedEmail: Codable, Equatable, Sendable {
     public var quotedHistory: String?     // "On … wrote:" / "El … escribió:" / "-----Original Message-----" onward
     public var raw: String                // exactly what the user pasted
     public var isFromOwner: Bool          // from matches one of the owner's addresses
+    /// v0.7 (§17.7): the provider's link to the message (mail from a connected account; nil when pasted).
+    public var webLink: String? = nil
     public init(subject: String?, from: EmailAddress?, to: [EmailAddress] = [], cc: [EmailAddress] = [], date: Date?,
                 body: String, quotedHistory: String?, raw: String, isFromOwner: Bool = false) {
         self.subject = subject; self.from = from; self.to = to; self.cc = cc; self.date = date

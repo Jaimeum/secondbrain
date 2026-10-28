@@ -306,7 +306,7 @@ public extension BrainEngine {
         cc: \(YAML.list(email.cc.map(EmailParser.format)))
         date: \(SBDate.iso(sent))
         added: \(SBDate.iso(added))
-        project: \(YAML.scalar(project))\(externalId.map { "\nexternal_id: \(YAML.quoted($0))" } ?? "")
+        project: \(YAML.scalar(project))\(externalId.map { "\nexternal_id: \(YAML.quoted($0))" } ?? "")\((email.webLink ?? origin?.webLink).map { "\nweb_link: \(YAML.quoted($0))" } ?? "")
         ---
 
 
@@ -324,7 +324,7 @@ public extension BrainEngine {
         meta.addParticipants([email.from].compactMap { $0 } + email.to + email.cc)
         meta.messages.append(.init(file: file.lastPathComponent, date: email.date, from: email.from, sourceId: id,
                                    bodyHash: EmailParser.bodyFingerprint(email.body), added: added, externalId: externalId,
-                                   webLink: origin?.webLink, isFromOwner: email.isFromOwner))
+                                   webLink: email.webLink ?? origin?.webLink, isFromOwner: email.isFromOwner))
         // v0.7 (§17.4): this provider conversation now lives here; later mail of it always joins this thread.
         if let origin, let pid = origin.providerThreadId, !pid.isEmpty {
             meta.providerThreadIds = (meta.providerThreadIds ?? [:]).merging([origin.accountId: pid]) { _, new in new }

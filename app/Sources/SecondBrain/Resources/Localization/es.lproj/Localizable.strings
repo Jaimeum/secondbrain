@@ -1650,3 +1650,6 @@
 "mail.inProjectSeeThread" = "En %@ · Ver hilo";
 "graph.kind.emailThread" = "Hilo de correo";
 "entity.kind.emailThread" = "Hilo de correo";
+
+/* v0.7 links */
+"original.help" = "%@ (se abre en el navegador)";

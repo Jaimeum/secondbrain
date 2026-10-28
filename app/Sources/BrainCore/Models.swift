@@ -270,6 +270,8 @@ public struct SourceRecord: Codable, Identifiable, Equatable, Sendable {
     public var calendarEventId: String?
     // v0.7 (§17.1): an attachment's source points at the email it came with (that email's SourceRecord.id).
     public var parentSourceId: String?
+    // v0.7 (§17.7): a recording tied to a calendar event keeps the event's web link ("Abrir en Outlook Calendar").
+    public var webLink: String?
 
     /// The date the timeline uses: when it happened, falling back to when it was added.
     public var timelineDate: Date { eventDate ?? createdAt }

@@ -303,6 +303,8 @@ struct WikiPagePane: View {
                 .help(shownTitle)
 
             if let selection {
+                // v0.7 (§17.7): a thread page opens its newest email; a recorded meeting's page, its calendar event.
+                EntityOriginalButton(path: selection, iconOnly: width < 720, style: .link)
                 if width >= 560 {
                     iconActions(selection)
                 } else {

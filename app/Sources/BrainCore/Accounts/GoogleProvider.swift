@@ -221,7 +221,7 @@ public enum GmailParser {
         let from = header(m, "From").flatMap { EmailParser.parseAddresses($0).first } ?? EmailAddress(name: nil, email: nil)
         let labels = Set(m.labelIds ?? [])
         let thread = m.threadId ?? m.id
-        let link = "https://mail.google.com/mail/?authuser=\(HTTP.encodeForm(account.email))#all/\(thread)"
+        let link = OriginalLinks.gmailThread(accountEmail: account.email, threadId: thread)   // v0.7 (§17.7)
         return MailMessageSummary(
             id: m.id, threadId: thread, from: from,
             to: header(m, "To").map(EmailParser.parseAddresses) ?? [],

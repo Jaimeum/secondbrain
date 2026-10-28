@@ -23,6 +23,7 @@ struct SB: AsyncParsableCommand {
                       + [AttachmentsCmd.self]  // v0.7 attach
                       + [ThreadsCmd.self]  // MARK: v0.7 threads
                       + [RepliesCmd.self]  // MARK: v0.7 replies
+                      + [BackfillCmd.self]  // MARK: v0.7 backfill
     )
 }
 

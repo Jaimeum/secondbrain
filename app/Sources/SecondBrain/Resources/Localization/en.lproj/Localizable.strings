@@ -1661,3 +1661,31 @@
 "replies.auto.thread" = "I added %1$d emails to “%2$@”.";
 "replies.auto.many" = "I added %d emails to threads you follow.";
 "replies.auto.noSubject" = "(no subject)";
+
+/* v0.7 backfill */
+"batch.title.searching" = "Looking for earlier emails…";
+"batch.title.ruleFrom" = "%@ from %@";
+"batch.subtitle.selection" = "Going to %@: the whole threads, with the attachments you tick.";
+"batch.subtitle.window" = "From the last %@ · Going to %@";
+"batch.subtitle.rule" = "By the rule “%@”";
+"batch.searching" = "Searching your mail…";
+"batch.loading" = "Reading the threads…";
+"batch.empty.title" = "I found no earlier emails";
+"batch.empty.message" = "Nothing from the last %@ matches this rule. From now on it works by itself.";
+"batch.saveNothing" = "Save";
+"batch.row.saved" = "Already saved · %@";
+"batch.row.newOf" = "%@ of %ld";
+"batch.row.staysIn" = "Stays in %@";
+"batch.attachmentsLoading" = "Checking the attachments…";
+"batch.reason.notFile" = "Not a file";
+"batch.reason.tooBig" = "Too big";
+"batch.reason.logo" = "Logo or signature";
+"batch.reason.small" = "Small image";
+"batch.reason.junkType" = "Technical file";
+"batch.reason.duplicate" = "Already saved";
+"batch.saveHelp" = "Saves the whole threads of the ticked emails. I'll show you their attachments first.";
+"batch.check" = "Select";
+"batch.uncheck" = "Remove from the selection";
+"batch.bringEarlier" = "Bring earlier ones…";
+"batch.progress" = "Saving emails… %ld of %ld";
+"batch.title.none" = "No earlier emails";

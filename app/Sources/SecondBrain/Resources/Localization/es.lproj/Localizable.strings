@@ -1661,3 +1661,31 @@
 "replies.auto.thread" = "Agregué %1$d correos a «%2$@».";
 "replies.auto.many" = "Agregué %d correos a hilos que sigues.";
 "replies.auto.noSubject" = "(sin asunto)";
+
+/* v0.7 backfill */
+"batch.title.searching" = "Buscando correos anteriores…";
+"batch.title.ruleFrom" = "%@ de %@";
+"batch.subtitle.selection" = "Van a %@: los hilos completos, con los adjuntos que marques.";
+"batch.subtitle.window" = "De los últimos %@ · Van a %@";
+"batch.subtitle.rule" = "Por la regla «%@»";
+"batch.searching" = "Buscando en tu correo…";
+"batch.loading" = "Leyendo los hilos…";
+"batch.empty.title" = "No encontré correos anteriores";
+"batch.empty.message" = "Nada de los últimos %@ coincide con esta regla. De ahora en adelante funciona sola.";
+"batch.saveNothing" = "Guardar";
+"batch.row.saved" = "Ya guardado · %@";
+"batch.row.newOf" = "%@ de %ld";
+"batch.row.staysIn" = "Sigue en %@";
+"batch.attachmentsLoading" = "Viendo los adjuntos…";
+"batch.reason.notFile" = "No es un archivo";
+"batch.reason.tooBig" = "Muy grande";
+"batch.reason.logo" = "Logo o firma";
+"batch.reason.small" = "Imagen pequeña";
+"batch.reason.junkType" = "Archivo técnico";
+"batch.reason.duplicate" = "Ya está guardado";
+"batch.saveHelp" = "Guarda los hilos completos de los correos marcados. Antes te muestro sus adjuntos.";
+"batch.check" = "Seleccionar";
+"batch.uncheck" = "Quitar de la selección";
+"batch.bringEarlier" = "Traer anteriores…";
+"batch.progress" = "Guardando correos… %ld de %ld";
+"batch.title.none" = "Ningún correo anterior";

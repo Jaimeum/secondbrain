@@ -9,14 +9,19 @@ struct MailView: View {
     @ViewState private var model: MailModel
     /// Single-column mode: the reader is showing (pushed over the list).
     @ViewState private var narrowShowsDetail = false
+    // MARK: v0.7 backfill — §17.6 multi-select and its confirmation sheet.
+    @ViewState private var selection = MailSelection()
+    @ViewState private var batch: MailBatchModel?
+    @ViewState private var pickedDestination: String?? = nil
 
     static let listMinWidth: CGFloat = 260
     static let detailMinWidth: CGFloat = 320
     /// Below this the two columns don't fit (260 + 320 + divider + slack): one column with push.
     static let splitMinWidth: CGFloat = 620
 
-    init(model: MailModel? = nil) {
+    init(model: MailModel? = nil, selection: MailSelection? = nil) {
         _model = ViewState(initialValue: model ?? MailModel())
+        _selection = ViewState(initialValue: selection ?? MailSelection())   // v0.7 backfill: snapshots pass one
     }
 
     private var hasMailAccounts: Bool {
@@ -61,6 +66,9 @@ struct MailView: View {
         .onChange(of: state.accountsRevision) { model.accountsChanged() }
         .onChange(of: state.vaultRevision) { model.vaultChanged() }
         .onChange(of: state.engine.routing.settings) { model.routingChanged() }   // MARK: v0.4 routing
+        .onChange(of: model.messages.map(\.id)) { selection.keepOnly(model.messages.map(\.id)) }   // MARK: v0.7 backfill
+        .onChange(of: model.accountId) { selection.clear(); pickedDestination = nil }
+        .sheet(item: $batch) { MailBatchSheet(model: $0) }
         .alert(L("activity.conflictTitle"), isPresented: Binding(get: { model.undoConflict != nil },
                                                                 set: { if !$0 { model.undoConflict = nil } })) {
             Button(L("activity.undoAnyway"), role: .destructive) {
@@ -78,11 +86,23 @@ struct MailView: View {
     private func split(width: CGFloat) -> some View {
         let list = min(max(Self.listMinWidth, (width * 0.36).rounded()), 420, width - Self.detailMinWidth - 1)
         return HStack(spacing: 0) {
-            MailListPane(model: model)
+            listPane()
                 .frame(width: list)
             Rectangle().fill(Brand.color.line).frame(width: 1)
             MailDetailView(model: model)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// The list with Correo's multi-select (v0.7 §17.6): "Guardar en …" opens the confirmation sheet.
+    private func listPane(onOpen: (() -> Void)? = nil) -> some View {
+        MailListPane(model: model, onOpen: onOpen, selection: selection, picked: $pickedDestination) { slug in
+            guard let account = model.account else { return }
+            let checked = model.messages.filter { selection.contains($0.id) }
+            guard !checked.isEmpty else { return }
+            let sheet = MailBatchModel(origin: .selection(checked, account), projectSlug: slug)
+            sheet.onSaved = { [selection] in selection.clear() }
+            batch = sheet
         }
     }
 
@@ -105,7 +125,7 @@ struct MailView: View {
             }
             .transition(.opacity)
         } else {
-            MailListPane(model: model) { narrowShowsDetail = true }
+            listPane { narrowShowsDetail = true }
                 .transition(.opacity)
         }
     }
@@ -141,6 +161,10 @@ private struct MailListPane: View {
     @Bindable var model: MailModel
     /// The user opened a message (single-column mode pushes the reader).
     var onOpen: (() -> Void)? = nil
+    // MARK: v0.7 backfill — checked messages, the bar's destination, "Guardar en …".
+    var selection = MailSelection()
+    @Binding var picked: String??
+    var onSaveSelection: (String?) -> Void = { _ in }
     @ViewState private var connector = AccountConnector()
     @ViewState private var help: OrgHelpRequest?
     @FocusState private var listFocused: Bool
@@ -150,7 +174,14 @@ private struct MailListPane: View {
             header
             Rectangle().fill(Brand.color.line).frame(height: 1)
             content
+            if selection.isActive {
+                MailSelectionBar(selection: selection, model: model, picked: $picked, onSave: onSaveSelection)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if let error = MailBatchSaver.shared.lastError {
+                batchError(error)
+            }
         }
+        .animation(Brand.motion.animation(fast: true), value: selection.isActive)
         .background(Brand.color.surface)
         .sheet(item: $help) { request in OrgAccessHelpSheet(provider: request.provider) }
     }
@@ -212,9 +243,11 @@ private struct MailListPane: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(messages) { message in
                         MailRow(message: message, isMine: mine.contains(message.from.email ?? ""),
-                                isSelected: model.selectedId == message.id, source: index[message.id], model: model)
+                                isSelected: model.selectedId == message.id, source: index[message.id], model: model,
+                                isChecked: selection.contains(message.id), selecting: selection.isActive,
+                                onCheck: { selection.toggle(message.id) })
                             .contentShape(Rectangle())
-                            .onTapGesture { open(message.id) }
+                            .onTapGesture { click(message.id, in: messages) }
                             .id(message.id)
                     }
                     footer
@@ -233,6 +266,37 @@ private struct MailListPane: View {
                 return .handled
             }
         }
+    }
+
+    /// ⌘-click checks/unchecks, ⇧-click checks a range (v0.7 §17.6); a plain click opens the message.
+    private func click(_ id: String, in messages: [MailMessageSummary]) {
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.command) {
+            selection.toggle(id, alsoOpen: model.selectedId)
+        } else if flags.contains(.shift) {
+            selection.extend(to: id, in: messages.map(\.id), open: model.selectedId)
+        } else {
+            open(id)
+        }
+    }
+
+    /// A save in the background went wrong: one line under the list, dismissable.
+    private func batchError(_ error: String) -> some View {
+        HStack(alignment: .top, spacing: Brand.spacing.s) {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.danger)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button { MailBatchSaver.shared.lastError = nil } label: {
+                Image(systemName: "xmark").foregroundStyle(Brand.color.text3)
+            }
+            .buttonStyle(.plain)
+            .help(L("common.close"))
+        }
+        .padding(Brand.spacing.m)
+        .background(Brand.color.card)
+        .overlay(alignment: .top) { Rectangle().fill(Brand.color.line).frame(height: 1) }
     }
 
     private func open(_ id: String) {
@@ -336,17 +400,29 @@ private struct MailRow: View {
     let isSelected: Bool
     let source: SourceRecord?
     let model: MailModel
+    // MARK: v0.7 backfill — the checkbox column (on hover, and for every row while a selection is going on).
+    var isChecked = false
+    var selecting = false
+    var onCheck: () -> Void = {}
+    @ViewState private var hovering = false
 
     /// On the selected fill (accentSoft) text2 falls under 4.5:1 at 11 pt: the full text color there.
     private var secondary: Color { isSelected ? Brand.color.text : Brand.color.text2 }
 
     var body: some View {
         HStack(alignment: .top, spacing: Brand.spacing.s) {
-            Circle()
-                .fill(message.isRead ? Color.clear : Brand.color.accent)
-                .frame(width: 7, height: 7)
-                .padding(.top, 5)
-                .accessibilityLabel(message.isRead ? "" : L("mail.unread"))
+            ZStack(alignment: .top) {
+                if selecting || hovering || isChecked {
+                    MailRowCheckbox(checked: isChecked, toggle: onCheck)
+                } else {
+                    Circle()
+                        .fill(message.isRead ? Color.clear : Brand.color.accent)
+                        .frame(width: 7, height: 7)
+                        .padding(.top, 5)
+                        .accessibilityLabel(message.isRead ? "" : L("mail.unread"))
+                }
+            }
+            .frame(width: 16)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(isMine ? L("mail.you") : message.from.display)
@@ -392,13 +468,14 @@ private struct MailRow: View {
         .padding(.horizontal, Brand.spacing.s)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? Brand.color.accentSoft : Color.clear,
+        .background(isSelected ? Brand.color.accentSoft : (isChecked ? Brand.color.cardAlt : Color.clear),
                     in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
         .overlay(alignment: .bottom) {
             if !isSelected {
-                Rectangle().fill(Brand.color.line).frame(height: 1).padding(.leading, 23).padding(.trailing, 8)
+                Rectangle().fill(Brand.color.line).frame(height: 1).padding(.leading, 32).padding(.trailing, 8)
             }
         }
+        .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }

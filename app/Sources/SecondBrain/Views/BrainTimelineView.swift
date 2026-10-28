@@ -314,7 +314,7 @@ private struct EntryRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: entry.kind.symbol)
+            Image(systemName: entry.symbol(engine: state.engine))
                 .font(Brand.font(12, .medium))
                 .foregroundStyle(Brand.color.text2)
                 .frame(width: 26, height: 26)

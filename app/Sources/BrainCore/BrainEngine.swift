@@ -499,11 +499,13 @@ private final class ConfigBox: @unchecked Sendable {
     /// Undoing an ingest also detaches it from its source, so the source can be learned from again
     /// (`retry`) or moved to another project.
     public func undo(historyId: String, force: Bool = false) throws {
-        guard !runningAnywhere({ [.ingest, .lint, .saveAnswer, .reformat, .makeTemplate].contains($0.kind) }) else { throw EngineError.busy }
+        guard !runningAnywhere({ [.ingest, .lint, .saveAnswer, .reformat, .makeTemplate, .fileDump].contains($0.kind) }) else { throw EngineError.busy }
         try history.undo(entryId: historyId, force: force)
-        guard var src = sources.first(where: { $0.historyId == historyId }) else { return }
-        src.historyId = nil
-        upsert(&src)
+        // v0.7: a /file-dump entry belongs to every source of the drop.
+        for var src in sources where src.historyId == historyId {
+            src.historyId = nil
+            upsert(&src)
+        }
     }
 
     // MARK: Queue
@@ -750,6 +752,7 @@ private final class ConfigBox: @unchecked Sendable {
             case .reformat: try await runReformat(job)
             case .makeTemplate: try await runMakeTemplate(job)
             case .manualEdit: break   // recorded directly by the app (e.g. `setTask`), never queued
+            case .fileDump: try await runFileDump(job)   // v0.7 (§17.3)
             }
             return .success
         } catch let error as ClaudeError {
@@ -804,6 +807,7 @@ private final class ConfigBox: @unchecked Sendable {
                 }
                 upsert(&src)
             }
+            if job.kind == .fileDump { job.status == .failed ? fileDumpFailed(job) : fileDumpWillRetry(job) }   // v0.7
             if job.status == .failed { onEvent?(.jobFailed(job)) }
         }
     }
@@ -1066,8 +1070,10 @@ private final class ConfigBox: @unchecked Sendable {
         for src in sources where src.status == .recording && src.kind == .meeting {
             if let m = try? SessionManifest.load(from: sessionDir(src.id)), m.endedAt != nil { recordingFinished(m) }
         }
+        let dumping = dumpPendingSourceIds()   // v0.7: sources a queued /file-dump will file
         for var src in sources where [.queued, .transcribing, .ingesting].contains(src.status) {
-            let pending = queue.jobs.contains { $0.sourceId == src.id && ($0.status == .queued || $0.status == .running) }
+            let pending = dumping.contains(src.id)
+                || queue.jobs.contains { $0.sourceId == src.id && ($0.status == .queued || $0.status == .running) }
             if pending {
                 if src.status != .queued {
                     src.status = .queued
@@ -1159,6 +1165,7 @@ private final class ConfigBox: @unchecked Sendable {
         case .makeTemplate:
             return lang.t("Creando el formato «\(job.payload["name"] ?? "")»…", "Creating the “\(job.payload["name"] ?? "")” format…")
         case .manualEdit: return lang.t("Guardando tu cambio…", "Saving your change…")
+        case .fileDump: return lang.t("Archivando lo que agregaste…", "Filing what you added…")
         }
     }
 
@@ -1183,6 +1190,13 @@ private final class ConfigBox: @unchecked Sendable {
         queue.upsert(job)
         jobs = queue.jobs
         onJobUpdate?(job)
+    }
+
+    /// v0.7: drops one job (a drop's /file-dump cancelled before it ran).
+    func removeJob(id: String) {
+        writeGeneration += 1
+        queue.remove(id: id)
+        jobs = queue.jobs
     }
 
     func removeJobs(for sourceId: String, where predicate: (Job) -> Bool) {

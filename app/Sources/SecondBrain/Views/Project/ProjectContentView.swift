@@ -276,7 +276,7 @@ struct ProjectContentView: View {
     private func entryRow(_ entry: TimelineEntry) -> some View {
         let source = entry.sourceId.flatMap { state.engine.source($0) }
         let clickable = entry.pagePath != nil || source != nil
-        return ContentListRow(symbol: entry.kind.symbol, title: entry.title, caption: caption(entry),
+        return ContentListRow(symbol: entry.symbol(engine: state.engine), title: entry.title, caption: caption(entry),
                               isSelected: isSelected(entry)) {
             if clickable { open(entry) }
         }

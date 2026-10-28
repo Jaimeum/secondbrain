@@ -33,6 +33,7 @@ struct TimelineBuilder {
                 entries.append(entry(for: src))
             }
             if let raw = src.rawPath { knownKeys.insert(((raw as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()) }
+            if src.kind == .inPerson, let key = FileDumpNames.pageKey(of: src) { knownKeys.insert(key.lowercased()) }   // v0.7
             if let thread = src.threadKey { knownKeys.insert(thread.lowercased()) }
         }
         if !threads.isEmpty {
@@ -118,6 +119,7 @@ struct TimelineBuilder {
         let candidate: String
         switch src.kind {
         case .meeting: candidate = "projects/\(slug)/wiki/meetings/\(key).md"
+        case .inPerson: candidate = "projects/\(slug)/wiki/meetings/\(FileDumpNames.pageKey(of: src) ?? key).md"   // v0.7
         case .email: candidate = "projects/\(slug)/wiki/emails/\(src.threadKey ?? key).md"
         default: candidate = "projects/\(slug)/wiki/sources/\(key).md"
         }
@@ -159,7 +161,8 @@ struct TimelineBuilder {
     /// Pure parser (testable). `pagePath` holds the first wikilink target (resolved by the caller).
     static func parseTimelinePage(_ text: String, path: String, projectSlug: String, skipping known: Set<String>) -> [TimelineEntry] {
         var out: [TimelineEntry] = []
-        let kinds: [(String, TimelineKind)] = [("🎙", .meeting), ("✉", .email), ("📄", .document), ("📝", .note), ("🔗", .url),
+        let kinds: [(String, TimelineKind)] = [("🎙", .meeting), ("🤝", .meeting), ("✉", .email), ("📄", .document), ("🖼", .document),
+                                               ("📝", .note), ("🔗", .url),
                                                ("⚖", .decision), ("🚩", .milestone), ("🏁", .milestone), ("📌", .milestone),
                                                ("📅", .task)]
         for (n, line) in Frontmatter.split(text).body.components(separatedBy: "\n").enumerated() {

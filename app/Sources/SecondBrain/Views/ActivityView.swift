@@ -267,6 +267,7 @@ private struct HistoryRow: View {
         case .reformat: "doc.richtext"
         case .makeTemplate: "rectangle.and.pencil.and.ellipsis"
         case .manualEdit: "checkmark.circle"
+        case .fileDump: "tray.and.arrow.down"   // v0.7 (§17.3)
         }
     }
 }

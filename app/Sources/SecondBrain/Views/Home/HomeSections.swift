@@ -176,7 +176,7 @@ struct HomeRecentItem: Identifiable {
 
     @MainActor init(entry: TimelineEntry) {
         id = "entry:" + entry.id
-        symbol = entry.kind.symbol
+        symbol = entry.symbol(engine: AppState.shared.engine)   // v0.7: in-person meetings
         kindLabel = entry.thread == nil ? entry.kind.label : L("thread.kind")
         if let thread = entry.thread {
             detail = ThreadText.caption(thread, last: entry.date)

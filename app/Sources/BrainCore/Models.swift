@@ -283,7 +283,10 @@ public struct SourceRecord: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
-public enum JobKind: String, Codable, Sendable { case transcribe, ingest, classify, lint, saveAnswer, reformat, makeTemplate, manualEdit }
+public enum JobKind: String, Codable, Sendable {
+    case transcribe, ingest, classify, lint, saveAnswer, reformat, makeTemplate, manualEdit
+    case fileDump   // v0.7 (§17.3): "Agregar al proyecto" → /file-dump
+}
 public enum JobStatus: String, Codable, Sendable { case queued, running, done, failed, cancelled }
 
 public struct Job: Codable, Identifiable, Equatable, Sendable {

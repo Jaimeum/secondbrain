@@ -1755,3 +1755,37 @@
 "files.reason.duplicate" = "Ya estaba guardado";
 "files.reason.claude" = "Claude: %@";
 "files.reason.user" = "Lo desmarcaste";
+
+/* v0.7 dump */
+"dump.title" = "Agregar al proyecto";
+"dump.placeholder" = "Arrastra archivos aquí o escribe lo que pasó: «Hoy en la visita a la planta…». Yo lo archivo donde va.";
+"dump.chooseFiles" = "Archivos…";
+"dump.chooseFilesHelp" = "Elegir documentos, fotos o grabaciones para agregar";
+"dump.inPerson" = "Es una reunión presencial";
+"dump.inPersonHelp" = "Guardo el texto como la minuta de una reunión en persona, con su fecha, participantes y acuerdos";
+"dump.add" = "Agregar";
+"dump.addHelp" = "Lo guardo en el proyecto y Claude lo archiva: nota, reunión, documento, decisiones, pendientes y personas (⌘↩)";
+"dump.someFailed" = "No pude agregar todo: %@";
+"dump.files" = "Archivos: %ld";
+"dump.textAndFiles" = "%@ · archivos: %ld";
+"dump.showEarlier" = "Envíos anteriores: %ld";
+"dump.hideEarlier" = "Ocultar envíos anteriores";
+"dump.queued" = "En la fila para archivarlo…";
+"dump.filing" = "Leyendo y archivando…";
+"dump.waitingClaude" = "Esperando a que Claude esté disponible…";
+"dump.failed" = "No pude archivarlo.";
+"dump.undone" = "Deshecho: lo quité del proyecto.";
+"dump.undo" = "Deshacer";
+"dump.undoHelp" = "Quita lo que agregaste y los cambios que hice en el cerebro (también está en Historial)";
+"dump.retry" = "Reintentar";
+"dump.openPage" = "Abrir la página";
+"dump.sheetTitle" = "Agregar al proyecto";
+"dump.sheetHint" = "Suelta archivos (varios a la vez) y/o escribe o pega lo que pasó. Yo lo clasifico y lo archivo en el proyecto: notas, reuniones presenciales, documentos, decisiones, pendientes y personas.";
+"dump.project" = "Proyecto";
+"dump.pickProject" = "Elige un proyecto";
+"add.dump" = "Agregar al proyecto…";
+"queue.filingDump" = "Archivando lo que agregaste a %@…";
+"notify.dumpTitle" = "Lo archivé";
+"capture.inPerson" = "Reunión presencial";
+"capture.inPersonHelp" = "Guardo el texto como la minuta de una reunión en persona en el proyecto elegido";
+"capture.inPersonNeedsProject" = "Elige un proyecto para guardar una reunión presencial.";

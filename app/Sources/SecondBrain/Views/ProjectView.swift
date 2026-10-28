@@ -136,6 +136,9 @@ struct ProjectView: View {
             Button { state.requestEmail(projectSlug: project.slug) } label: {
                 Label(L("add.email"), systemImage: "envelope")
             }
+            Button { state.dumpRequest = DumpRequest(projectSlug: project.slug) } label: {   // v0.7 (§17.3)
+                Label(L("add.dump"), systemImage: "tray.and.arrow.down")
+            }
             Divider()
             Button {
                 state.recordingProjectSlug = project.slug

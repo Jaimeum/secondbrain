@@ -20,7 +20,8 @@ enum Importer {
 
     /// `eventDate` nil = the document's own date (PDF metadata > file dates) or now (CONTRACT §11.1).
     static func importFile(_ file: URL, into dir: URL, project: String?, sourceURL: URL? = nil,
-                           kind: SourceKind = .document, title: String? = nil, eventDate: Date? = nil) throws -> Imported {
+                           kind: SourceKind = .document, title: String? = nil, eventDate: Date? = nil,
+                           extra: [(String, String)] = []) throws -> Imported {
         let fm = FileManager.default
         guard !fm.isDirectory(file) else { throw CocoaError(.fileReadUnsupportedScheme, userInfo: [NSFilePathErrorKey: file.path]) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -59,7 +60,8 @@ enum Importer {
 
         var fields: [(String, String)] = [("original_file", YAML.scalar(original))]
         if let sourceURL { fields.append(("source_url", YAML.scalar(sourceURL.absoluteString))) }
-        let raw = try writeRaw(type: kind == .url ? "url" : "document", id: id, title: title, project: project,
+        fields += extra   // v0.7 (§17.3): e.g. `origin: dump`
+        let raw = try writeRaw(type: kind == .url ? "url" : kind == .image ? "image" : "document", id: id, title: title, project: project,
                                extra: fields.filter { $0.1 != "null" },
                                body: body, dir: dir, base: base, eventDate: when)
         return Imported(sourceId: id, title: title, rawURL: raw, eventDate: when)
@@ -104,13 +106,15 @@ enum Importer {
         return Imported(sourceId: id, title: title, rawURL: raw, eventDate: when)
     }
 
-    static func writeNote(title: String, body: String, into dir: URL, project: String?, eventDate: Date? = nil) throws -> Imported {
+    /// `base`: the file name without extension (default `YYYY-MM-DD-<slug>`); v0.7 dump notes use `YYYY-MM-DD-dump-<slug>`.
+    static func writeNote(title: String, body: String, into dir: URL, project: String?, eventDate: Date? = nil,
+                          base: String? = nil, extra: [(String, String)] = []) throws -> Imported {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let id = SessionManifest.newId()
         let when = eventDate ?? Date()
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Fmt.local(when, "yyyy-MM-dd HH:mm") : title
-        let raw = try writeRaw(type: "note", id: id, title: title, project: project, extra: [], body: body,
-                               dir: dir, base: fileBase(title: title, date: when), eventDate: when)
+        let raw = try writeRaw(type: "note", id: id, title: title, project: project, extra: extra, body: body,
+                               dir: dir, base: base ?? fileBase(title: title, date: when), eventDate: when)
         return Imported(sourceId: id, title: title, rawURL: raw, eventDate: when)
     }
 

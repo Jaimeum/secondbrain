@@ -1755,3 +1755,37 @@
 "files.reason.duplicate" = "Already saved";
 "files.reason.claude" = "Claude: %@";
 "files.reason.user" = "You unticked it";
+
+/* v0.7 dump */
+"dump.title" = "Add to project";
+"dump.placeholder" = "Drop files here or write what happened: “Today at the plant visit…”. I'll file it where it belongs.";
+"dump.chooseFiles" = "Files…";
+"dump.chooseFilesHelp" = "Choose documents, photos or recordings to add";
+"dump.inPerson" = "It's an in-person meeting";
+"dump.inPersonHelp" = "I'll save the text as the minutes of an in-person meeting, with its date, participants and agreements";
+"dump.add" = "Add";
+"dump.addHelp" = "I save it in the project and Claude files it: note, meeting, document, decisions, tasks and people (⌘↩)";
+"dump.someFailed" = "I couldn't add everything: %@";
+"dump.files" = "Files: %ld";
+"dump.textAndFiles" = "%@ · files: %ld";
+"dump.showEarlier" = "Earlier drops: %ld";
+"dump.hideEarlier" = "Hide earlier drops";
+"dump.queued" = "Waiting in line to be filed…";
+"dump.filing" = "Reading and filing…";
+"dump.waitingClaude" = "Waiting for Claude to be available…";
+"dump.failed" = "I couldn't file it.";
+"dump.undone" = "Undone: removed from the project.";
+"dump.undo" = "Undo";
+"dump.undoHelp" = "Removes what you added and the changes I made to the brain (also in History)";
+"dump.retry" = "Retry";
+"dump.openPage" = "Open the page";
+"dump.sheetTitle" = "Add to project";
+"dump.sheetHint" = "Drop files (several at once) and/or write or paste what happened. I'll sort it and file it in the project: notes, in-person meetings, documents, decisions, tasks and people.";
+"dump.project" = "Project";
+"dump.pickProject" = "Choose a project";
+"add.dump" = "Add to project…";
+"queue.filingDump" = "Filing what you added to %@…";
+"notify.dumpTitle" = "Filed";
+"capture.inPerson" = "In-person meeting";
+"capture.inPersonHelp" = "I'll save the text as the minutes of an in-person meeting in the chosen project";
+"capture.inPersonNeedsProject" = "Choose a project to save an in-person meeting.";

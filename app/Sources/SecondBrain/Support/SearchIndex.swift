@@ -261,7 +261,8 @@ final class SearchIndex {
             let key = ((raw as NSString).lastPathComponent as NSString).deletingPathExtension
             let path: String
             switch source.kind {
-            case .meeting, .inPerson: path = "projects/\(slug)/wiki/meetings/\(key).md"
+            case .meeting: path = "projects/\(slug)/wiki/meetings/\(key).md"
+            case .inPerson: path = "projects/\(slug)/wiki/meetings/\(FileDumpNames.pageKey(of: source) ?? key).md"   // v0.7
             case .email: path = "projects/\(slug)/wiki/emails/\(source.threadKey ?? key).md"
             case .note, .document, .url, .image: path = "projects/\(slug)/wiki/sources/\(key).md"
             case .github: return nil

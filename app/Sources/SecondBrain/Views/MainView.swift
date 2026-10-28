@@ -37,6 +37,9 @@ struct MainView: View {
         .sheet(item: $state.linkRequest) { request in
             PasteLinkSheet(projectSlug: request.projectSlug)
         }
+        .sheet(item: $state.dumpRequest) { request in   // v0.7 (§17.3)
+            ProjectDropSheet(request: request)
+        }
         .sheet(item: $state.historyRequest) { request in
             ActivitySheet(projectSlug: request.projectSlug) { path in
                 state.historyRequest = nil

@@ -25,6 +25,7 @@ struct SB: AsyncParsableCommand {
                       + [RepliesCmd.self]  // MARK: v0.7 replies
                       + [BackfillCmd.self]  // MARK: v0.7 backfill
                       + [FilesCmd.self]  // v0.7 files
+                      + [DumpCmd.self]  // MARK: v0.7 dump
     )
 }
 

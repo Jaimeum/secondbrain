@@ -530,6 +530,7 @@ enum SourcePages {
         let wiki = "projects/\(slug)/wiki/"
         var out: [String] = []
         if source.kind == .email, let thread = source.threadKey { out.append(wiki + "emails/\(thread).md") }
+        if source.kind == .inPerson, let key = FileDumpNames.pageKey(of: source) { out.append(wiki + "meetings/\(key).md") }   // v0.7
         if let key = source.sourceKey {
             out.append(wiki + (source.kind == .meeting ? "meetings/" : "sources/") + key + ".md")
             out.append(wiki + (source.kind == .meeting ? "sources/" : "meetings/") + key + ".md")

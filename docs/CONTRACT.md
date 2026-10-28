@@ -1888,3 +1888,6 @@ Archivo · Enlace · Correo · Grabar.
   `sb facts selftest` (aplicar ediciones propuestas + `facts.md` + deshacer), `sb search selftest` (texto completo).
 - Versión **0.6.0**, notas de versión (README "Novedades" y `scripts/release.sh`), README con la nueva navegación,
   `docs/TODO.md` actualizado, release publicada.
+- `sb routing selftest` y `sb graph selftest` forman parte de `sb selftest` (no hay comandos separados).
+- Desviación de §16.8: en Pendientes los filtros (Proyecto ▾, Persona ▾, Buscar, Origen) viven en la barra de la vista y
+  no en la barra de herramientas de la ventana.

@@ -87,10 +87,15 @@ mantiene un wiki por proyecto con todo lo que se habló. El audio nunca sale de 
 único que se envía es el texto que Claude lee con tu propia cuenta.
 
 ### Novedades
-- **Arreglado: grabar dejaba de funcionar al actualizar** aunque el permiso apareciera activado en Ajustes del Sistema. Desde esta versión secondbrain se firma siempre con la misma identidad, así que macOS conserva los permisos de micrófono y grabación en las siguientes actualizaciones. Si al pasar a 0.5.3 no graba, pulsa **Reparar permiso** en el aviso bajo *Grabar* (una sola vez).
-- **Arreglado: conectar tu cuenta de Claude** fallaba con "no se pudo conectar" cuando la app capturaba el token a medias; ahora espera a que esté completo, y si el token guardado no sirve pero tu `claude` ya tiene sesión, usa esa sesión.
-- **Conectar Microsoft 365 y GitHub ya funciona desde la app:** SecondBrain quedó registrada en Microsoft (correo y calendario de Outlook, solo lectura) y en GitHub (conexión con código de dispositivo, sin pegar tokens).
-- Incluye todo lo de 0.5.0: nueva identidad **secondbrain**, navegación simplificada (Inicio · Reuniones · Correo · Pendientes · Personas), **⌘K** para buscar o preguntar y pantallas que caben en cualquier tamaño de ventana.
+- **El lugar fija el ámbito.** Dentro de un proyecto, Preguntar, Grafo y Pendientes son solo de ese proyecto; los globales tienen su lugar en la barra lateral (Inicio · Preguntar · Grafo · Pendientes · Personas · Correo · Reuniones · Sin asignar). Se acabó el interruptor "Este proyecto | Todo el cerebro".
+- **Proyectos con pestañas** Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas; en Personas agregas o quitas gente a mano.
+- **Fichas:** cualquier persona, empresa, tema, decisión o reunión tiene una ficha con lo que sabemos, sus reuniones, correos, decisiones, pendientes y relacionados, filtrada al proyecto cuando la abres dentro de uno. **⌘K** ahora busca en el texto completo.
+- **Preguntar guarda tus conversaciones;** las citas se abren al lado sin perder el hilo, y cada respuesta se puede **Guardar como página**.
+- **Corrige el cerebro a mano:** edita una página, revisa los cambios que propongo en las demás páginas que decían lo mismo, y queda como hecho confirmado (`facts.md`) que no vuelvo a contradecir.
+- **Captura del día a día:** **⌥⌘N** abre la captura rápida (nota, enlace, correo o archivo) desde cualquier app (puedes cambiar el atajo en Ajustes); la barra de menús abre primero la captura; los correos que caen en una regla se guardan solos; y **+ Agregar** vive en la barra lateral. Los permisos de grabación se piden la primera vez que grabas.
+- **Empresas** como fichas globales (`orgs/`), y el **Grafo** abre la ficha en un panel al lado.
+- Ten en cuenta: las conversaciones guardadas son por cerebro, y **⌥⌘N** reemplaza "Nueva carpeta inteligente" del Finder mientras secondbrain está abierta.
+- Incluye todo lo de 0.5.x, con el arreglo de permisos de 0.5.3 (grabar sigue funcionando al actualizar; si no, **Reparar permiso** bajo *Grabar*).
 
 ### Instalar
 1. Descarga **SecondBrain-$VERSION.dmg** (abajo, en *Assets*), ábrelo y arrastra **SecondBrain** a la
@@ -99,8 +104,9 @@ mantiene un wiki por proyecto con todo lo que se habló. El audio nunca sale de 
    está notarizada por Apple). Pulsa **Listo**, abre **Ajustes del Sistema → Privacidad y seguridad**,
    baja hasta el aviso de SecondBrain y pulsa **Abrir de todos modos** (te pedirá tu contraseña).
    Solo se hace una vez.
-3. Sigue la bienvenida: permisos de **audio de la computadora** y **micrófono**, conectar tu cuenta
-   de Claude (se abre el navegador) y la descarga del modelo de transcripción (~3 GB, una sola vez).
+3. Sigue la bienvenida: conecta tu cuenta de Claude (se abre el navegador) y crea tu primer proyecto.
+   Los permisos de **audio de la computadora** y **micrófono** y la descarga del modelo de transcripción
+   (~3 GB, una sola vez) se piden la primera vez que grabas.
 
 **Requisitos:** macOS 15 o posterior, Mac con Apple Silicon (M1 o más nuevo), ~5 GB libres y una
 suscripción de Claude (Pro o Max).
@@ -115,10 +121,15 @@ Records your meetings (computer audio + your mic), transcribes them **on your Ma
 per-project wiki of everything discussed. Audio never leaves your computer.
 
 ### What's new
-- **Fixed: recording stopped working after an update** even though the permission still showed as on in System Settings. From this version on secondbrain is always signed with the same identity, so macOS keeps the microphone and recording permissions across updates. If it can't record after moving to 0.5.3, click **Fix permission** in the notice under *Record* (once).
-- **Fixed: connecting your Claude account** failed with "couldn't connect" when the app captured the token half-printed; it now waits for the full token, and if the stored token is rejected but your `claude` is already signed in, it uses that session.
-- **Connect Microsoft 365 and GitHub from the app:** SecondBrain is now registered with Microsoft (Outlook mail and calendar, read-only) and GitHub (device-code sign-in, no token pasting).
-- Includes everything from 0.5.0: the new **secondbrain** identity, simpler navigation (Home · Meetings · Mail · Tasks · People), **⌘K** to search or ask, and screens that fit any window size.
+- **Place sets the scope.** Inside a project, Ask, Graph and Tasks are about that project only; the global ones live in the sidebar (Home · Ask · Graph · Tasks · People · Mail · Meetings · Unassigned). The "This project | Whole brain" switch is gone.
+- **Projects with tabs:** Summary · Content · Ask · Graph · Tasks · People; add or remove people by hand under People.
+- **Entity pages:** any person, company, topic, decision or meeting has a page with what we know, its meetings, mail, decisions, tasks and related items, filtered to the project when opened inside one. **⌘K** now searches full text.
+- **Ask keeps your conversations;** citations open alongside without losing your place, and any answer can be **Saved as a page**.
+- **Correct the brain by hand:** edit a page, review the changes I propose on other pages that said the same thing, and it becomes a confirmed fact (`facts.md`) I won't contradict again.
+- **Everyday capture:** **⌥⌘N** opens quick capture (note, link, email or file) from any app (rebind it in Settings); the menu bar opens capture first; mail matching a rule is saved automatically; and **+ Add** lives in the sidebar. Recording permissions are asked the first time you record.
+- **Companies** as global pages (`orgs/`), and the **Graph** opens the entity page in a side panel.
+- Good to know: saved conversations are per brain, and **⌥⌘N** replaces Finder's "New Smart Folder" while secondbrain is running.
+- Includes everything from 0.5.x, with the 0.5.3 permission fix (recording keeps working across updates; if not, **Fix permission** under *Record*).
 
 ### Install
 1. Download **SecondBrain-$VERSION.dmg** (under *Assets*), open it and drag **SecondBrain** to
@@ -126,8 +137,9 @@ per-project wiki of everything discussed. Audio never leaves your computer.
 2. Open it. The first time, macOS says it can't verify the app (it isn't notarized by Apple). Click
    **Done**, go to **System Settings → Privacy & Security**, scroll to the SecondBrain notice and click
    **Open Anyway** (in Spanish: *Abrir de todos modos*). You only do this once.
-3. Follow the welcome steps: computer-audio and microphone permissions, connect your Claude account
-   (opens your browser) and the transcription model download (~3 GB, once).
+3. Follow the welcome steps: connect your Claude account (opens your browser) and create your first project.
+   Computer-audio and microphone permissions and the transcription model download (~3 GB, once) are asked
+   the first time you record.
 
 **Requires** macOS 15+, Apple Silicon (M1 or newer), ~5 GB free and a Claude Pro or Max subscription.
 EOF

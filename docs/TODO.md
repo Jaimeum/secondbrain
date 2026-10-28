@@ -53,14 +53,36 @@ no lo que se mueve, se arrastra o depende de AppKit. Revisar a mano con la app c
 - [ ] Pendiente de v0.4: GitHub real (dos ramas a la vez, force-push / rebase, rama borrada, cambios de PRs e issues
       entre dos sincronizaciones) y conectar con `gh`, token y Device Flow. Hoy solo lo cubre `sb github selftest`.
 
+## 3a. Probar la v0.6 en vivo
+
+Las capturas no cubren lo que depende de AppKit, de macOS o de Claude. Con la app compilada:
+
+- [ ] **/propagate real desde el editor de la app:** editar una página → *Revisar cambios en el cerebro* → aplicar →
+      `facts.md` y Historial (deshacer). Una corrida por CLI el 2026-10-27 ya funcionó: Claude encontró las dos páginas
+      y propuso el hecho correcto; falta verla de punta a punta en la app.
+- [ ] **⌥⌘N:** se registra al abrir la app, Ajustes → General permite cambiarlo (grabar otro atajo, rechazar los de
+      macOS y ⌥⌘R) y desactivarlo; y que "Nueva carpeta inteligente" del Finder deje de responder mientras está activo.
+- [ ] **Panel de captura rápida con varios monitores:** aparece en el monitor del cursor, toma el foco al abrir, esc lo
+      cierra y devuelve el foco a la app anterior; no activa la ventana principal.
+- [ ] **Primer Grabar con la ventana principal cerrada:** hoja explicativa → permisos de micrófono y grabación →
+      descarga del modelo → graba (también desde ⌥⌘R y la barra de menús).
+- [ ] **Barras de herramientas** (no aparecen en las capturas): Proyecto (+ Agregar, Historial, ⋯), Pendientes, Grafo,
+      Preguntar; que se pliegan al angostar la ventana.
+- [ ] **Pendientes:** los filtros (Proyecto, Persona, Buscar, Origen) viven en la barra de la vista, no en la barra de
+      herramientas de la ventana: desviación deliberada de §16.8. Verificar que se ven bien y persisten.
+- [ ] Fichas: **⌘[** atrás, ficha filtrada al proyecto, "Ver todo →", "Ver en el grafo" enfocado.
+- [ ] Preguntar: conversaciones sobreviven al reiniciar y al cambiar de cerebro; **Guardar como página** aparece en
+      Contenido y ⌘K.
+- [ ] Correo automático: una regla nueva guarda sola los correos entrantes y avisa.
+
 ## 4. Diferido de v0.5
 
 - Oferta de regla en Correo: el dominio sigue en negritas y queda un comentario viejo sobre el contraste de `text2` (`RuleOfferBar.swift`).
 
-- Búsqueda de texto completo en ⌘K (hoy: títulos, nombres y metadatos).
+- ~~Búsqueda de texto completo en ⌘K~~: hecho en 0.6.0.
 - Animación D "conexión encontrada" (`docs/brand/05_motion/`).
 - Exportes Rive / Lottie de las animaciones de marca.
-- Limpieza de strings sin uso en `Localizable.strings` (es/en).
+- ~~Limpieza de strings sin uso en `Localizable.strings` (es/en)~~: hecho en 0.6.0.
 - Caché de títulos de página en `VaultStore` (hoy los chips de origen resuelven títulos en cada carga).
 - "Mis pendientes (n)" en Reuniones → Anteriores (si no quedó en 0.5.0).
 - Conteo de coincidencias por regla en Ajustes → Reglas.

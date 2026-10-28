@@ -167,8 +167,6 @@
 "note.failed" = "I couldn't save the note.";
 
 /* Ask */
-"chat.scopeProject" = "This project";
-"chat.scopeBrain" = "Whole brain";
 "chat.lint" = "Review my brain";
 "chat.lintHelp" = "I look for contradictions, orphan pages and overdue tasks, and fix the easy ones.";
 "chat.lintQueued" = "Reviewing… I'll let you know when done";
@@ -315,8 +313,6 @@
 "onb.vault.choose" = "Use this folder";
 "onb.vault.panelMessage" = "Choose where to keep your brain";
 "onb.vault.hint" = "If you use Obsidian, you can open this folder there too.";
-"onb.perm.title" = "Two permissions and you're set";
-"onb.perm.message" = "macOS will ask you to confirm. I only listen when you press Record.";
 "onb.perm.screenTitle" = "Computer audio";
 "onb.perm.screenMessage" = "To hear the other people on your calls. macOS calls it “Screen & System Audio Recording”, but I don't record your screen.";
 "onb.perm.micTitle" = "Microphone";
@@ -324,7 +320,6 @@
 "onb.perm.allow" = "Allow";
 "onb.perm.openSettings" = "Open Settings";
 "onb.perm.granted" = "Done";
-"onb.perm.restartHint" = "Already turned it on in Settings but it doesn't show here? macOS needs secondbrain to reopen. You'll come back to this same step.";
 "onb.claude.title" = "Connect Claude";
 "onb.claude.message" = "I use your Claude account (Pro or Max) to understand what you give me and answer your questions. No technical knowledge needed.";
 "onb.models.title" = "Getting transcription ready";
@@ -332,7 +327,6 @@
 "onb.models.starting" = "Starting the download…";
 "onb.models.ready" = "Ready to transcribe";
 "onb.models.retry" = "Try again";
-"onb.models.hint" = "You can continue: the download keeps going in the background.";
 "onb.models.continueBackground" = "Continue";
 "onb.project.title" = "Your first project";
 "onb.project.message" = "A project groups the emails, notes, documents and meetings about one thing: a client, a team, your thesis…";
@@ -566,7 +560,7 @@
 "tpl.save" = "Save format";
 "tpl.scope.meeting" = "Meetings";
 "tpl.scope.email" = "Emails";
-"tpl.scope.any" = "Meetings and emails";
+"tpl.scope.any" = "Any source";
 "tpl.picker" = "Format";
 "tpl.pickerShort" = "Format";
 "tpl.standard" = "Standard";
@@ -651,7 +645,6 @@
 
 /* v0.3 — Graph */
 "graph.empty.title" = "Your brain is still empty";
-"graph.empty.message" = "This is where you'll see how everything I learn connects. Add a note, an email or a document to start.";
 "graph.seeInGraph" = "See in graph";
 "graph.showAll" = "Show all";
 "graph.fit" = "Fit";
@@ -662,8 +655,6 @@
 "graph.open" = "Open page";
 "graph.openOverview" = "Open project overview";
 "graph.today" = "Today";
-"graph.hint.all" = "Click anything to explore it";
-"graph.hint.project" = "Click anything to explore it";
 "graph.close" = "Close";
 "graph.connected" = "Connected to";
 "graph.matches" = "%ld matches";
@@ -1187,16 +1178,10 @@
 "home.nothingDue" = "Nothing due today";
 "home.recent" = "Latest I learned";
 "home.seeByDate" = "See all by date";
-"home.connections" = "Explore how everything connects";
 "home.history" = "History";
 "home.emptyTitle" = "Your knowledge, in one place.";
-"home.emptyRecord" = "Record";
-"home.emptyPaste" = "Paste an email";
-"home.emptyDrop" = "Drop a file here";
-"home.connectCalendar" = "Connect your calendar or use the Mac's";
 "search.placeholder" = "Search or ask…";
 "search.ask" = "Ask: “%@”";
-"search.askProject" = "Ask %@: “%@”";
 "search.group.meetings" = "Meetings";
 "search.group.notes" = "Notes and documents";
 "search.group.mail" = "Emails";
@@ -1409,7 +1394,6 @@
 
 /* v0.5 — finish */
 "meetings.past.myTasks" = "My tasks (%ld)";
-"meetings.past.myTasksHelp" = "Your tasks from this meeting that are still open";
 
 /* v0.5.3 — recording permission */
 "record.repairPermission" = "Fix permission";
@@ -1525,7 +1509,6 @@
 "ask.savedOpen" = "Saved · View";
 "ask.savedOpenHelp" = "View the saved page";
 "ask.saveFailed" = "I couldn't save the answer as a page.";
-"ask.savedHistoryTitle" = "Saved an answer: “%@”";
 "ask.closeInspector" = "Close the panel";
 /* v0.6 graph */
 "graph.kind.org" = "Company";

@@ -167,8 +167,6 @@
 "note.failed" = "No pude guardar la nota.";
 
 /* Preguntar */
-"chat.scopeProject" = "Este proyecto";
-"chat.scopeBrain" = "Todo el cerebro";
 "chat.lint" = "Revisar mi cerebro";
 "chat.lintHelp" = "Busco contradicciones, páginas sueltas y pendientes vencidos, y arreglo lo sencillo.";
 "chat.lintQueued" = "Revisando… te aviso al terminar";
@@ -315,8 +313,6 @@
 "onb.vault.choose" = "Usar esta carpeta";
 "onb.vault.panelMessage" = "Elige dónde guardar tu cerebro";
 "onb.vault.hint" = "Si usas Obsidian, también puedes abrir esta carpeta ahí.";
-"onb.perm.title" = "Dos permisos y listo";
-"onb.perm.message" = "macOS te pedirá confirmar. Solo escucho cuando tú presionas Grabar.";
 "onb.perm.screenTitle" = "Audio de la computadora";
 "onb.perm.screenMessage" = "Para escuchar a los demás en tus llamadas. macOS lo llama “Grabación de pantalla y audio del sistema”, pero no grabo tu pantalla.";
 "onb.perm.micTitle" = "Micrófono";
@@ -324,7 +320,6 @@
 "onb.perm.allow" = "Permitir";
 "onb.perm.openSettings" = "Abrir Ajustes";
 "onb.perm.granted" = "Listo";
-"onb.perm.restartHint" = "¿Ya lo activaste en Ajustes y aquí no aparece? macOS necesita que reabras secondbrain. Volverás a este mismo paso.";
 "onb.claude.title" = "Conecta a Claude";
 "onb.claude.message" = "Uso tu cuenta de Claude (Pro o Max) para entender lo que me das y responder tus preguntas. No necesitas saber nada técnico.";
 "onb.models.title" = "Preparando la transcripción";
@@ -332,7 +327,6 @@
 "onb.models.starting" = "Empezando la descarga…";
 "onb.models.ready" = "Listo para transcribir";
 "onb.models.retry" = "Reintentar";
-"onb.models.hint" = "Puedes continuar: la descarga sigue en segundo plano.";
 "onb.models.continueBackground" = "Continuar";
 "onb.project.title" = "Tu primer proyecto";
 "onb.project.message" = "Un proyecto agrupa los correos, notas, documentos y reuniones de un tema: un cliente, un equipo, tu tesis…";
@@ -566,7 +560,7 @@
 "tpl.save" = "Guardar formato";
 "tpl.scope.meeting" = "Reuniones";
 "tpl.scope.email" = "Correos";
-"tpl.scope.any" = "Reuniones y correos";
+"tpl.scope.any" = "Cualquier fuente";
 "tpl.picker" = "Formato";
 "tpl.pickerShort" = "Formato";
 "tpl.standard" = "Estándar";
@@ -651,7 +645,6 @@
 
 /* v0.3 — Grafo */
 "graph.empty.title" = "Tu cerebro aún está vacío";
-"graph.empty.message" = "Aquí verás cómo se conecta todo lo que aprendo. Agrega una nota, un correo o un documento para empezar.";
 "graph.seeInGraph" = "Ver en el grafo";
 "graph.showAll" = "Ver todo";
 "graph.fit" = "Ajustar";
@@ -662,8 +655,6 @@
 "graph.open" = "Abrir página";
 "graph.openOverview" = "Abrir resumen del proyecto";
 "graph.today" = "Hoy";
-"graph.hint.all" = "Haz clic en algo para explorarlo";
-"graph.hint.project" = "Haz clic en algo para explorarlo";
 "graph.close" = "Cerrar";
 "graph.connected" = "Conectado con";
 "graph.matches" = "%ld coincidencias";
@@ -1187,16 +1178,10 @@
 "home.nothingDue" = "Nada vence hoy";
 "home.recent" = "Lo último que aprendí";
 "home.seeByDate" = "Ver todo por fecha";
-"home.connections" = "Explorar cómo se conecta todo";
 "home.history" = "Historial";
 "home.emptyTitle" = "Tu conocimiento, en un lugar.";
-"home.emptyRecord" = "Grabar";
-"home.emptyPaste" = "Pegar un correo";
-"home.emptyDrop" = "Arrastra un archivo aquí";
-"home.connectCalendar" = "Conecta tu calendario o usa el de la Mac";
 "search.placeholder" = "Buscar o preguntar…";
 "search.ask" = "Preguntar: «%@»";
-"search.askProject" = "Preguntar a %@: «%@»";
 "search.group.meetings" = "Reuniones";
 "search.group.notes" = "Notas y documentos";
 "search.group.mail" = "Correos";
@@ -1409,7 +1394,6 @@
 
 /* v0.5 — finish */
 "meetings.past.myTasks" = "Mis pendientes (%ld)";
-"meetings.past.myTasksHelp" = "Tareas tuyas de esta reunión que siguen abiertas";
 
 /* v0.5.3 — recording permission */
 "record.repairPermission" = "Reparar permiso";
@@ -1525,7 +1509,6 @@
 "ask.savedOpen" = "Guardada · Ver";
 "ask.savedOpenHelp" = "Ver la página guardada";
 "ask.saveFailed" = "No pude guardar la respuesta como página.";
-"ask.savedHistoryTitle" = "Guardé una respuesta: «%@»";
 "ask.closeInspector" = "Cerrar el panel";
 /* v0.6 graph */
 "graph.kind.org" = "Empresa";

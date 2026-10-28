@@ -55,7 +55,21 @@ public struct ThreadMatch: Equatable, Sendable {
 
 // MARK: - Templates ("formatos")
 
-public enum TemplateScope: String, Codable, Sendable { case meeting, email, any }
+/// v0.6 (§16.10): `note` and `document` join; templates written before keep their scope.
+public enum TemplateScope: String, Codable, Sendable, CaseIterable {
+    case meeting, email, note, document, any
+
+    /// The scope a source of this kind is formatted with (links read like documents); nil for repo syncs.
+    public init?(kind: SourceKind) {
+        switch kind {
+        case .meeting: self = .meeting
+        case .email: self = .email
+        case .note: self = .note
+        case .document, .url: self = .document
+        case .github: return nil
+        }
+    }
+}
 
 public struct TemplateInfo: Codable, Identifiable, Hashable, Sendable {
     public var id: String                 // filename stem in vault/templates/

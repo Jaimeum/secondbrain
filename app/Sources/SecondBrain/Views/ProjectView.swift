@@ -123,9 +123,16 @@ struct ProjectView: View {
 
     // MARK: Toolbar
 
-    /// "+ Agregar": every way to add something to this project.
+    /// "+ Agregar" (§16.2): Nota · Archivo… · Enlace… · Pegar correo · Grabar aquí (recording last).
     private var addMenu: some View {
         Menu {
+            Button { sheet = .note } label: { Label(L("add.note"), systemImage: "square.and.pencil") }
+            Button(action: addFiles) { Label(L("add.file"), systemImage: "doc.badge.plus") }
+            Button { sheet = .link } label: { Label(L("add.link"), systemImage: "link") }
+            Button { state.requestEmail(projectSlug: project.slug) } label: {
+                Label(L("add.email"), systemImage: "envelope")
+            }
+            Divider()
             Button {
                 state.recordingProjectSlug = project.slug
                 state.toggleRecording()
@@ -133,15 +140,6 @@ struct ProjectView: View {
                 Label(L("project.addRecordHere"), systemImage: "record.circle")
             }
             .disabled(state.isRecording)
-            Button { state.requestEmail(projectSlug: project.slug) } label: {
-                Label(L("search.action.pasteMail"), systemImage: "envelope")
-            }
-            Button { sheet = .note } label: { Label(L("sources.newNote"), systemImage: "square.and.pencil") }
-            Divider()
-            Button(action: addFiles) {
-                Label(L("project.addFiles"), systemImage: "doc.badge.plus")
-            }
-            Button { sheet = .link } label: { Label(L("project.pasteLink"), systemImage: "link") }
         } label: {
             Label(L("project.add"), systemImage: "plus")
                 .labelStyle(.titleAndIcon)
@@ -159,12 +157,19 @@ struct ProjectView: View {
                 } label: {
                     if project.defaultTemplate == nil { Label(L("tpl.standard"), systemImage: "checkmark") } else { Text(L("tpl.standard")) }
                 }
-                Divider()
-                ForEach(state.templates(for: .meeting).filter { $0.id != TemplateInfo.standardId }) { t in
-                    Button {
-                        setDefault(t.id)
-                    } label: {
-                        if project.defaultTemplate == t.id { Label(t.name, systemImage: "checkmark") } else { Text(t.name) }
+                // v0.6 (§16.2): the formats of every scope, under their scope's name.
+                ForEach(TemplateScope.allCases, id: \.self) { scope in
+                    let list = state.templates.filter { $0.scope == scope && $0.id != TemplateInfo.standardId }
+                    if !list.isEmpty {
+                        Section(scope.label) {
+                            ForEach(list) { t in
+                                Button {
+                                    setDefault(t.id)
+                                } label: {
+                                    if project.defaultTemplate == t.id { Label(t.name, systemImage: "checkmark") } else { Text(t.name) }
+                                }
+                            }
+                        }
                     }
                 }
             }

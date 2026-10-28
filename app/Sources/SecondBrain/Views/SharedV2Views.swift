@@ -188,7 +188,7 @@ struct ReformatSheet: View {
         VStack(alignment: .leading, spacing: Brand.spacing.l) {
             SheetTitleBlock(title: L("reformat.title"), subtitle: source.title, symbol: source.symbol)
             Picker(L("tpl.picker"), selection: $templateId) {
-                ForEach(state.templates(for: source.kind == .email ? .email : .meeting)) { template in
+                ForEach(state.templates(for: TemplateScope(kind: source.kind) ?? .meeting)) { template in
                     Text(template.name).tag(Optional(template.id))
                 }
             }
@@ -224,7 +224,7 @@ struct ReformatSheet: View {
         .background(Brand.color.surface)
         .onAppear {
             state.reloadTemplates()
-            templateId = source.templateId ?? state.templates(for: source.kind == .email ? .email : .meeting).first?.id
+            templateId = source.templateId ?? state.templates(for: TemplateScope(kind: source.kind) ?? .meeting).first?.id
         }
     }
 }

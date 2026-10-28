@@ -1560,3 +1560,26 @@
 "tasks.openProjectTasks" = "Show in the project's tasks";
 "tasks.showInList" = "Show in Tasks";
 "meetings.past.myTasksOpen" = "Show my tasks from this meeting";
+/* v0.6 capture — quick capture, menu bar, automatic mail, formats */
+"capture.title" = "Quick capture";
+"capture.placeholder" = "Type a note, paste a link or an email, or drop files here…";
+"capture.kind.note" = "Note";
+"capture.kind.link" = "Link";
+"capture.kind.email" = "Email";
+"capture.kind.files" = "Files: %ld";
+"capture.kindHelp" = "I tell by myself: a link is read as a page, a pasted email goes into its thread and anything else becomes a note.";
+"capture.destination" = "Save to";
+"capture.destinationHelp" = "Suggested by your rules; if none applies, it goes to Unassigned and I sort it.";
+"capture.save" = "Save";
+"capture.saved" = "Saved to %@";
+"capture.hint" = "⌘↩ save · esc close";
+"capture.removeFile" = "Remove";
+"capture.moreFiles" = "and %ld more";
+"capture.thread" = "Joins the thread “%@”";
+"capture.failed" = "I couldn't save it. Try again.";
+"settings.captureHotkey" = "⌃⌥Space shortcut for quick capture";
+"tpl.scope.note" = "Notes";
+"tpl.scope.document" = "Documents and links";
+"rules.offer.fromAuto" = "Always send mail from %1$@ to %2$@ and save the next ones by themselves?";
+"rules.offer.toAuto" = "Always send mail addressed to %1$@ to %2$@ and save the next ones by themselves?";
+"rules.offer.withAuto" = "Always send anything that includes %1$@ to %2$@ and save the next ones by themselves?";

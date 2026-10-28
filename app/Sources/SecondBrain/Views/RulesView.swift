@@ -305,7 +305,9 @@ struct RulesPanel: View {
     }
 
     private func newRule() -> RoutingRule {
-        RoutingRule(conditions: [RuleCondition(field: .senderEmail, op: .is, value: "")], projectSlug: state.projects.first?.slug)
+        // v0.6 (§16.10): new mail rules save the next matching mail by themselves.
+        RoutingRule(conditions: [RuleCondition(field: .senderEmail, op: .is, value: "")], projectSlug: state.projects.first?.slug,
+                    autoAddMail: true)
     }
 
     private func duplicate(_ rule: RoutingRule) {

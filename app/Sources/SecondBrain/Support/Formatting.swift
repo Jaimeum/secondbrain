@@ -265,6 +265,8 @@ extension TemplateScope {
         switch self {
         case .meeting: L("tpl.scope.meeting")
         case .email: L("tpl.scope.email")
+        case .note: L("tpl.scope.note")
+        case .document: L("tpl.scope.document")
         case .any: L("tpl.scope.any")
         }
     }

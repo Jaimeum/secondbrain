@@ -118,6 +118,11 @@ private struct GeneralSettings: View {
                 SettingsRow(title: L("settings.hotkey")) {
                     Toggle("", isOn: settingsBinding(state, \.hotkeyEnabled)).toggleStyle(.switch).labelsHidden()
                 }
+                // MARK: v0.6 capture — ⌃⌥Space next to ⌥⌘R (§16.10).
+                SettingsDivider()
+                SettingsRow(title: L("settings.captureHotkey")) {
+                    Toggle("", isOn: settingsBinding(state, \.captureHotkeyEnabled)).toggleStyle(.switch).labelsHidden()
+                }
             }
         }
     }

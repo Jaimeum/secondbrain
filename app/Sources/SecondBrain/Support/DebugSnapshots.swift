@@ -53,7 +53,29 @@ enum DebugSnapshots {
                 shots.append(("thread-min", CGSize(width: 560, height: 420), AnyView(ThreadSheet(threadKey: thread.key))))
             }
             shots.append(("note", CGSize(width: 560, height: 520), AnyView(NoteSheet(projectSlug: slug))))
-            shots.append(("menubar", CGSize(width: 320, height: 440), AnyView(MenuBarView())))
+            shots.append(("menubar", CGSize(width: 360, height: 600), AnyView(MenuBarView())))
+            // MARK: v0.6 capture (§16.10): the ⌃⌥Space panel empty, on a link, a pasted email and dropped files.
+            @MainActor func capture(_ text: String, files: [URL] = []) -> AnyView {
+                AnyView(QuickCaptureView(model: QuickCaptureModel(state: state, text: text, files: files))
+                    .frame(width: QuickCapturePanel.width).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxHeight: .infinity, alignment: .top))
+            }
+            shots.append(("capture", CGSize(width: 520, height: 250), capture("")))
+            shots.append(("capture-note", CGSize(width: 520, height: 250),
+                          capture("Llamar a Laura el jueves: quiere ver la propuesta con el descuento por volumen antes del comité.")))
+            shots.append(("capture-link", CGSize(width: 520, height: 250), capture("https://www.contoso.com/blog/2026/plan-de-migracion")))
+            shots.append(("capture-email", CGSize(width: 520, height: 280), capture("""
+                De: Laura Méndez <laura@acmelogistics.com>
+                Enviado: martes, 27 de octubre de 2026 10:14
+                Para: Jaime <jaime@dive.ai>
+                Asunto: Propuesta de rutas
+
+                Hola Jaime, te mando los números que pediste.
+                """)))
+            shots.append(("capture-files", CGSize(width: 520, height: 320), capture("", files: [
+                URL(fileURLWithPath: "/tmp/Propuesta Acme Logistics v3 (final, con descuentos por volumen).pdf"),
+                URL(fileURLWithPath: "/tmp/Llamada con Laura.m4a"), URL(fileURLWithPath: "/tmp/notas.txt"),
+                URL(fileURLWithPath: "/tmp/presupuesto.xlsx")])))
             // v0.3 (CONTRACT §12.6); run with SB_DEMO_ACCOUNTS=1 for mail/meetings with data.
             shots.append(("graph", CGSize(width: 1000, height: 680),
                           AnyView(GraphView(scope: Scope(projectSlug: project?.slug), onOpen: { _ in }))))
@@ -155,7 +177,7 @@ enum DebugSnapshots {
             // v0.5 shell: these also render dark ("<name>-dark").
             var darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "search-text", "record-control", "record-control-plain",
                                         "record-control-recording", "record-control-error", "menubar", "new-project",
-                                        "content-by-date", "content-by-topic"]
+                                        "content-by-date", "content-by-topic", "capture", "capture-email"]
             darkToo.formUnion(CorrectionsModel.snapshotDarkNames)   // MARK: v0.6 facts
             for (name, size, view) in shots where only.isEmpty || name.hasPrefix(only) {
                 for dark in darkToo.contains(name) ? [false, true] : [false] {

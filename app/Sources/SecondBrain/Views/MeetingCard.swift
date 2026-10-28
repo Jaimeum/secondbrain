@@ -552,9 +552,15 @@ struct PastMeetingRow: View {
                 HStack(spacing: 6) {
                     BrandChip(text: state.projectName(projectSlug), symbol: projectSlug == nil ? "tray" : nil)
                     let mine = MeetingsModel.shared.myOpenTaskCount(item)
-                    if mine > 0 {
-                        BrandChip(text: L("meetings.past.myTasks", mine), symbol: "checklist")
-                            .help(L("meetings.past.myTasksHelp"))
+                    if mine > 0, let key = MeetingsModel.shared.taskKey(item) {
+                        // §16.8: Pendientes › Míos of this meeting (the same n tasks).
+                        Button {
+                            TaskFilterStore.shared.open(.origin(key), state: state)
+                        } label: {
+                            BrandChip(text: L("meetings.past.myTasks", mine), symbol: "checklist")
+                        }
+                        .buttonStyle(.plain)
+                        .help(L("meetings.past.myTasksOpen"))
                     }
                     if let source, source.status.isInProgress || source.status == .needsProject {
                         StatusPill(status: source.status, progress: source.progress)

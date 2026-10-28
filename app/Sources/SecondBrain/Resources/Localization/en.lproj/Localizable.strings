@@ -1541,3 +1541,22 @@
 "search.action.addFile" = "Add file";
 "search.action.pasteLink" = "Paste link";
 "search.action.facts" = "Confirmed facts";
+/* v0.6 tasks — Pendientes filters (§16.8) */
+"tasks.filter.project" = "Project";
+"tasks.filter.allProjects" = "All projects";
+"tasks.filter.projectHelp" = "Show only the tasks of some projects";
+"tasks.filter.person" = "Person";
+"tasks.filter.anyone" = "Everyone";
+"tasks.filter.personHelp" = "Show what you owe someone or what they owe you";
+"tasks.filter.noPeople" = "No one with tasks yet";
+"tasks.filter.with" = "Everything with %@";
+"tasks.filter.iOwe" = "What I owe %@";
+"tasks.filter.owesMe" = "What %@ owes me";
+"tasks.filter.iOweShort" = "I owe %@";
+"tasks.filter.owesMeShort" = "%@ owes me";
+"tasks.filter.search" = "Search";
+"tasks.filter.clear" = "Clear filters";
+"tasks.emptyFilters" = "Nothing matches these filters";
+"tasks.openProjectTasks" = "Show in the project's tasks";
+"tasks.showInList" = "Show in Tasks";
+"meetings.past.myTasksOpen" = "Show my tasks from this meeting";

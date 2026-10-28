@@ -384,5 +384,24 @@
 			<string>%ld conexiones</string>
 		</dict>
 	</dict>
+	<!-- v0.6 tasks -->
+	<key>tasks.filter.projects</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld proyecto</string>
+			<key>many</key>
+			<string>%ld proyectos</string>
+			<key>other</key>
+			<string>%ld proyectos</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

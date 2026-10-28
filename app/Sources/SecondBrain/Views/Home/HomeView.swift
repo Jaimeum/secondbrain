@@ -250,7 +250,8 @@ struct HomeView: View {
         let soon = dueSoon
         return VStack(alignment: .leading, spacing: 10) {
             BrandSectionHeader(title: L("home.tasksToday")) {
-                HomeLink(title: L("home.seeAllTasks", myOpen.count)) { state.navigate(to: .sidebar(.tasks)) }
+                // Opens Míos with no filter: exactly the tasks counted here (§16.8).
+                HomeLink(title: L("home.seeAllTasks", myOpen.count)) { TaskFilterStore.shared.open(.mine, state: state) }
             }
             BrandCard(padding: soon.isEmpty ? 14 : 0) {
                 if soon.isEmpty {

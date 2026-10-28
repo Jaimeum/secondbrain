@@ -310,6 +310,8 @@ enum DebugSnapshots {
                 items.append(("entity-home", .home, nil))
             }
         }
+        // v0.6 tasks: Pendientes with Proyecto / Persona / Buscar set (§16.13 "Pendientes con filtros").
+        items.append(("tasks-filtered", .tasks, nil))
         let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""
         for entry in items where only.isEmpty || entry.name.hasPrefix(only) {
             for (sizeName, size) in [("1100", CGSize(width: 1100, height: 720)), ("min", CGSize(width: 920, height: 620))] {
@@ -328,6 +330,7 @@ enum DebugSnapshots {
                     if entry.name.hasSuffix("ask-thread") {   // MARK: v0.6 ask
                         AskSnapshots.seed(state: state, scope: entry.tab == nil ? .brain : Scope(projectSlug: state.currentProjectSlug))
                     }
+                    TaskFilterStore.shared.filter = entry.name == "tasks-filtered" ? snapshotTaskFilter(state) : TaskFilter()
                     let file = "window-\(entry.name)-\(sizeName)-\(dark ? "dark" : "light").png"
                     let view = entry.name == "search"
                         ? AnyView(ZStack { MainView(); SearchPalette(initialQuery: "comi") })
@@ -336,6 +339,12 @@ enum DebugSnapshots {
                 }
             }
         }
+    }
+
+    /// Two projects and "Lo que me debe Elena" (a demo-vault person with tasks in two projects): the filter bar set.
+    private static func snapshotTaskFilter(_ state: AppState) -> TaskFilter {
+        TaskFilter(projects: Set(state.projects.prefix(2).map(\.slug)),
+                   person: TaskPerson(slug: "elena-castro", name: "Elena Castro"), relation: .owesMe)
     }
 
     private static func renderWindow(_ view: some View, size: CGSize, dark: Bool, to url: URL) async {

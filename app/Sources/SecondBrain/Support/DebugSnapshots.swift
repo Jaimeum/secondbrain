@@ -279,7 +279,9 @@ enum DebugSnapshots {
             let tabs: [(String, ProjectTab)] = [("summary", .summary), ("content", .content), ("ask", .ask), ("graph", .graph),
                                                 ("tasks", .tasks), ("people", .people)]
             for (tabName, tab) in tabs { items.append(("project-\(tabName)", .project(project.slug), tab)) }
+            items.append(("project-ask-thread", .project(project.slug), .ask))   // MARK: v0.6 ask — list + inspector
         }
+        items.append(("ask-thread", .ask, nil))   // MARK: v0.6 ask
         // ⌘K over Inicio (the palette inside the real window, with its query).
         items.append(("search", .home, nil))
         // MARK: v0.6 entity — fichas (§16.13): a person's global ficha (Personas), the same person filtered to the
@@ -313,6 +315,9 @@ enum DebugSnapshots {
                         state.navigate(to: .sidebar(entry.item))
                     }
                     state.searchPresented = false   // "search" lays its own palette (with a query) over the window
+                    if entry.name.hasSuffix("ask-thread") {   // MARK: v0.6 ask
+                        AskSnapshots.seed(state: state, scope: entry.tab == nil ? .brain : Scope(projectSlug: state.currentProjectSlug))
+                    }
                     let file = "window-\(entry.name)-\(sizeName)-\(dark ? "dark" : "light").png"
                     let view = entry.name == "search"
                         ? AnyView(ZStack { MainView(); SearchPalette(initialQuery: "comi") })

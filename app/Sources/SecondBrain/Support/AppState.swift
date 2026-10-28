@@ -122,11 +122,9 @@ final class AppState {
     var showNewProject = false
     /// "Nueva nota" from ⌘K.
     var noteRequest: NoteRequest?
-    /// The whole brain's conversation (sidebar Preguntar). v0.6: replaced by ChatStore threads (§16.3, area A).
-    let brainChat = ChatModel()
-    /// Each project's "Preguntar" conversation, kept while the app runs: leaving a project and coming back (or asking
-    /// it from ⌘K) continues the same conversation. Created on first use; dropped when the vault changes.
-    @ObservationIgnored private(set) var projectChats: [String: ChatModel] = [:]
+    /// v0.6 ask (§16.3): Preguntar's saved conversations per scope ("brain" / "project:<slug>"), kept while the app
+    /// runs so an answer keeps streaming off screen. Created on first use; dropped when the vault changes.
+    @ObservationIgnored private var conversationsByScope: [String: Conversations] = [:]
     /// v0.3: bumped when connected accounts change (connect / disconnect), so Correo and Reuniones reload.
     var accountsRevision = 0
     @ObservationIgnored private var overdueReload: Task<Void, Never>?
@@ -335,9 +333,8 @@ final class AppState {
         // Conversations were about the other vault's pages: start fresh (an answer still streaming is stopped).
         // A transcription-model change alone keeps them.
         if vaultChanged {
-            for chat in projectChats.values { chat.stop() }
-            projectChats.removeAll()
-            brainChat.clear()
+            for conversations in conversationsByScope.values { conversations.stopAll() }
+            conversationsByScope.removeAll()
             clearPending()
         }
         vaultGeneration += 1
@@ -429,17 +426,12 @@ final class AppState {
         vaultRevision += 1
     }
 
-    /// The conversation of a scope (v0.6: AskView keeps it; area A moves it to ChatStore threads).
-    func chat(for scope: Scope) -> ChatModel {
-        scope.projectSlug.map(projectChat(for:)) ?? brainChat
-    }
-
-    /// The project's persistent conversation (see `projectChats`).
-    func projectChat(for slug: String) -> ChatModel {
-        if let chat = projectChats[slug] { return chat }
-        let chat = ChatModel()
-        projectChats[slug] = chat
-        return chat
+    /// Preguntar's conversations of a scope (saved under `data/chats/`, §16.3).
+    func conversations(for scope: Scope) -> Conversations {
+        if let existing = conversationsByScope[scope.key] { return existing }
+        let conversations = Conversations(scope: scope, store: ChatStore(dataRoot: config.dataURL))
+        conversationsByScope[scope.key] = conversations
+        return conversations
     }
 
     func project(_ slug: String?) -> Project? {

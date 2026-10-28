@@ -1502,3 +1502,22 @@
 "projectPeople.fact.removed" = "%1$@ no forma parte del proyecto %2$@.";
 "projectPeople.lastContact" = "Último contacto: %@";
 "projectPeople.addedByYou" = "Agregada por ti";
+/* v0.6 ask — Preguntar: conversaciones guardadas, panel de cita, guardar como página */
+"ask.new" = "Nueva conversación";
+"ask.newHelp" = "Empezar una conversación nueva (las anteriores quedan guardadas)";
+"ask.untitled" = "Conversación";
+"ask.listEmpty" = "Tus conversaciones quedan guardadas aquí.";
+"ask.emptyMessageProject" = "Respondo con lo que hay en este proyecto y te digo de dónde lo saqué.";
+"ask.rename" = "Renombrar";
+"ask.renameTitle" = "Renombrar conversación";
+"ask.renamePlaceholder" = "Nombre";
+"ask.delete" = "Eliminar";
+"ask.deleteTitle" = "¿Eliminar esta conversación?";
+"ask.deleteMessage" = "«%@» se borra de la lista. Las páginas que guardaste desde ella se quedan en el cerebro.";
+"ask.saveAsPage" = "Guardar como página";
+"ask.saved" = "Guardando…";
+"ask.savedOpen" = "Guardada · Ver";
+"ask.savedOpenHelp" = "Ver la página guardada";
+"ask.saveFailed" = "No pude guardar la respuesta como página.";
+"ask.savedHistoryTitle" = "Guardé una respuesta: «%@»";
+"ask.closeInspector" = "Cerrar el panel";

@@ -187,6 +187,36 @@ public extension BrainEngine {
     }
 }
 
+public extension BrainEngine {
+    /// A recording tied to a calendar event before v0.7 has no `webLink`: look for its event (by id) in the connected
+    /// calendars around the recording's date, once per source and session, and keep the event's link in the source.
+    /// Returns whether a link was added.
+    @discardableResult
+    func fillMeetingWebLink(sourceId: String, accounts list: [ConnectedAccount]? = nil,
+                            provider makeProvider: ((ConnectedAccount) -> MailCalendarProvider)? = nil) async -> Bool {
+        guard var src = source(sourceId), src.kind == .meeting, let eventId = src.calendarEventId, !eventId.isEmpty,
+              !OriginalLinks.isOpenable(src.webLink), !WebLinkFill.triedMeetings.contains(sourceId) else { return false }
+        WebLinkFill.triedMeetings.insert(sourceId)
+        let day = src.timelineDate
+        let from = day.addingTimeInterval(-2 * 86_400), to = day.addingTimeInterval(2 * 86_400)
+        let candidates = (list ?? accounts.calendarAccounts).filter { $0.provider != .local }
+        for account in candidates {
+            let p = makeProvider?(account) ?? accounts.provider(for: account)
+            guard let events = try? await p.events(from: from, to: to),
+                  let event = events.first(where: { $0.id == eventId }),
+                  let link = event.webLink, OriginalLinks.isOpenable(link) else { continue }
+            guard var fresh = source(sourceId) else { return false }
+            fresh.webLink = link
+            src = fresh
+            upsert(&src)
+            return true
+        }
+        return false
+    }
+}
+
 @MainActor enum WebLinkFill {
     static var tried: Set<String> = []
+    /// Recordings whose event was already looked for this session.
+    static var triedMeetings: Set<String> = []
 }

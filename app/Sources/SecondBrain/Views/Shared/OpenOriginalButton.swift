@@ -119,7 +119,14 @@ struct EntityOriginalButton: View {
             }
         }
         .task(id: "\(path)-\(state.vaultRevision)") {
-            guard let key = ThreadConversationView.threadKey(forPage: path) else { thread = nil; return }
+            guard let key = ThreadConversationView.threadKey(forPage: path) else {
+                thread = nil
+                // A recording made before v0.7: its event's link is looked for once (not only while the agenda has it).
+                if meetingLink == nil, let id = meetingSource?.id, await state.engine.fillMeetingWebLink(sourceId: id) {
+                    state.bumpVault()
+                }
+                return
+            }
             let vault = state.engine.vault
             thread = await Task.detached { vault.threadInfo(key: key) }.value
             // Mail saved before v0.7 has no web link yet: ask for it once, then show the button.
@@ -132,11 +139,15 @@ struct EntityOriginalButton: View {
     }
 
     /// The recording whose page this is, tied to a calendar event: its stored link, else the agenda's copy of the event.
-    private var meetingLink: (link: String, provider: AccountProvider)? {
+    private var meetingSource: SourceRecord? {
         guard path.contains("/wiki/meetings/") else { return nil }
-        guard let source = state.engine.sources.last(where: {
+        return state.engine.sources.last {
             $0.kind == .meeting && $0.calendarEventId != nil && SourcePages.candidates(for: $0).contains(path)
-        }) else { return nil }
+        }
+    }
+
+    private var meetingLink: (link: String, provider: AccountProvider)? {
+        guard let source = meetingSource else { return nil }
         if let link = source.webLink, OriginalLinks.isOpenable(link),
            let provider = OriginalLinks.provider(forLink: link) ?? MeetingsModel.shared.event(id: source.calendarEventId)
                .flatMap({ OriginalLinks.provider(ofAccountId: $0.accountId) }) {

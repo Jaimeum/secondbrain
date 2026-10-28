@@ -134,6 +134,21 @@ import Foundation
         t.eq(engine.source(p.id)?.webLink, nil, "Mac calendar event → no link")
         let decoded = try? JSONDecoder().decode(SourceRecord.self, from: Data(#"{"id":"x","kind":"meeting","title":"t","status":"done","createdAt":0,"updatedAt":0}"#.utf8))
         t.check(decoded != nil && decoded?.webLink == nil, "SourceRecord without webLink decodes")
+
+        // --- A recording made before v0.7 (event id, no link): the event is looked for once, its link kept.
+        let events = try await demo.events(from: Date().addingTimeInterval(-86_400), to: Date().addingTimeInterval(7 * 86_400))
+        if let event = events.first(where: { $0.webLink != nil }) {
+            let manifest = SessionManifest(id: SessionManifest.newId(at: event.start), title: event.title, projectSlug: acme.slug,
+                                           startedAt: event.start, micCaptured: true, calendarEventId: event.id, attendees: nil)
+            engine.recordingStarted(manifest)
+            t.eq(engine.source(manifest.id)?.webLink, nil, "old recording: no link yet")
+            let filled = await engine.fillMeetingWebLink(sourceId: manifest.id, accounts: [account]) { _ in demo }
+            t.check(filled && engine.source(manifest.id)?.webLink == event.webLink, "old recording: the event's link found and kept")
+            let again = await engine.fillMeetingWebLink(sourceId: manifest.id, accounts: [account]) { _ in demo }
+            t.check(!again, "already has its link: nothing to do")
+        } else {
+            t.check(false, "demo events with links")
+        }
     } catch {
         t.check(false, "links: \(error)")
     }

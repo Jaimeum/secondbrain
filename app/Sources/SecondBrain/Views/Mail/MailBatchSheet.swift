@@ -157,6 +157,10 @@ struct MailBatchSheet: View {
     /// "2 adjuntos · 1 hilo ya guardado" — or the read-only promise when there is nothing else to say.
     private var summary: String {
         var parts: [String] = []
+        // "Encontré 15" counts what the rule matched; "Guardar 19" saves whole conversations: say where the 4 come from.
+        if case .rule = model.origin, model.messagesToSave > model.matchedCount, model.matchedCount > 0 {
+            parts.append(L("batch.wholeThreads", model.messagesToSave - model.matchedCount))
+        }
         if model.attachmentsToSave > 0 { parts.append(L("batch.attachments", model.attachmentsToSave)) }
         if model.alreadySavedCount > 0 { parts.append(L("batch.alreadySaved", model.alreadySavedCount)) }
         return parts.isEmpty ? L("readonly.promise") : parts.joined(separator: " · ")

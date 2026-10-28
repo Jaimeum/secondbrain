@@ -1802,3 +1802,4 @@
 "attach.review.title" = "¿Qué adjuntos guardo?";
 "attach.review.hint" = "Ya guardé el correo. Marqué los adjuntos que parecen útiles: revisa y confirma con «Guardar los marcados».";
 "attach.review.done" = "Listo";
+"batch.wholeThreads" = "+%ld del resto de sus conversaciones";

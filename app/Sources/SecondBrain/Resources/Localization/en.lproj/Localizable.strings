@@ -1802,3 +1802,4 @@
 "attach.review.title" = "Which attachments should I save?";
 "attach.review.hint" = "The email is saved. I checked the attachments that look useful: review them and confirm with “Save checked”.";
 "attach.review.done" = "Done";
+"batch.wholeThreads" = "+%ld from the rest of their conversations";

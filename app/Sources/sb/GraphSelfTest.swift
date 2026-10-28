@@ -20,7 +20,7 @@ func testGraph(_ t: Tester, root: URL) async {
     t.check(g.nodes.count >= 70 && g.nodes.count <= 80, "global nodes \(g.nodes.count) ∉ 70…80")
     t.check(g.edges.count >= 200, "global edges \(g.edges.count) < 200")
     let kinds = Set(g.nodes.map(\.kind))
-    for k in [GraphNodeKind.project, .meeting, .email, .document, .note, .url, .person, .topic, .decision, .question, .page] {
+    for k in [GraphNodeKind.project, .meeting, .emailThread, .document, .note, .url, .person, .topic, .decision, .question, .page] {
         t.check(kinds.contains(k), "kind \(k.rawValue) missing")
     }
     t.eq(g.nodes.filter { $0.kind == .person }.count, DemoVault.people.count, "people nodes")
@@ -52,7 +52,7 @@ func testGraph(_ t: Tester, root: URL) async {
     // Kinds by folder / frontmatter.
     let atlas = "projects/lanzamiento-atlas/wiki"
     t.eq(byId["\(atlas)/topics/plan-de-lanzamiento.md"]?.kind, .topic, "topic kind")
-    t.eq(byId["\(atlas)/emails/contrato-con-acme.md"]?.kind, .email, "email-thread kind")
+    t.eq(byId["\(atlas)/emails/contrato-con-acme.md"]?.kind, .emailThread, "email-thread kind")
     t.eq(byId["\(atlas)/tasks.md"]?.kind, .page, "tasks.md kind")
     t.eq(byId["\(atlas)/questions/quien-aprueba-presupuesto-marketing.md"]?.kind, .question, "question kind")
     t.check(g.nodes.contains { $0.kind == .url && $0.id.contains("/sources/") }, "source_type url → url")

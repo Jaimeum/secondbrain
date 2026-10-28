@@ -304,10 +304,16 @@ final class MailModel {
                     found.existingThreadKey = stored.threadKey
                     found.existingThreadProject = stored.projectSlug
                     found.continuesStoredThread = true
+                } else if let key = engine.vault.threadKey(accountId: account.id, providerThreadId: summary.threadId),
+                          let info = engine.vault.threadInfo(key: key) {
+                    // v0.7 (§17.4): the provider's conversation id is saved with a thread: that is its thread, always.
+                    found.existingThreadKey = key
+                    found.existingThreadProject = info.projectSlug
+                    found.continuesStoredThread = true
                 }
                 // On screen now; the fuzzy thread match (reads every stored email) patches it afterwards.
                 show(found)
-                guard stored == nil else { finishLoading(); return }
+                guard stored == nil, !found.continuesStoredThread else { finishLoading(); return }
                 matchPending = true
                 let match = await engine.matchThreadsAsync(for: parsed).first(where: { $0.score >= 0.8 })
                 guard !Task.isCancelled, selectedId == id, self.detail?.message.summary.id == id else { return }

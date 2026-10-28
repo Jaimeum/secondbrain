@@ -123,10 +123,21 @@ public struct TimelineEntry: Codable, Identifiable, Hashable, Sendable {
     public var projectSlug: String?
     public var pagePath: String?          // vault-relative page to open
     public var sourceId: String?
+    /// v0.7 (§17.4): an email thread is ONE entry (`kind == .email`, `id` "thread:<key>", `date` = its newest message,
+    /// `sourceId` = its newest learned message): how many emails it has and who wrote ("Ana", "Tú", "Luis").
+    public var thread: ThreadSummary?
+    public struct ThreadSummary: Codable, Hashable, Sendable {
+        public var key: String
+        public var messageCount: Int
+        public var senders: [String]
+        public init(key: String, messageCount: Int, senders: [String]) {
+            self.key = key; self.messageCount = messageCount; self.senders = senders
+        }
+    }
     public init(id: String, date: Date, hasTime: Bool, addedAt: Date?, kind: TimelineKind, title: String,
-                projectSlug: String?, pagePath: String?, sourceId: String?) {
+                projectSlug: String?, pagePath: String?, sourceId: String?, thread: ThreadSummary? = nil) {
         self.id = id; self.date = date; self.hasTime = hasTime; self.addedAt = addedAt; self.kind = kind; self.title = title
-        self.projectSlug = projectSlug; self.pagePath = pagePath; self.sourceId = sourceId
+        self.projectSlug = projectSlug; self.pagePath = pagePath; self.sourceId = sourceId; self.thread = thread
     }
 }
 

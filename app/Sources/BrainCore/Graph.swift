@@ -16,9 +16,9 @@ public extension BrainEngine {
     /// Nodes and edges of the whole brain (`projectSlug == nil`) or of one project. Runs off the main thread and is
     /// cached by a cheap vault signature (file count + latest modification), so reopening the tab is instant.
     func graph(projectSlug: String?) async -> KnowledgeGraph {
-        let root = vault.root
+        let root = vault.root, language = config.uiLanguage
         return await Task.detached(priority: .userInitiated) {
-            KnowledgeGraphBuilder.cachedGraph(vaultRoot: root, projectSlug: projectSlug)
+            KnowledgeGraphBuilder.cachedGraph(vaultRoot: root, projectSlug: projectSlug, language: language)
         }.value
     }
 }
@@ -26,22 +26,22 @@ public extension BrainEngine {
 public enum KnowledgeGraphBuilder {
     // MARK: Cache
 
-    private struct CacheKey: Hashable { let root: String; let slug: String? }
+    private struct CacheKey: Hashable { let root: String; let slug: String?; let language: String }
     private struct CacheEntry { let signature: String; let graph: KnowledgeGraph }
     nonisolated(unsafe) private static var cache: [CacheKey: CacheEntry] = [:]
     private static let lock = NSLock()
 
     /// Builds (or returns the cached) graph. Blocking: call it off the main thread.
-    public static func cachedGraph(vaultRoot: URL, projectSlug: String?) -> KnowledgeGraph {
+    public static func cachedGraph(vaultRoot: URL, projectSlug: String?, language: String = "es") -> KnowledgeGraph {
         let signature = vaultSignature(vaultRoot)
-        let key = CacheKey(root: vaultRoot.standardizedFileURL.path, slug: projectSlug)
+        let key = CacheKey(root: vaultRoot.standardizedFileURL.path, slug: projectSlug, language: language)
         lock.lock()
         if let hit = cache[key], hit.signature == signature {
             lock.unlock()
             return hit.graph
         }
         lock.unlock()
-        let graph = build(vaultRoot: vaultRoot, projectSlug: projectSlug)
+        let graph = build(vaultRoot: vaultRoot, projectSlug: projectSlug, language: language)
         lock.lock()
         cache[key] = CacheEntry(signature: signature, graph: graph)
         lock.unlock()
@@ -66,7 +66,9 @@ public enum KnowledgeGraphBuilder {
                 latestDir = max(latestDir, mtime)   // deletions and renames only touch the folder
                 continue
             }
-            guard url.pathExtension.lowercased() == "md" || url.lastPathComponent == "project.json" else { continue }
+            // v0.7: `_thread.json` too (a thread's participants, message count and attachments live there).
+            guard url.pathExtension.lowercased() == "md" || url.lastPathComponent == "project.json"
+                    || url.lastPathComponent == ThreadMeta.fileName else { continue }
             count += 1
             latest = max(latest, mtime)
         }
@@ -90,7 +92,7 @@ public enum KnowledgeGraphBuilder {
     static func isGlobalEntity(_ path: String) -> Bool { path.hasPrefix("people/") || path.hasPrefix("orgs/") }
 
     /// Builds the graph from disk (no cache). Blocking: call it off the main thread.
-    public static func build(vaultRoot: URL, projectSlug: String?) -> KnowledgeGraph {
+    public static func build(vaultRoot: URL, projectSlug: String?, language: String = "es") -> KnowledgeGraph {
         let vault = VaultStore(root: vaultRoot)
         let projects = ProjectManager(vaultRoot: vaultRoot).list()
         let allSlugs = projects.map(\.slug)
@@ -110,10 +112,17 @@ public enum KnowledgeGraphBuilder {
         }
 
         var pages: [String: Page] = [:]
+        var globalIndex = ThreadLinks.GlobalIndex()
         for path in paths {
             guard let text = try? vault.read(path) else { continue }
-            pages[path] = parse(path: path, text: text)
+            let page = parse(path: path, text: text)
+            pages[path] = page
+            if isGlobalEntity(path) { globalIndex.add(page, text: text) }
         }
+        // v0.7 (§17.4): each saved thread with a page is one node, tied to its participants, their companies and
+        // its saved attachments (the links Claude wrote, and citations of a single message, are resolved below).
+        let threads = ThreadLinks.threads(vault: vault, pages: pages)
+        let threadLinks = ThreadLinks.links(threads, index: globalIndex, pages: pages, owners: Set(vault.ownerEmails()))
 
         // 2. Resolve links: one vault walk per linking project (resolution only depends on the linker's project).
         let byProject = Dictionary(grouping: pages.values, by: { $0.projectSlug ?? "" })
@@ -128,8 +137,11 @@ public enum KnowledgeGraphBuilder {
         // 3. People and companies in a project's graph (`linkedGlobals`); the others leave it.
         var nodeIds = Set(pages.keys)
         if let projectSlug {
-            let keep = linkedGlobals(projectSlug: projectSlug, pages: pages, resolvedByProject: resolvedByProject,
+            var keep = linkedGlobals(projectSlug: projectSlug, pages: pages, resolvedByProject: resolvedByProject,
                                      vaultRoot: vaultRoot)
+            // v0.7: a thread's participants and their companies, unless `project.json` excludes the person.
+            let excluded = Set(projectPeople(vaultRoot: vaultRoot, slug: projectSlug).exclude.map { "people/\($0).md" })
+            keep.formUnion(threadLinks.globals(ofThreadsIn: projectSlug, pages: pages, excluded: excluded))
             for path in globalPaths where !keep.contains(path) { nodeIds.remove(path); pages[path] = nil }
         }
 
@@ -148,6 +160,9 @@ public enum KnowledgeGraphBuilder {
                 if path.hasPrefix("project:") || nodeIds.contains(path) { addEdge(page.path, path) }
             }
         }
+        for (thread, linked) in threadLinks.targets {
+            for target in linked where nodeIds.contains(target) { addEdge(thread, target) }
+        }
 
         // 5. Project hubs: tied to overview.md and to every page with ≤ 1 link, so each project is one cluster.
         var degree: [String: Int] = [:]
@@ -162,7 +177,8 @@ public enum KnowledgeGraphBuilder {
             let own = pages.values.filter { $0.projectSlug == project.slug }
             guard !own.isEmpty else { continue }
             hubs.append(GraphNode(id: hub, title: "\(project.emoji) \(project.name)", kind: .project, projectSlug: project.slug))
-            for page in own where page.path.hasSuffix("/wiki/overview.md") || degree[page.path, default: 0] <= 1 {
+            for page in own where page.path.hasSuffix("/wiki/overview.md") || degree[page.path, default: 0] <= 1
+                || threads[page.path] != nil {   // v0.7: a thread always hangs from its project
                 addEdge(hub, page.path)
             }
         }
@@ -185,9 +201,18 @@ public enum KnowledgeGraphBuilder {
             hub.links = degree[hub.id, default: 0]
             return hub
         }
+        let lang = Lang(language)
         for page in pages.values where nodeIds.contains(page.path) {
-            nodes.append(GraphNode(id: page.path, title: page.title, kind: page.kind, projectSlug: page.projectSlug,
-                                   date: page.date, links: degree[page.path, default: 0]))
+            var title = page.title, kind = page.kind, date = page.date
+            if let thread = threads[page.path] {   // "Contrato Acme · 7 correos"
+                let subject = thread.subject.isEmpty ? page.title : thread.subject
+                title = "\(subject) · " + lang.t(thread.messageCount == 1 ? "1 correo" : "\(thread.messageCount) correos",
+                                                 thread.messageCount == 1 ? "1 email" : "\(thread.messageCount) emails")
+                kind = .emailThread
+                date = thread.lastDate ?? date
+            }
+            nodes.append(GraphNode(id: page.path, title: title, kind: kind, projectSlug: page.projectSlug,
+                                   date: date, links: degree[page.path, default: 0]))
         }
         nodes.sort { $0.id < $1.id }
         return KnowledgeGraph(nodes: nodes, edges: edges)
@@ -336,7 +361,7 @@ public enum KnowledgeGraphBuilder {
         } else if parts.count >= 5, parts[0] == "projects", parts[2] == "wiki" {
             switch parts[3] {
             case "meetings": kind = .meeting
-            case "emails": kind = .email
+            case "emails": kind = .emailThread
             case "sources": kind = sourceType == "url" ? .url : sourceType == "note" ? .note : .document
             case "topics": kind = .topic
             case "decisions": kind = .decision
@@ -347,7 +372,7 @@ public enum KnowledgeGraphBuilder {
         }
         switch type {
         case "meeting": return .meeting
-        case "email", "email-thread", "thread": return .email
+        case "email", "email-thread", "thread": return .emailThread
         case "source": return sourceType == "url" ? .url : sourceType == "note" ? .note : .document
         case "document": return .document
         case "note": return .note

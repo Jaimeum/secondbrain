@@ -1612,3 +1612,19 @@
 "original.gmail" = "Open in Gmail";
 "original.outlookCalendar" = "Open in Outlook Calendar";
 "original.googleCalendar" = "Open in Google Calendar";
+
+/* v0.7 threads */
+"thread.last" = "last %@";
+"thread.conversation" = "Conversation";
+"thread.you" = "You";
+"thread.collapse" = "Hide the conversation";
+"thread.expand" = "Show the conversation";
+"thread.unknownSender" = "Unknown sender";
+"thread.noNewText" = "No new text: it only forwards or quotes earlier emails.";
+"thread.showMore" = "Show more";
+"thread.showLess" = "Show less";
+"thread.openAttachment" = "Open the attachment";
+"thread.kind" = "Email thread";
+"mail.inProjectSeeThread" = "In %@ · See thread";
+"graph.kind.emailThread" = "Email thread";
+"entity.kind.emailThread" = "Email thread";

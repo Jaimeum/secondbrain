@@ -88,15 +88,11 @@ persona, empresa y tema. El audio nunca sale de tu computadora; lo único que se
 que Claude lee con tu propia cuenta.
 
 ### Novedades
-- **Adjuntos de correo.** Los de correos nuevos se guardan solos; logos, firmas e imágenes decorativas se descartan (Claude decide lo dudoso: guarda la foto del pizarrón y descarta el logo del cliente). Lo descartado queda 30 días en **Descartados** para rescatarlo. Al guardar correos anteriores eliges qué adjuntos con casillas; más de 25 MB no se baja solo. Word, Excel y PowerPoint se leen también.
-- **Archivos.** Nuevo en la barra lateral y como pestaña de cada proyecto: todos los PDFs, documentos, hojas y fotos con búsqueda, filtros por tipo, origen y persona, vista previa (Espacio) y de dónde vino cada uno.
-- **Agregar al proyecto.** En el Resumen del proyecto, una caja donde tiras archivos o escribes lo que pasó (p. ej. una visita presencial) y lo archivo donde va: reunión presencial, decisión, pendientes, documento… y te digo cómo lo archivé.
-- **Hilos de correo como unidad.** Una fila por hilo, la conversación completa en orden con tus correos marcados "Tú", y un solo nodo en el **Grafo**.
-- **Tus respuestas.** Todo hilo guardado se sigue solo; tus respuestas y las de los demás se agregan, y lo que prometes queda en tus pendientes con enlace al correo que enviaste.
-- **Abrir el original.** "Abrir en Outlook / Gmail / Google Calendar" en correos, hilos, eventos y archivos que vinieron de un correo.
-- **Hacia atrás.** Selecciona varios correos y guárdalos juntos; al crear una regla te ofrezco traer los correos anteriores que habría capturado (últimos 90 días) para que elijas.
-- Ten en cuenta: la hoja "¿Qué adjuntos guardo?" aparece justo después de guardar un correo; "Traer anteriores" puede incluir de más (la hoja lo marca); en hilos viejos de Outlook el botón "Abrir en Outlook" puede tardar unos segundos la primera vez.
-- Incluye todo lo de 0.6: el lugar fija el ámbito, fichas, corregir el cerebro y captura rápida con **⌥⌘N**.
+- **Un diseño más tranquilo.** Menos líneas y cambios bruscos de color, esquinas redondeadas y tonos suaves en toda la app, en claro y en oscuro. La barra de arriba se funde con el contenido y la selección de la barra lateral ya no sale en el azul del sistema.
+- **"Agregar" más discreto.** Una cápsula suave con un "+" en lugar del botón gris con flecha azul (en la barra lateral y en los proyectos).
+- **Cualquier emoji como ícono de proyecto.** Escribe o pega el que quieras, o abre "Más emojis…"; siguen las sugerencias.
+- **Formularios más limpios.** Campos con borde suave y un halo tenue al escribir (sin bordes negros), selectores, casillas y menús con el estilo de la app.
+- Incluye todo lo de 0.7: adjuntos de correo, Archivos, "Agregar al proyecto", hilos de correo como unidad, tus respuestas y "Abrir el original".
 
 ### Instalar
 1. Descarga **SecondBrain-$VERSION.dmg** (abajo, en *Assets*), ábrelo y arrastra **SecondBrain** a la
@@ -123,15 +119,11 @@ meetings (transcribed **on your Mac**). Claude keeps a per-project wiki with a p
 company and topic. Audio never leaves your computer.
 
 ### What's new
-- **Mail attachments.** Those on new mail are saved automatically; logos, signatures and decorative images are dropped (Claude decides the doubtful ones: it keeps the whiteboard photo and drops the client's logo). Anything dropped stays 30 days in **Descartados** (Discarded) so you can rescue it. When saving older mail you pick which attachments with checkboxes; anything over 25 MB isn't downloaded on its own. Word, Excel and PowerPoint files are read too.
-- **Files.** New in the sidebar and as a tab in every project: all PDFs, documents, sheets and photos with search, filters by type, source and person, preview (Space) and where each one came from.
-- **Add to project.** On the project Summary, a box where you drop files or type what happened (say, an in-person visit) and I file it where it belongs: in-person meeting, decision, tasks, document… and tell you how I filed it.
-- **Mail threads as a unit.** One row per thread, the whole conversation in order with your own messages marked "You", and a single node in the **Graph**.
-- **Your replies.** Every saved thread is followed automatically; your replies and everyone else's are added, and what you promise lands in your tasks with a link to the email you sent.
-- **Open the original.** "Open in Outlook / Gmail / Google Calendar" on mail, threads, events and files that came from an email.
-- **Looking back.** Select several emails and save them together; when you create a rule I offer to bring in the earlier mail it would have captured (last 90 days) so you can choose.
-- Good to know: the "Which attachments do I keep?" sheet appears right after you save an email; "Bring earlier" may include too much (the sheet flags it); on old Outlook threads "Open in Outlook" can take a few seconds the first time.
-- Includes everything from 0.6: place sets the scope, entity pages, correcting the brain and quick capture with **⌥⌘N**.
+- **A calmer design.** Fewer lines and abrupt color changes, rounded corners and soft tones across the app, in light and dark. The top bar blends into the content and the sidebar selection no longer uses the system blue.
+- **A quieter "Add".** A soft capsule with a "+" instead of the grey button with a blue arrow (in the sidebar and in projects).
+- **Any emoji as a project icon.** Type or paste the one you want, or open "More emoji…"; suggestions are still there.
+- **Cleaner forms.** Fields with a soft border and a faint halo while typing (no black borders); pickers, checkboxes and menus in the app's style.
+- Includes everything from 0.7: mail attachments, Files, "Add to project", mail threads as a unit, your replies and "Open the original".
 
 ### Install
 1. Download **SecondBrain-$VERSION.dmg** (under *Assets*), open it and drag **SecondBrain** to

@@ -180,6 +180,12 @@ struct FactsSelfTestCmd: AsyncParsableCommand {
     t.eq(proposal.facts.count, 2, "facts kept")
     t.eq(vault.validated(parsed, editedPath: Corrections.factsPath).facts.count, 0, "editing facts.md itself adds no facts")
 
+    // 2b. Shape seen from the real Claude (sonnet, 2026-10-27): `before`/`after` wrapped in newlines around one line.
+    let realEdit = ProposedEdit(path: "x.md", before: "\n- En su equipo está [[carlos-vega|Carlos Vega]].\n", after: "\n")
+    let realPage = "# Ana García\n\n- Rol: CFO\n\n- En su equipo está [[carlos-vega|Carlos Vega]].\n"
+    t.eq(Corrections.applying(realEdit, to: realPage), "# Ana García\n\n- Rol: CFO\n\n",
+         "newline-wrapped edit from the real Claude removes exactly that line")
+
     // 3. Apply: the owner unchecked nothing. A page changed since Claude read it → that edit is stale, the rest applies.
     let changedOverview = overview + "\n## Nuevo\n- algo\n"
     let stale = ProposedEdit(path: "projects/kickoff/wiki/overview.md", before: "- algo que ya no está", after: "x")

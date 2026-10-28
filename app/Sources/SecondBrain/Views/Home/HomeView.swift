@@ -413,7 +413,15 @@ struct HomeView: View {
     @ViewBuilder private func destination(_ route: HomeRoute) -> some View {
         switch route {
         case .entity(let path):
-            EntityView(path: path, scope: .brain)
+            // §16.4: links push another ficha in Inicio's stack (a project's page goes to its project); Atrás ⌘[.
+            EntityView(path: path, scope: .brain, onOpen: { next in
+                if EntityView.pushes(next, in: .brain) {
+                    if routes.last != .entity(next) { routes.append(.entity(next)) }
+                } else {
+                    state.navigate(to: .entity(next, .brain))
+                }
+            }, onBack: { _ = routes.popLast() })
+            .navigationBarBackButtonHidden(true)
         case .timeline:
             BrainTimelineView(projectSlug: nil) { path, _ in state.open(path: path) }
         }

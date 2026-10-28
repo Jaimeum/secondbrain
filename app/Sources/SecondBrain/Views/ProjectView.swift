@@ -38,9 +38,9 @@ struct ProjectView: View {
     @ViewState private var graphFocus: String?
     @ViewState private var sheet: ProjectSheet?
     @ViewState private var error: String?
-    /// A page of somewhere else (a person, an org, another project) opened from inside this project.
-    /// v0.6: filled in by B (entity pages) — pushed as a ficha filtered to this project, with Atrás (§16.4).
-    @ViewState private var foreignPage: VaultPageItem?
+    /// Pages of somewhere else (a person, an org, another project) opened from inside this project: pushed as fichas
+    /// filtered to this project over the current tab, with Atrás (§16.4). Empty = the tab shows.
+    @ViewState private var fichas: [String] = []
 
     private var scope: Scope { .project(project.slug) }
 
@@ -65,7 +65,6 @@ struct ProjectView: View {
                 }
             }
             .sheet(item: $sheet) { sheetView($0) }
-            .sheet(item: $foreignPage) { PageSheet(path: $0.path) }
             .onAppear(perform: consumePending)
             .onChange(of: state.pendingPage) { consumePending() }
             .onChange(of: state.pendingGraphFocus) { consumePending() }
@@ -73,6 +72,7 @@ struct ProjectView: View {
             .onChange(of: tab) { old, _ in
                 // "Ver en el grafo" centers the graph once; the next visit from the tab bar starts from the overview.
                 if old == .graph { graphFocus = nil }
+                fichas = []
             }
             .alert(L("common.oops"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button(L("common.ok")) { error = nil }
@@ -95,6 +95,12 @@ struct ProjectView: View {
                     .background(Brand.color.surface)
                     .contentShape(Rectangle())
             }
+            if !fichas.isEmpty {
+                EntityStackView(stack: $fichas, scope: scope, onBackFromRoot: { fichas = [] }, onElsewhere: openPage)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Brand.color.surface)
+                    .contentShape(Rectangle())
+            }
         }
     }
 
@@ -103,7 +109,7 @@ struct ProjectView: View {
         case .content:
             EmptyView()
         case .summary:
-            ProjectSummaryView(project: project)
+            ProjectSummaryView(project: project, onOpen: openPage)
         case .tasks:
             TasksView(scope: scope, onOpenPage: openPage)
         case .ask:
@@ -111,7 +117,7 @@ struct ProjectView: View {
         case .graph:
             GraphView(scope: scope, focus: graphFocus, onOpen: openPage)
         case .people:
-            ProjectPeopleView(project: project)
+            ProjectPeopleView(project: project, onOpen: openPage)
         }
     }
 
@@ -221,6 +227,11 @@ struct ProjectView: View {
     /// AskView / TasksView once their tab shows.
     private func consumePending() {
         guard state.selection == .project(project.slug) else { return }
+        // The tab first: the page decides last (the project's overview opens Resumen, a foreign page a ficha).
+        if let requested = state.pendingProjectTab {
+            state.pendingProjectTab = nil
+            tab = requested
+        }
         if let path = state.pendingPage {
             state.pendingPage = nil
             openPage(path)
@@ -230,20 +241,21 @@ struct ProjectView: View {
             graphFocus = focus
             tab = .graph
         }
-        if let requested = state.pendingProjectTab {
-            state.pendingProjectTab = nil
-            tab = requested
-        }
     }
 
     /// One rule for every link inside the project (§16.4): this project's pages open in Contenido; anything else is
     /// shown as a ficha in this project's context.
     private func openPage(_ path: String) {
-        if Scope.projectSlug(ofPath: path) == project.slug {
+        if path == "projects/\(project.slug)/wiki/overview.md" {
+            // The project's own ficha is its Resumen (§16.2).
+            fichas = []
+            tab = .summary
+        } else if Scope.projectSlug(ofPath: path) == project.slug {
+            fichas = []
             page = path
             tab = .content
-        } else {
-            foreignPage = VaultPageItem(path: path)
+        } else if fichas.last != path {
+            fichas.append(path)
         }
     }
 }
@@ -286,25 +298,6 @@ private struct ReposSheet: View {
         }
         .frame(minWidth: 600, idealWidth: 720, minHeight: 420, idealHeight: 520)
         .background(Brand.color.surface)
-    }
-}
-
-struct PeopleView: View {
-    @Environment(AppState.self) private var state
-    @ViewState private var page: String?
-
-    var body: some View {
-        WikiBrowser(scope: .people, selection: $page)
-            .navigationTitle(L("sidebar.people"))
-            .onAppear(perform: consumePending)
-            .onChange(of: state.pendingPage) { consumePending() }
-    }
-
-    /// A person opened from elsewhere (`AppState.navigate(to: .entity)`, ⌘K, a wikilink): select it and clear the request.
-    private func consumePending() {
-        guard state.selection == .people, let path = state.pendingPage else { return }
-        state.pendingPage = nil
-        page = path
     }
 }
 

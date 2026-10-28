@@ -385,6 +385,14 @@ final class AppState {
         }
     }
 
+    // MARK: v0.6 entity → facts
+
+    /// Records a fact the user confirmed by hand (e.g. "Javier Ruiz no forma parte del proyecto 🚀 X.") in
+    /// `facts.md` (CONTRACT §16.6). Stub for the entity area: the edits/facts area (Corrections) implements it.
+    func recordFact(_ text: String) {
+        Log.info("fact (not recorded yet): \(text)")
+    }
+
     // MARK: Projects
 
     /// Re-reads `projects/*/project.json` off the main thread (called after every finished job).

@@ -1531,3 +1531,13 @@
 "graph.panel.openProjectHelp" = "Open the project (double-click the node)";
 "graph.panel.close" = "Close";
 "graph.panel.selectHelp" = "See it in the graph";
+/* v0.6 search — ⌘K full text, groups, actions */
+"search.group.orgs" = "Companies";
+"search.group.topics" = "Topics";
+"search.group.decisions" = "Decisions";
+"search.group.questions" = "Saved questions";
+"search.group.repos" = "Repos";
+"search.more" = "Show %ld more";
+"search.action.addFile" = "Add file";
+"search.action.pasteLink" = "Paste link";
+"search.action.facts" = "Confirmed facts";

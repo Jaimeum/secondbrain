@@ -112,6 +112,9 @@ enum DebugSnapshots {
             shots.append(("home-empty", CGSize(width: 900, height: 620), AnyView(HomeView(previewEmpty: true))))
             shots.append(("search", CGSize(width: 760, height: 600), AnyView(SearchPalette(initialQuery: "comi"))))
             shots.append(("search-empty", CGSize(width: 760, height: 420), AnyView(SearchPalette())))
+            // v0.6 search: full text (rows found by their page's text carry a snippet; "Ver n más").
+            shots.append(("search-text", CGSize(width: 760, height: 620), AnyView(SearchPalette(initialQuery: "presupuesto"))))
+            shots.append(("search-narrow", CGSize(width: 480, height: 600), AnyView(SearchPalette(initialQuery: "presupuesto"))))
             // The sidebar footer at its default width (220): the meeting card, a plain "Grabar", recording, an error.
             func footer(_ preview: RecordControlPreview?) -> AnyView {
                 AnyView(VStack(alignment: .leading, spacing: 4) {
@@ -150,7 +153,7 @@ enum DebugSnapshots {
             shots += CorrectionsModel.snapshotShots(state: state)   // MARK: v0.6 facts — editor + "Revisar cambios"
             let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""   // e.g. "graph": just those shots
             // v0.5 shell: these also render dark ("<name>-dark").
-            var darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "record-control", "record-control-plain",
+            var darkToo: Set<String> = ["home", "home-empty", "search", "search-empty", "search-text", "record-control", "record-control-plain",
                                         "record-control-recording", "record-control-error", "menubar", "new-project",
                                         "content-by-date", "content-by-topic"]
             darkToo.formUnion(CorrectionsModel.snapshotDarkNames)   // MARK: v0.6 facts
@@ -239,8 +242,8 @@ enum DebugSnapshots {
         // ⌘K finds meetings by their page's title, also without a source record on this Mac (§15.2).
         await SearchIndex.shared.rebuild(state: state)
         let found = SearchIndex.shared.results(for: "comi")
-        let meetings = found.first { $0.0 == .meetings }?.1.map(\.title) ?? []
-        log("search comi → \(found.map { "\($0.0.rawValue)=\($0.1.map(\.title))" }.joined(separator: " "))")
+        let meetings = found.first { $0.group == .meetings }?.items.map(\.title) ?? []
+        log("search comi → \(found.map { "\($0.group.rawValue)=\($0.items.map(\.title))" }.joined(separator: " "))")
         log("search comi meetings \(meetings.contains("Comité de la alianza") ? "PASS" : "FAIL")")
         let ids = SearchIndex.shared.items.map(\.id)
         log("search ids unique \(Set(ids).count == ids.count ? "PASS" : "FAIL (\(ids.count - Set(ids).count) dup)")")

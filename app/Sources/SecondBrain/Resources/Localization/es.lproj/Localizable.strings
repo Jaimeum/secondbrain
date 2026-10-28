@@ -1531,3 +1531,13 @@
 "graph.panel.openProjectHelp" = "Abrir el proyecto (doble clic en el nodo)";
 "graph.panel.close" = "Cerrar la ficha";
 "graph.panel.selectHelp" = "Ver su ficha en el grafo";
+/* v0.6 search — ⌘K full text, groups, actions */
+"search.group.orgs" = "Empresas";
+"search.group.topics" = "Temas";
+"search.group.decisions" = "Decisiones";
+"search.group.questions" = "Preguntas guardadas";
+"search.group.repos" = "Repos";
+"search.more" = "Ver %ld más";
+"search.action.addFile" = "Agregar archivo";
+"search.action.pasteLink" = "Pegar enlace";
+"search.action.facts" = "Hechos confirmados";

@@ -73,8 +73,9 @@ struct EntityView: View {
                 Text(shownTitle)
                     .font(Brand.section)
                     .foregroundStyle(Brand.color.text)
-                    .lineLimit(1)
+                    .lineLimit(2)   // narrow hosts (Preguntar's citation panel) wrap instead of cutting the name
                     .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
                     .help(shownTitle)
                 Spacer(minLength: Brand.spacing.s)
                 ViewThatFits(in: .horizontal) {

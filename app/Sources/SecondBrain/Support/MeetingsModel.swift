@@ -255,13 +255,18 @@ final class MeetingsModel {
     /// "Mis pendientes (n)" of an Anteriores row: my open tasks citing its meeting (0 = no chip). A meeting page is
     /// named after its raw file (`wiki/meetings/<raw key>.md`), so one key covers both.
     func myOpenTaskCount(_ item: PastMeetingItem) -> Int {
+        taskKey(item).flatMap { myOpenTasksByKey[$0] } ?? 0
+    }
+
+    /// The citation key `tasks.md` uses for this meeting (lowercased raw file / page name), nil without a file.
+    func taskKey(_ item: PastMeetingItem) -> String? {
         let path: String?
         switch item {
         case .source(let s, _): path = s.rawPath
         case .page(let e): path = e.pagePath
         }
-        guard let path else { return 0 }
-        return myOpenTasksByKey[((path as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()] ?? 0
+        guard let path else { return nil }
+        return ((path as NSString).lastPathComponent as NSString).deletingPathExtension.lowercased()
     }
 
     /// "Anteriores" (§15.2): the meetings the brain learned, newest first. Recordings come live from the sources (their

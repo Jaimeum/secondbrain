@@ -275,5 +275,24 @@
 			<string>Save the rest of the thread (%ld)</string>
 		</dict>
 	</dict>
+	<!-- v0.6 tasks -->
+	<key>tasks.filter.projects</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld project</string>
+			<key>many</key>
+			<string>%ld projects</string>
+			<key>other</key>
+			<string>%ld projects</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

@@ -1433,3 +1433,23 @@
 "page.openHelp" = "Abrir en su lugar";
 "entity.edit" = "Editar";
 "entity.editHelp" = "Corregir esta página a mano";
+
+/* v0.6 tasks — Pendientes filters (§16.8) */
+"tasks.filter.project" = "Proyecto";
+"tasks.filter.allProjects" = "Todos los proyectos";
+"tasks.filter.projectHelp" = "Ver solo los pendientes de algunos proyectos";
+"tasks.filter.person" = "Persona";
+"tasks.filter.anyone" = "Todas las personas";
+"tasks.filter.personHelp" = "Ver lo que le debes a alguien o lo que te debe";
+"tasks.filter.noPeople" = "Nadie con pendientes todavía";
+"tasks.filter.with" = "Todo con %@";
+"tasks.filter.iOwe" = "Lo que le debo a %@";
+"tasks.filter.owesMe" = "Lo que me debe %@";
+"tasks.filter.iOweShort" = "Le debo a %@";
+"tasks.filter.owesMeShort" = "Me debe %@";
+"tasks.filter.search" = "Buscar";
+"tasks.filter.clear" = "Quitar filtros";
+"tasks.emptyFilters" = "Nada con estos filtros";
+"tasks.openProjectTasks" = "Ver en los pendientes del proyecto";
+"tasks.showInList" = "Ver en Pendientes";
+"meetings.past.myTasksOpen" = "Ver mis pendientes de esta reunión";

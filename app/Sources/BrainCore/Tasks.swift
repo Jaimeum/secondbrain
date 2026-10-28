@@ -234,9 +234,125 @@ public enum TaskParser {
     }
 }
 
+// MARK: - Filters (CONTRACT §16.8)
+
+/// A person the Pendientes "Persona ▾" filter can pick: a `people/<slug>.md` page, or an owner Claude wrote as plain
+/// text ("— Diego") with no page yet.
+public struct TaskPerson: Codable, Hashable, Sendable {
+    public var slug: String?
+    public var name: String
+    public init(slug: String?, name: String) { self.slug = slug; self.name = name }
+    /// Same person whether the page or only the name is known ("ana-garcia" / "Ana García").
+    public var key: String { slug?.lowercased() ?? "name:" + TaskParser.normalize(name) }
+}
+
+/// How a task relates to the picked person: anything with them, what I owe them ("Lo que le debo a…" = my tasks
+/// that mention them), what they owe me ("Lo que me debe…" = tasks they own).
+public enum TaskRelation: String, Codable, Sendable, CaseIterable { case any, iOwe, owesMe }
+
+/// The global Pendientes filters (projects, person, text), persisted by the app. Segments and Origen are separate.
+public struct TaskFilter: Codable, Equatable, Sendable {
+    public var projects: Set<String> = []        // empty = every project
+    public var person: TaskPerson?
+    public var relation: TaskRelation = .any
+    public var text: String = ""
+    public init(projects: Set<String> = [], person: TaskPerson? = nil, relation: TaskRelation = .any, text: String = "") {
+        self.projects = projects; self.person = person; self.relation = relation; self.text = text
+    }
+
+    public var isActive: Bool { !projects.isEmpty || person != nil || !query.isEmpty }
+    private var query: String { TaskParser.normalize(text) }
+
+    /// `projectName` lets the text search find a task by its project's name too.
+    public func matches(_ task: TaskItem, projectName: String? = nil) -> Bool {
+        if !projects.isEmpty, !projects.contains(task.projectSlug) { return false }
+        if let person {
+            let owns = TaskPeople.isOwner(person, of: task)
+            switch relation {
+            case .any: if !owns && !TaskPeople.mentions(person, in: task) { return false }
+            case .owesMe: if !owns { return false }
+            case .iOwe: if !task.isMine || !TaskPeople.mentions(person, in: task) { return false }
+            }
+        }
+        let q = query
+        if !q.isEmpty {
+            let haystack = TaskParser.normalize([task.text, task.ownerName ?? "", projectName ?? ""].joined(separator: " "))
+            // Every word, in any order: "acme plan" finds "Enviar a Acme el plan".
+            for word in q.split(separator: " ") where !haystack.contains(word) { return false }
+        }
+        return true
+    }
+}
+
+public enum TaskPeople {
+    /// The task is theirs (never one of mine, even if my page is picked).
+    public static func isOwner(_ person: TaskPerson, of task: TaskItem) -> Bool {
+        guard !task.isMine else { return false }
+        if let slug = person.slug, let owner = task.ownerSlug { return owner.lowercased() == slug.lowercased() }
+        guard let name = task.ownerName.map(TaskParser.normalize), !name.isEmpty else { return false }
+        let full = TaskParser.normalize(person.name)
+        return name == full || name == firstName(full)
+    }
+
+    /// The task names them: a wikilink to their page anywhere in the line other than the owner, or their name
+    /// (full, or first name of 3+ letters) as whole words in the text.
+    public static func mentions(_ person: TaskPerson, in task: TaskItem) -> Bool {
+        if let slug = person.slug?.lowercased(), task.ownerSlug?.lowercased() != slug {
+            if TaskParser.wikilinks(in: task.line).contains(where: { TaskParser.slugOf($0.target).lowercased() == slug }) { return true }
+        }
+        let words = " " + TaskParser.normalize(task.text) + " "
+        let full = TaskParser.normalize(person.name)
+        guard !full.isEmpty else { return false }
+        if words.contains(" \(full) ") { return true }
+        let first = firstName(full)
+        return first.count >= 3 && words.contains(" \(first) ")
+    }
+
+    /// The people the Persona menu offers: those that own or are mentioned in at least one task, most tasks first.
+    /// `directory` = the person pages; plain-text owners without a page are added by name.
+    public static func people(in tasks: [TaskItem], directory: [TaskPerson]) -> [TaskPerson] {
+        var counts: [String: (person: TaskPerson, n: Int)] = [:]
+        for person in directory {
+            let n = tasks.filter { isOwner(person, of: $0) || mentions(person, in: $0) }.count
+            if n > 0 { counts[person.key] = (person, n) }
+        }
+        for task in tasks where !task.isMine {
+            guard let name = task.ownerName, !name.isEmpty else { continue }
+            let person = TaskPerson(slug: task.ownerSlug, name: name)
+            // An owner already covered by a page (by slug, or by its name / first name) is not repeated.
+            if directory.contains(where: { isOwner($0, of: task) }) || counts.values.contains(where: { isOwner($0.person, of: task) }) {
+                continue
+            }
+            counts[person.key] = (person, tasks.filter { isOwner(person, of: $0) }.count)
+        }
+        return counts.values.sorted {
+            $0.n != $1.n ? $0.n > $1.n : $0.person.name.localizedCaseInsensitiveCompare($1.person.name) == .orderedAscending
+        }.map(\.person)
+    }
+
+    private static func firstName(_ normalized: String) -> String {
+        normalized.split(separator: " ").first.map(String.init) ?? normalized
+    }
+}
+
 // MARK: - Engine
 
 public extension BrainEngine {
+    /// Person pages (`people/*.md`, without the owner's own page) for the Pendientes "Persona ▾" filter.
+    func taskPeopleDirectory() async -> [TaskPerson] {
+        let vault = self.vault
+        return await Task.detached(priority: .userInitiated) {
+            let owner = vault.ownerInfo()
+            return vault.pages(projectSlug: nil)
+                .filter { $0.path.hasPrefix("people/") }
+                .compactMap { page -> TaskPerson? in
+                    let slug = TaskParser.slugOf(page.path)
+                    guard !owner.slugs.contains(slug) else { return nil }
+                    return TaskPerson(slug: slug, name: page.title)
+                }
+        }.value
+    }
+
     /// Tasks of a project's `wiki/tasks.md` (nil = every project), parsed off the main thread.
     func tasks(projectSlug: String?) async -> [TaskItem] {
         let vault = self.vault, projects = self.projects

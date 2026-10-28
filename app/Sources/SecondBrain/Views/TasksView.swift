@@ -82,6 +82,44 @@ final class TaskListModel {
     }
 }
 
+/// The global Pendientes filters (Proyecto ▾, Persona ▾, Buscar; CONTRACT §16.8), kept across launches in
+/// UserDefaults, plus one-shot requests from other screens ("Ver todos (n)" in Inicio, a meeting's "Mis pendientes").
+@MainActor @Observable
+final class TaskFilterStore {
+    static let shared = TaskFilterStore()
+
+    enum Request: Equatable {
+        /// Míos with no filters, so the list shows exactly what Inicio counted.
+        case mine
+        /// Míos of one source (a lowercased citation key: a meeting's raw file name), with no other filter.
+        case origin(String)
+    }
+
+    var filter: TaskFilter { didSet { if filter != oldValue { save() } } }
+    /// Taken by the global TasksView on appear / once its tasks are loaded.
+    var request: Request?
+
+    private static let defaultsKey = "tasks.filters.brain"
+    /// Snapshots neither read nor write the saved filters (deterministic PNGs, the user's choice left alone).
+    private static var persists: Bool { DebugSnapshots.directory == nil }
+
+    private init() {
+        let data = Self.persists ? UserDefaults.standard.data(forKey: Self.defaultsKey) : nil
+        filter = data.flatMap { try? JSONDecoder().decode(TaskFilter.self, from: $0) } ?? TaskFilter()
+    }
+
+    private func save() {
+        guard Self.persists, let data = try? JSONEncoder().encode(filter) else { return }
+        UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+    }
+
+    /// Opens Pendientes for a request (filters are reset by the list when it takes it).
+    func open(_ request: Request, state: AppState) {
+        self.request = request
+        state.navigate(to: .sidebar(.tasks))
+    }
+}
+
 /// "Pendientes" (CONTRACT §15.2, §16.8): one view for the sidebar item (`.brain`) and the project tab (`.project`).
 /// Segments Míos · De otros · Sin dueño · Hechos, an "Origen" menu and Exportar; a click on a task previews its
 /// meeting or email in a sheet without leaving the list.
@@ -102,10 +140,18 @@ struct TasksView: View {
     @ViewState private var export: ExportRequest?
     @ViewState private var preview: VaultPageItem?
     @ViewState private var pickedSegment = false
-    /// The task the router asked for (⌘K, a ficha): highlighted in the list. v0.6: filled in by F (scroll + highlight).
+    /// The task the router asked for (⌘K, a ficha, a project chip): its segment is shown, the list scrolls to it and
+    /// the row is outlined for a moment.
     @ViewState private var highlightedTaskId: String?
+    /// The row the list scrolls to (set once the task is found in the loaded list).
+    @ViewState private var scrollTarget: String?
+    /// The Persona menu (`.brain`): people pages and plain-text owners with at least one task, worked out on reload.
+    @ViewState private var people: [TaskPerson] = []
 
     private var isAll: Bool { scope == .brain }
+    private var filters: TaskFilterStore { .shared }
+    /// Proyecto / Persona / Buscar only exist in the global list (inside a project the place is the filter).
+    private var activeFilter: TaskFilter? { isAll && filters.filter.isActive ? filters.filter : nil }
 
     // MARK: Filtering
 
@@ -125,11 +171,10 @@ struct TasksView: View {
 
     private func snapshot() -> Snapshot {
         let index = SourceLabels.shared.index(state)
-        let base: [TaskItem]
+        let allowed = filteredTasks()
+        var base = allowed
         if let sourceFilter {
-            base = model.tasks.filter { task in task.sourceKeys.contains { sourceGroup($0, index) == sourceFilter } }
-        } else {
-            base = model.tasks
+            base = base.filter { task in task.sourceKeys.contains { sourceGroup($0, index) == sourceFilter } }
         }
         var snap = Snapshot()
         var bySegment: [Segment: [TaskItem]] = [:]
@@ -138,8 +183,14 @@ struct TasksView: View {
         let list = bySegment[segment] ?? []
         // Hechos lists every done task (LazyVStack), so its count and its rows always agree.
         snap.filtered = segment == .done ? list.sorted(by: TaskSort.doneFirst) : list.sorted(by: TaskSort.byDue)
-        snap.cited = citedSources(index)
+        snap.cited = citedSources(allowed, index)
         return snap
+    }
+
+    /// The tasks Proyecto / Persona / Buscar let through (all of them inside a project or with no filter).
+    private func filteredTasks() -> [TaskItem] {
+        guard let filter = activeFilter else { return model.tasks }
+        return model.tasks.filter { filter.matches($0, projectName: state.project($0.projectSlug)?.name) }
     }
 
     private func sourceGroup(_ key: String, _ index: SourceIndex) -> String {
@@ -155,9 +206,9 @@ struct TasksView: View {
     }
 
     /// Sources cited by at least one task, newest first: one per meeting/document and ONE per email thread.
-    private func citedSources(_ index: SourceIndex) -> [CitedSource] {
+    private func citedSources(_ tasks: [TaskItem], _ index: SourceIndex) -> [CitedSource] {
         var seen: [String: CitedSource] = [:]
-        for task in model.tasks {
+        for task in tasks {
             for key in task.sourceKeys {
                 let group = sourceGroup(key, index)
                 let date = index.source(forKey: key)?.timelineDate ?? .distantPast
@@ -212,10 +263,26 @@ struct TasksView: View {
 
     var body: some View {
         let snap = snapshot()
+        reactions(list(snap), snap)
+            .sheet(item: $export) { ExportSheet(request: $0) }
+            .sheet(item: $preview) { item in PageSheet(path: item.path, onOpen: onOpenPage) }
+            .alert(L("common.oops"), isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+                Button(L("common.ok")) { model.error = nil }
+            } message: {
+                Text(model.error ?? "")
+            }
+    }
+
+    private func list(_ snap: Snapshot) -> some View {
         VStack(spacing: 0) {
             header(snap)
                 .padding(.horizontal, Brand.spacing.content)
                 .padding(.vertical, Brand.spacing.m)
+            if isAll {
+                TaskFilterBar(people: people)
+                    .padding(.horizontal, Brand.spacing.content)
+                    .padding(.bottom, Brand.spacing.m)
+            }
             Rectangle().fill(Brand.color.line).frame(height: 1)
             content(snap)
         }
@@ -223,6 +290,11 @@ struct TasksView: View {
         .overlay(alignment: .bottom) { undoLine }
         .animation(Brand.motion.animation(fast: true), value: model.justDone?.id)
         .modifier(AllScopeTitle(isAll: isAll))
+    }
+
+    /// Loading, label resolution, and the reactions to the router and to filter changes.
+    private func reactions(_ content: some View, _ snap: Snapshot) -> some View {
+        content
         .task(id: state.tasksRevision) { await reload() }
         .task {
             while !Task.isCancelled {
@@ -246,15 +318,12 @@ struct TasksView: View {
         }
         .onChange(of: segment) { model.releaseSticky() }
         .onChange(of: sourceFilter) { model.releaseSticky() }
+        .onChange(of: filters.filter) { model.releaseSticky() }
         .onAppear(perform: consumePendingTask)
         .onChange(of: state.pendingTaskId) { consumePendingTask() }
-        .sheet(item: $export) { ExportSheet(request: $0) }
-        .sheet(item: $preview) { item in PageSheet(path: item.path, onOpen: onOpenPage) }
-        .alert(L("common.oops"), isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button(L("common.ok")) { model.error = nil }
-        } message: {
-            Text(model.error ?? "")
-        }
+        // A highlight or a request can arrive before the list is loaded: `reload` applies it once the tasks are in.
+        .onChange(of: highlightedTaskId) { revealHighlight() }
+        .onChange(of: filters.request) { takeRequest() }
     }
 
     /// `AppState.navigate(to: .task(id))` selected this list (the sidebar's, or this project's tab).
@@ -263,6 +332,47 @@ struct TasksView: View {
         if let slug = scope.projectSlug, Scope.projectSlug(ofPath: id) != slug { return }
         state.pendingTaskId = nil
         highlightedTaskId = id
+    }
+
+    /// Shows the highlighted task wherever it is: its segment, no Origen, and (global list) no filter that hides it;
+    /// then scrolls to it and drops the outline after a moment.
+    private func revealHighlight() {
+        guard let id = highlightedTaskId, model.loaded else { return }
+        guard let task = model.tasks.first(where: { $0.id == id }) else {
+            highlightedTaskId = nil   // gone (rewritten by Claude meanwhile): nothing to point at
+            return
+        }
+        pickedSegment = true
+        segment = segment(of: task)
+        sourceFilter = nil
+        if isAll, filters.filter.isActive,
+           !filters.filter.matches(task, projectName: state.project(task.projectSlug)?.name) {
+            filters.filter = TaskFilter()
+        }
+        scrollTarget = id
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            if highlightedTaskId == id {
+                withAnimation(Brand.motion.animation()) { highlightedTaskId = nil }
+            }
+        }
+    }
+
+    /// Inicio's "Ver todos (n)" and a meeting's "Mis pendientes (n)": Míos, with exactly what they counted.
+    private func takeRequest() {
+        guard isAll, let request = filters.request, model.loaded else { return }
+        filters.request = nil
+        filters.filter = TaskFilter()
+        pickedSegment = true
+        segment = .mine
+        switch request {
+        case .mine:
+            sourceFilter = nil
+        case .origin(let key):
+            let index = SourceLabels.shared.index(state)
+            let task = model.tasks.first { $0.sourceKeys.contains { $0.lowercased() == key } }
+            sourceFilter = task?.sourceKeys.first { $0.lowercased() == key }.map { sourceGroup($0, index) }
+        }
     }
 
     /// Segments left; Origen + Exportar right. Folds to icon-only buttons, then to two lines.
@@ -374,10 +484,14 @@ struct TasksView: View {
         let groups = makeGroups(filtered)
         if !model.loaded {
             BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if filtered.isEmpty, activeFilter != nil {
+            EmptyStateView(symbol: "line.3.horizontal.decrease.circle", title: L("tasks.emptyFilters"), message: "",
+                           actionTitle: L("tasks.filter.clear")) { filters.filter = TaskFilter() }
         } else if filtered.isEmpty {
             EmptyStateView(symbol: segment == .done ? "checkmark.circle" : "checklist", title: emptyTitle,
                            message: model.tasks.isEmpty ? L("tasks.emptyMessage") : "")
         } else {
+            ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(groups) { group in
@@ -401,6 +515,14 @@ struct TasksView: View {
                                     showProject: isAll,
                                     onToggle: { model.toggle(task, state: state) },
                                     onOpen: { preview = VaultPageItem(path: $0) })
+                                .overlay {
+                                    // The task the router pointed at, outlined for a moment.
+                                    RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+                                        .strokeBorder(Brand.color.accent, lineWidth: 1.5)
+                                        .opacity(highlightedTaskId == task.id ? 1 : 0)
+                                        .allowsHitTesting(false)
+                                }
+                                .id(task.id)
                         }
                     }
                 }
@@ -410,6 +532,15 @@ struct TasksView: View {
             // Room for the "Hecho · Deshacer" line so it never covers the last row.
             .contentMargins(.bottom, model.justDone == nil ? 0 : 44, for: .scrollContent)
             .animation(Brand.motion.fast, value: filtered.map(\.id))
+            .onChange(of: scrollTarget, initial: true) { _, id in
+                guard let id else { return }
+                // After the segment switch has laid the row out.
+                Task { @MainActor in
+                    withAnimation(Brand.motion.animation()) { proxy.scrollTo(id, anchor: .center) }
+                    scrollTarget = nil
+                }
+            }
+            }
         }
     }
 
@@ -446,10 +577,15 @@ struct TasksView: View {
         guard state.engineStarted else { return }
         let engine = state.engine, slug = scope.projectSlug
         await model.load { await engine.tasks(projectSlug: slug) }
+        if isAll {
+            let directory = await engine.taskPeopleDirectory(), tasks = model.tasks
+            let found = await Task.detached { TaskPeople.people(in: tasks, directory: directory) }.value
+            if found != people { people = found }
+        }
         // First load: open on the first segment that has something (mine, then others', then no owner).
         if !pickedSegment {
             pickedSegment = true
-            let open = model.tasks.filter { !model.isDone($0) }
+            let open = filteredTasks().filter { !model.isDone($0) }
             let has: [Segment: Bool] = [
                 .mine: open.contains(where: \.isMine),
                 .theirs: open.contains { !$0.isMine && $0.ownerSlug != nil },
@@ -457,6 +593,8 @@ struct TasksView: View {
             ]
             segment = initialSegment ?? [Segment.mine, .theirs, .unowned].first { has[$0] == true } ?? .mine
         }
+        revealHighlight()
+        takeRequest()
     }
 
     private var emptyTitle: String {
@@ -472,6 +610,171 @@ struct TasksView: View {
     private var exportTitle: String {
         let prefix = scope.projectSlug.flatMap { state.project($0)?.name } ?? L("tasks.title")
         return "\(prefix) — \(segmentTitle(segment))"
+    }
+}
+
+/// Global Pendientes only (§16.8): Proyecto ▾ (several at once), Persona ▾ ("Lo que le debo a…" / "Lo que me debe…")
+/// and Buscar, kept in `TaskFilterStore`. The search field takes what's left; at narrow widths the menus go icon-only.
+private struct TaskFilterBar: View {
+    @Environment(AppState.self) private var state
+    let people: [TaskPerson]
+
+    private var store: TaskFilterStore { .shared }
+
+    var body: some View {
+        @Bindable var store = store
+        HStack(spacing: Brand.spacing.s) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Brand.spacing.s) {
+                    projectMenu(compact: false)
+                    personMenu(compact: false)
+                }
+                HStack(spacing: Brand.spacing.s) {
+                    projectMenu(compact: true)
+                    personMenu(compact: true)
+                }
+            }
+            .layoutPriority(1)
+            searchField($store.filter.text)
+                .frame(minWidth: 140, maxWidth: 280)
+            Spacer(minLength: 0)
+            if store.filter.isActive {
+                Button(L("tasks.filter.clear")) {
+                    withAnimation(Brand.motion.fast) { store.filter = TaskFilter() }
+                }
+                .buttonStyle(.plain)
+                .font(Brand.callout)
+                .foregroundStyle(Brand.color.accent)
+                .lineLimit(1)
+            }
+        }
+    }
+
+    // MARK: Proyecto ▾
+
+    private var projectTitle: String {
+        let picked = store.filter.projects
+        if picked.isEmpty { return L("tasks.filter.project") }
+        if picked.count == 1, let slug = picked.first, let project = state.project(slug) {
+            return "\(project.emoji) \(project.name)"
+        }
+        return L("tasks.filter.projects", picked.count)
+    }
+
+    private func projectMenu(compact: Bool) -> some View {
+        let picked = store.filter.projects
+        return Menu {
+            Button {
+                store.filter.projects = []
+            } label: {
+                if picked.isEmpty { Label(L("tasks.filter.allProjects"), systemImage: "checkmark") } else { Text(L("tasks.filter.allProjects")) }
+            }
+            Divider()
+            ForEach(state.projects, id: \.slug) { project in
+                let on = picked.contains(project.slug)
+                Button {
+                    if on { store.filter.projects.remove(project.slug) } else { store.filter.projects.insert(project.slug) }
+                } label: {
+                    if on { Label("\(project.emoji) \(project.name)", systemImage: "checkmark") } else { Text("\(project.emoji) \(project.name)") }
+                }
+            }
+        } label: {
+            menuLabel(projectTitle, symbol: "folder", compact: compact && picked.isEmpty)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(compact && picked.isEmpty ? .hidden : .visible)
+        .fixedSize()   // the title is capped (`menuLabel`), so the menu hugs it instead of stretching
+        .foregroundStyle(picked.isEmpty ? Brand.color.text2 : Brand.color.accent)
+        .help(L("tasks.filter.projectHelp"))
+    }
+
+    // MARK: Persona ▾
+
+    private var personTitle: String {
+        guard let person = store.filter.person else { return L("tasks.filter.person") }
+        switch store.filter.relation {
+        case .any: return person.name
+        case .iOwe: return L("tasks.filter.iOweShort", person.name)
+        case .owesMe: return L("tasks.filter.owesMeShort", person.name)
+        }
+    }
+
+    private func personMenu(compact: Bool) -> some View {
+        let picked = store.filter.person
+        // The picked person stays in the menu even when none of the loaded tasks names them any more.
+        let list = picked.map { p in people.contains { $0.key == p.key } ? people : [p] + people } ?? people
+        return Menu {
+            Button {
+                store.filter.person = nil
+                store.filter.relation = .any
+            } label: {
+                if picked == nil { Label(L("tasks.filter.anyone"), systemImage: "checkmark") } else { Text(L("tasks.filter.anyone")) }
+            }
+            Divider()
+            if list.isEmpty {
+                Text(L("tasks.filter.noPeople"))
+            }
+            ForEach(list, id: \.key) { person in
+                Menu {
+                    relationButton(person, .any, L("tasks.filter.with", person.name))
+                    relationButton(person, .iOwe, L("tasks.filter.iOwe", person.name))
+                    relationButton(person, .owesMe, L("tasks.filter.owesMe", person.name))
+                } label: {
+                    if picked?.key == person.key { Label(person.name, systemImage: "checkmark") } else { Text(person.name) }
+                }
+            }
+        } label: {
+            menuLabel(personTitle, symbol: "person", compact: compact && picked == nil)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(compact && picked == nil ? .hidden : .visible)
+        .fixedSize()   // the title is capped (`menuLabel`), so the menu hugs it instead of stretching
+        .foregroundStyle(picked == nil ? Brand.color.text2 : Brand.color.accent)
+        .help(L("tasks.filter.personHelp"))
+    }
+
+    private func relationButton(_ person: TaskPerson, _ relation: TaskRelation, _ title: String) -> some View {
+        let on = store.filter.person?.key == person.key && store.filter.relation == relation
+        return Button {
+            store.filter.person = person
+            store.filter.relation = relation
+        } label: {
+            if on { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }
+    }
+
+    /// A borderless menu either fills what it's offered or hugs its title; it hugs a title cut to a few words.
+    @ViewBuilder private func menuLabel(_ title: String, symbol: String, compact: Bool) -> some View {
+        if compact {
+            Image(systemName: symbol)
+        } else {
+            Text(title.count > 26 ? String(title.prefix(25)) + "…" : title).lineLimit(1)
+        }
+    }
+
+    // MARK: Buscar
+
+    private func searchField(_ text: Binding<String>) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(Brand.caption)
+                .foregroundStyle(Brand.color.text3)
+            TextField(L("tasks.filter.search"), text: text)
+                .textFieldStyle(.plain)
+                .font(Brand.callout)
+                .lineLimit(1)
+            if !text.wrappedValue.isEmpty {
+                Button { text.wrappedValue = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(Brand.color.text3)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(L("tasks.filter.clear")))
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).fill(Brand.color.card))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
     }
 }
 
@@ -572,6 +875,8 @@ struct TaskRow: View {
     var onOpen: ((String) -> Void)?
     /// Source chips (off in the per-source sheet, where they'd repeat the sheet's own source).
     var showSources = true
+    /// A click on the row does this instead of opening its source (the per-source sheet: show it in Pendientes).
+    var onSelect: (() -> Void)? = nil
 
     @ViewState private var hovering = false
 
@@ -590,7 +895,7 @@ struct TaskRow: View {
         // Computed once per pass (hover re-renders the row): cited keys, their labels, the page a click opens.
         let keys = chipKeys(SourceLabels.shared.index(state))
         let primaryPath = keys.lazy.compactMap { label($0).path }.first
-        let canOpen = onOpen != nil && primaryPath != nil
+        let canOpen = onSelect != nil || (onOpen != nil && primaryPath != nil)
         HStack(alignment: .top, spacing: 10) {
             Button(action: onToggle) {
                 Image(systemName: done ? "checkmark.circle.fill" : "circle")
@@ -629,10 +934,12 @@ struct TaskRow: View {
             .fill(hovering && canOpen ? Brand.color.accentSoft : Color.clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .onTapGesture { if let path = primaryPath { onOpen?(path) } }
+        .onTapGesture {
+            if let onSelect { onSelect() } else if let path = primaryPath { onOpen?(path) }
+        }
         .accessibilityElement(children: .contain)
-        .accessibilityAction(named: Text(L("tasks.openSource"))) {
-            if canOpen, let path = primaryPath { onOpen?(path) }
+        .accessibilityAction(named: Text(onSelect != nil ? L("tasks.showInList") : L("tasks.openSource"))) {
+            if let onSelect { onSelect() } else if canOpen, let path = primaryPath { onOpen?(path) }
         }
         .animation(Brand.motion.fast, value: hovering)
         // Re-resolved when the vault changes too, so a page written or retitled later updates the chip.
@@ -642,7 +949,9 @@ struct TaskRow: View {
         }
         .contextMenu {
             Button(done ? L("tasks.markUndone") : L("tasks.markDone"), action: onToggle)
-            if canOpen, let path = primaryPath {
+            if let onSelect {
+                Button(L("tasks.showInList"), action: onSelect)
+            } else if canOpen, let path = primaryPath {
                 Button(L("tasks.openSource")) { onOpen?(path) }
             }
             Button(L("chat.copy")) {
@@ -658,7 +967,14 @@ struct TaskRow: View {
                  tone: task.isMine ? .accent : .neutral, symbol: "person")
         }
         if showProject, let project = state.project(task.projectSlug) {
-            Chip(text: "\(project.emoji) \(project.name)", maxWidth: 200)
+            // §16.8: the project's Pendientes tab, with this task outlined.
+            Button {
+                state.navigate(to: .task(task.id))
+            } label: {
+                Chip(text: "\(project.emoji) \(project.name)", maxWidth: 200)
+            }
+            .buttonStyle(.plain)
+            .help(L("tasks.openProjectTasks"))
         }
         if let due = task.due {
             Chip(text: dueText(due), tone: dueTone(due), symbol: "calendar", strikethrough: done)
@@ -804,7 +1120,12 @@ struct SourceTasksSheet: View {
             } else {
                 ForEach(tasks) { task in
                     TaskRow(task: task, done: model.isDone(task), showOwner: !task.isMine,
-                            onToggle: { model.toggle(task, state: state) }, onOpen: nil, showSources: false)
+                            onToggle: { model.toggle(task, state: state) }, onOpen: nil, showSources: false,
+                            onSelect: {
+                                // The project's Pendientes, with this task outlined (§16.8).
+                                dismiss()
+                                state.navigate(to: .task(task.id))
+                            })
                         .padding(.horizontal, -10)
                 }
             }

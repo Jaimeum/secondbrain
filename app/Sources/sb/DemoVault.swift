@@ -63,6 +63,21 @@ enum DemoVault {
 
     struct Person { let key, name, role, org: String; let projects: [String]; let aliases: [String] }
 
+    /// Global companies (§16.4, CLAUDE.md §8.11): people of these carry `org: "[[<key>]]"`, so Empresas shows in ⌘K,
+    /// the global index and the fichas.
+    struct Org { let key, name, kind, summary: String; let projects: [String]; let aliases: [String] }
+
+    static let orgs: [Org] = [
+        Org(key: "acme", name: "Acme", kind: "client", summary: "Cliente de Atlas: opera la red logística que usará el lanzamiento.",
+            projects: ["lanzamiento-atlas"], aliases: ["Acme S.A.", "acme.com", "Acme Logistics"]),
+        Org(key: "banco-nubia", name: "Banco Nubia", kind: "partner", summary: "Socio de la alianza de pagos; firma el convenio con Dive.",
+            projects: ["alianza-banco-nubia"], aliases: ["Nubia", "nubia.bank"]),
+        Org(key: "dive", name: "Dive", kind: "own", summary: "La empresa de Jaime (yo): producto, ingeniería y finanzas.",
+            projects: ["lanzamiento-atlas", "migracion-a-la-nube", "alianza-banco-nubia"], aliases: ["dive.ai"]),
+    ]
+
+    static func orgKey(_ name: String) -> String? { orgs.first { $0.name == name }?.key }
+
     static let people: [Person] = [
         Person(key: "jaime-ruiz", name: "Jaime Ruiz", role: "Director de producto", org: "Dive", projects: ["lanzamiento-atlas", "migracion-a-la-nube", "alianza-banco-nubia"], aliases: ["Jaime", "Yo"]),
         Person(key: "ana-garcia", name: "Ana García", role: "Product manager", org: "Acme", projects: ["lanzamiento-atlas"], aliases: ["Ana", "ana@acme.com"]),
@@ -571,10 +586,13 @@ enum DemoVault {
         for person in people {
             let mine = projects.enumerated().filter { person.projects.contains(slugify($0.element.name)) }
             var lines = ["---", "type: person", "title: \"\(person.name)\"", "aliases: " + "[" + person.aliases.map { "\"\($0)\"" }.joined(separator: ", ") + "]",
-                         "role: \"\(person.role)\"", "organization: \"\(person.org)\"",
+                         "role: \"\(person.role)\"", "organization: \"\(person.org)\""]
+            if let org = orgKey(person.org) { lines.append("org: \"[[\(org)]]\"") }
+            lines += [
                          "projects: [" + person.projects.map { "\"\($0)\"" }.joined(separator: ", ") + "]", "language: es",
                          "owner: \(person.key == "jaime-ruiz")", "updated: \(ymd(today))", "---", "", "# \(person.name)", "",
-                         "> **En breve:** \(person.role) en \(person.org).", "", "## Proyectos"]
+                         "> **En breve:** \(person.role) en " + (orgKey(person.org).map { "[[\($0)|\(person.org)]]" } ?? person.org) + ".",
+                         "", "## Proyectos"]
             lines += mine.map { "- **[[projects/\(slugify($0.element.name))/wiki/overview|\($0.element.emoji) \($0.element.name)]]**" }
             let open = projects.flatMap { p in p.tasks.filter { $0.owner == person.key && $0.doneDaysAgo == nil }.map { (p, $0) } }
             if !open.isEmpty {
@@ -593,7 +611,32 @@ enum DemoVault {
             try write(root, "people/\(person.key).md", lines.joined(separator: "\n") + "\n")
         }
 
-        // Global index: projects (added by ProjectManager) + people.
+        // Organizations (orgs/), linked from their people and the global index.
+        for org in orgs {
+            let members = people.filter { orgKey($0.org) == org.key }
+            let mine = projects.filter { org.projects.contains(slugify($0.name)) }
+            var lines = ["---", "type: org", "title: \"\(org.name)\"",
+                         "aliases: [" + org.aliases.map { "\"\($0)\"" }.joined(separator: ", ") + "]", "kind: \(org.kind)",
+                         "projects: [" + org.projects.map { "\"\($0)\"" }.joined(separator: ", ") + "]",
+                         "people: [" + members.map { "\"[[\($0.key)]]\"" }.joined(separator: ", ") + "]",
+                         "language: es", "updated: \(ymd(today))", "---", "", "# \(org.name)", "", "> **En breve:** \(org.summary)", "",
+                         "## Proyectos"]
+            lines += mine.map { "- **[[projects/\(slugify($0.name))/wiki/overview|\($0.emoji) \($0.name)]]**" }
+            lines += ["", "## Personas"] + members.map { "- [[\($0.key)|\($0.name)]] — \($0.role)" }
+            try write(root, "orgs/\(org.key).md", lines.joined(separator: "\n") + "\n")
+        }
+
+        // A confirmed fact (§16.6), so "Hechos confirmados" has content.
+        let factsURL = root.appendingPathComponent(Corrections.factsPath)
+        if var facts = try? String(contentsOf: factsURL, encoding: .utf8),
+           let line = Corrections.factLine("Diego Paredes no forma parte de 🚀 Lanzamiento Atlas: solo colabora en la migración. "
+                                            + "([[diego-paredes]], [[projects/lanzamiento-atlas/wiki/overview|Lanzamiento Atlas]])",
+                                           date: day(2)) {
+            if !facts.hasSuffix("\n") { facts += "\n" }
+            try (facts + line + "\n").write(to: factsURL, atomically: true, encoding: .utf8)
+        }
+
+        // Global index: projects (added by ProjectManager) + people + companies.
         let indexURL = root.appendingPathComponent("index.md")
         var index = (try? String(contentsOf: indexURL, encoding: .utf8)) ?? "# Mi segundo cerebro\n"
         let peopleLines = people.map { "- [[\($0.key)|\($0.name)]] — \($0.role), \($0.org)" }.joined(separator: "\n")
@@ -602,13 +645,19 @@ enum DemoVault {
         } else {
             index += "\n## Personas\n\n\(peopleLines)\n"
         }
+        let orgLines = orgs.map { "- [[\($0.key)|\($0.name)]] — \($0.summary)" }.joined(separator: "\n")
+        if let range = index.range(of: "## Empresas\n") {
+            index.replaceSubrange(range, with: "## Empresas\n\n\(orgLines)\n")
+        } else {
+            index += "\n## Empresas\n\n\(orgLines)\n"
+        }
         try index.write(to: indexURL, atomically: true, encoding: .utf8)
 
         if scale > 0 { try addSynthetic(root: root, projects: created, scale: scale, today: today) }
 
         let rules = try addSampleRules(root: root, projects: created, today: today)
 
-        return "Created \(root.path): \(created.count) projects, \(pageCount) project pages, \(people.count) people, \(rules) routing rules"
+        return "Created \(root.path): \(created.count) projects, \(pageCount) project pages, \(people.count) people, \(orgs.count) companies, \(rules) routing rules"
             + (scale > 0 ? ", plus \(scale) synthetic meetings per project" : "")
     }
 

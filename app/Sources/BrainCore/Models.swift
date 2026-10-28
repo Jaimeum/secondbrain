@@ -339,6 +339,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var emoji: String
     public var createdAt: Date
     public var defaultTemplate: String?   // v0.2: template id for meetings/emails of this project
+    public var people: ProjectPeople?     // v0.6: people added/removed by hand in Personas (§16.2)
     public var id: String { slug }
     public init(slug: String, name: String, description: String, emoji: String, createdAt: Date = Date()) {
         self.slug = slug; self.name = name; self.description = description; self.emoji = emoji; self.createdAt = createdAt

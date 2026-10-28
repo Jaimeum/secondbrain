@@ -17,6 +17,7 @@ struct SB: AsyncParsableCommand {
                       GitHubCmd.self]  // MARK: v0.4 github
                       + [RulesCmd.self, RouteCmd.self]  // MARK: v0.4 routing
                       + [FactsCmd.self]  // MARK: v0.6 facts
+                      + [EntityCmd.self]  // MARK: v0.6 entity
     )
 }
 

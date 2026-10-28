@@ -229,6 +229,9 @@ struct WikiPagePane: View {
     @Binding var selection: String?
     /// The page's title when the caller knows it (else read from the file).
     var title: String? = nil
+    /// v0.6 entity: a wikilink (default: shown here, into the back history). Contenido passes the single click rule
+    /// (§16.4): this project's pages here, anything else as a ficha.
+    var onLink: ((String) -> Void)? = nil
 
     @ViewState private var history: [String] = []
     /// The next selection change comes from Back: not recorded.
@@ -376,7 +379,7 @@ struct WikiPagePane: View {
 
     /// A wikilink: the selection change itself goes into the history (`onChange(of: selection)`).
     private func navigate(to path: String) {
-        selection = path
+        if let onLink { onLink(path) } else { selection = path }
     }
 
     private func loadTitle() async {

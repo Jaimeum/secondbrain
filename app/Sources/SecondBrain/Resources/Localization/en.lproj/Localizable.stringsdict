@@ -312,5 +312,22 @@
 			<string>Apply %ld</string>
 		</dict>
 	</dict>
+	<!-- v0.6 entity -->
+	<key>projectPeople.sources</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld source</string>
+			<key>other</key>
+			<string>%ld sources</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

@@ -282,11 +282,32 @@ enum DebugSnapshots {
         }
         // ⌘K over Inicio (the palette inside the real window, with its query).
         items.append(("search", .home, nil))
+        // MARK: v0.6 entity — fichas (§16.13): a person's global ficha (Personas), the same person filtered to the
+        // first project (pushed over its Resumen), and a global page's ficha in Inicio.
+        var fichas: [String: Destination] = [:]
+        if let project = state.projects.first {
+            let snap = EntityIndex.shared(vaultRoot: state.engine.vault.root).refresh()
+            if let person = snap.people(ofProject: project.slug).first {
+                fichas["entity-global"] = .entity(person.path, .brain)
+                fichas["entity-filtered"] = .entity(person.path, .project(project.slug))
+                items.append(("entity-global", .people, nil))
+                items.append(("entity-filtered", .project(project.slug), nil))
+            }
+            if snap.entity("index.md") != nil {
+                fichas["entity-home"] = .entity("index.md", .brain)
+                items.append(("entity-home", .home, nil))
+            }
+        }
         let only = ProcessInfo.processInfo.environment["SB_SNAPSHOT_ONLY"] ?? ""
         for entry in items where only.isEmpty || entry.name.hasPrefix(only) {
             for (sizeName, size) in [("1100", CGSize(width: 1100, height: 720)), ("min", CGSize(width: 920, height: 620))] {
                 for dark in [false, true] {
-                    if case .project(let slug) = entry.item, let tab = entry.tab {
+                    if let destination = fichas[entry.name] {
+                        if entry.name == "entity-filtered", case .project(let slug) = entry.item {
+                            state.navigate(to: .projectTab(slug, .summary))
+                        }
+                        state.navigate(to: destination)
+                    } else if case .project(let slug) = entry.item, let tab = entry.tab {
                         state.navigate(to: .projectTab(slug, tab))
                     } else {
                         state.navigate(to: .sidebar(entry.item))

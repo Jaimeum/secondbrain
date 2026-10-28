@@ -67,6 +67,9 @@ public enum RecorderWarning: Equatable, Sendable {
             session.onWarning = { [weak self] warning in
                 Task { @MainActor in self?.warning = warning }
             }
+            session.onWarningCleared = { [weak self] cleared in
+                Task { @MainActor in if self?.warning == cleared { self?.warning = nil } }
+            }
             try await session.start()
             let manifest = session.snapshot
             self.session = session

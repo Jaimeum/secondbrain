@@ -83,6 +83,7 @@ public struct SessionManifest: Codable, Equatable, Sendable {   // definido en B
     public var chunkSeconds: Int         // 300
     public var tracks: [String: [String]] // "system": ["system_000.wav",...], "mic": ["mic_000.wav",...]
     public var micCaptured: Bool
+    public var micOutages: [MicOutage]?  // v0.7.2: tramos (s desde startedAt; end nil = hasta el final) con el mic perdido
     public static func load(from dir: URL) throws -> SessionManifest   // dir/session.json
     public func save(to dir: URL) throws                                 // escritura atómica
 }
@@ -225,8 +226,16 @@ public struct RecorderPermissions: Equatable, Sendable { public var screenAudio:
 public enum PrivacyPane: Sendable { case screenRecording, microphone }
 ```
 Sistema: SCStream con `capturesAudio = true`, `excludesCurrentProcessAudio = true`, video mínimo
-(2x2, 1 fps) y descartar frames de video. Mic: AVAudioEngine con `setVoiceProcessingEnabled(true)`
-(AEC) y ducking mínimo; si falla VP, continuar sin AEC. Convertir a 16 kHz mono Int16 (AVAudioConverter).
+(2x2, 1 fps) y descartar frames de video. Mic: tap simple en `inputNode` de AVAudioEngine, SIN voice
+processing ni ducking (nunca `setVoiceProcessingEnabled`): VP reconfigura el mic integrado compartido (modo DSP,
+canales 1→3), coreaudiod reinicia la captura de las demás apps y una app de llamadas (Discord/Zoom/Meet/Teams) puede
+fallar ese reinicio y dejar de enviar la voz del usuario hasta re-entrar. Sin AEC, con altavoces la voz remota se
+cuela en la pista mic; solo `TranscriptMerge.removeEcho` la quita (con auriculares no hay fuga). Reinicio ante
+`AVAudioEngineConfigurationChange`: debounce 0.5 s (máx. 2 s desde el primer cambio de la ráfaga); solo si cambió
+el dispositivo de entrada por defecto o el engine se detuvo; ≤5 reinicios por minuto (si no hay cupo, espera a que
+se libere en vez de rendirse); un reinicio fallido se reintenta a 1 s y 2 s y luego cada 30 s mientras grabe. Al
+perder el mic: aviso `microphoneUnavailable`, la pista sigue rellenándose con ceros y el tramo se anota en
+`micOutages`; al volver, se cierra el tramo y se limpia el aviso. Convertir a 16 kHz mono Int16 (AVAudioConverter).
 `recoverInterruptedSessions(in:) -> [SessionManifest]`: estático; sesiones sin endedAt (crash) → reparar
 headers WAV, poner endedAt, devolverlas para que la app las encole.
 
@@ -704,7 +713,15 @@ Nunca tocar páginas del wiki existentes salvo crear las nuevas que falten.
   sistema. Antes, con ±1 s de tolerancia, una pregunta de "Yo" seguida de una respuesta con las mismas palabras se
   borraba ("¿puedes preparar el análisis…?" → "Claro, preparo el análisis…"). Además, con solape, un segmento mic con
   RMS < 0.03 y < 0.12 × el RMS del sistema se descarta aunque el texto no coincida (residuo del AEC que Whisper
-  transcribe como otra frase/idioma; visto en una grabación real con altavoces).
+  transcribe como otra frase/idioma; visto en una grabación real con altavoces). Desde v0.7.2 el mic no tiene AEC
+  (ver §5.2): el umbral de energía se calibró con residuo del AEC; la fuga más fuerte de altavoces queda a cargo de
+  la regla de similitud de texto. Pendiente: recalibrar con una grabación real de mic crudo con altavoces.
+- [I] 2026-10-28 (v0.7.2) Mic sin voice processing: grabar durante una llamada de Discord dejaba al usuario mudo para
+  los demás hasta re-entrar. Causa (logs unificados): `setVoiceProcessingEnabled(true)` cambiaba el modo DSP del mic
+  integrado compartido, coreaudiod reiniciaba la IO de Discord y fallaba (error 35); además VPIO fallaba (-10875) y el
+  handler de `AVAudioEngineConfigurationChange` repetía el ciclo sin debounce ni tope, y el reinicio crudo fallaba
+  ('!dev') sin avisar (pista mic muerta con `micCaptured: true`). Ahora: tap crudo, política de reinicio de §5.2
+  (`MicRestartPolicy`, probada en `sb selftest` grupo `mic-restart`) y `micOutages` en session.json.
 - [I] `VaultStore.resolveWikilink` aplica la prioridad de [D]: wiki del mismo proyecto > `people/` > otros wiki/raíz >
   raw del mismo proyecto > otros raw/`_inbox`. Antes ganaba el raw (orden alfabético `raw/` < `wiki/`), así que las
   citas `[[<source-key>]]` abrían la transcripción en vez del resumen. `backlinks` lista el vault una sola vez.

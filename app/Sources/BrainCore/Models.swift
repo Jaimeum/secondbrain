@@ -191,6 +191,14 @@ public struct DataPaths: Sendable {
 
 // MARK: - Recording
 
+/// A span of a recording where the mic was lost: seconds from `startedAt`; `end` nil = until the end.
+/// The mic track keeps its full length (zeros), so this tells a dead mic from the owner being quiet.
+public struct MicOutage: Codable, Equatable, Sendable {
+    public var start: Double
+    public var end: Double?
+    public init(start: Double, end: Double? = nil) { self.start = start; self.end = end }
+}
+
 public struct SessionManifest: Codable, Equatable, Sendable {
     public var id: String
     public var title: String?
@@ -204,6 +212,8 @@ public struct SessionManifest: Codable, Equatable, Sendable {
     // v0.3 (§12.5): the calendar event this recording belongs to, and its attendees' names.
     public var calendarEventId: String?
     public var attendees: [String]?
+    // v0.7.2: spans where the mic track is zero-filled because the mic died mid-recording (nil = none).
+    public var micOutages: [MicOutage]?
 
     public init(id: String, title: String?, projectSlug: String?, startedAt: Date, endedAt: Date? = nil,
                 sampleRate: Int = 16000, chunkSeconds: Int = 300, tracks: [String: [String]] = [:], micCaptured: Bool,

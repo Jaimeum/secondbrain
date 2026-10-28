@@ -33,7 +33,9 @@ public enum TranscriptMerge {
     /// Echo threshold from CONTRACT §5.1.
     public static let echoSimilarity = 0.6
     /// A mic segment quieter than this, and than `echoResidualRatio` × the system speech it overlaps,
-    /// is echo-cancellation residue rather than the owner talking.
+    /// is the remote side leaking into the mic rather than the owner talking. Tuned on AEC residue;
+    /// since v0.7.2 the mic has no echo cancellation (CONTRACT §5.2), so loud speaker bleed can pass
+    /// this and only the text-similarity rule catches it. Headphones avoid bleed altogether.
     public static let echoResidualRMS = 0.03
     public static let echoResidualRatio = 0.12
 
@@ -169,8 +171,9 @@ public enum TranscriptMerge {
             guard !overlapping.isEmpty else { return true }
             let covered = coveredDuration(of: m, by: overlapping, tolerance: tolerance)
             guard covered >= minCoverage * max(m.end - m.start, 0.01) else { return true }
-            // What leaks past the mic's echo cancellation is faint and often transcribes as different
-            // words (or another language) than the system track: drop it on energy alone.
+            // Faint leakage of the system track into the mic (speaker bleed; the mic has no echo
+            // cancellation) often transcribes as different words or another language: drop it on
+            // energy alone. Louder bleed is left to the text-similarity rule below.
             let loudest = overlapping.map(\.rms).max() ?? 0
             if m.rms < echoResidualRMS, m.rms < echoResidualRatio * loudest { return false }
             if overlapping.contains(where: { similarity(m.text, $0.text) >= threshold }) { return false }

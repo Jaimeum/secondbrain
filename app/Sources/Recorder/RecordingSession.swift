@@ -14,6 +14,8 @@ final class RecordingSession: @unchecked Sendable {
     var onManifestChange: ((SessionManifest) -> Void)?
     /// Called on `queue` for problems worth surfacing while still recording.
     var onWarning: ((RecorderWarning) -> Void)?
+    /// Called on `queue` when the problem behind an earlier warning went away (e.g. the mic came back).
+    var onWarningCleared: ((RecorderWarning) -> Void)?
 
     private let queue = DispatchQueue(label: "app.secondbrain.recorder.writer", qos: .userInitiated)
     private let log = Logger(subsystem: "app.secondbrain.mac", category: "Recorder")
@@ -69,6 +71,8 @@ final class RecordingSession: @unchecked Sendable {
 
         guard writers["mic"] != nil else { return }
         let mic = MicCapture { [weak self] buffer, time in self?.handleMic(buffer, time) }
+        mic.onFailure = { [weak self] _ in self?.micLost() }
+        mic.onRecovery = { [weak self] in self?.micRecovered() }
         do {
             try mic.start()
             self.mic = mic
@@ -191,6 +195,34 @@ final class RecordingSession: @unchecked Sendable {
                     self.queue.async { self.onWarning?(.systemAudioLost) }
                 }
             }
+        }
+    }
+
+    /// The mic died mid-recording and can't be restarted for now: keep its track (zero-filled from here
+    /// on, so both tracks stay the same length), record the outage in session.json and tell the user.
+    private func micLost() {
+        let at = max(0, AudioMath.hostSeconds() - startHost)
+        queue.async { [weak self] in
+            guard let self, !self.stopping else { return }
+            var outages = self.manifest.micOutages ?? []
+            if outages.last.map({ $0.end != nil }) ?? true { outages.append(MicOutage(start: at)) }
+            self.manifest.micOutages = outages
+            self.saveManifest()
+            self.onWarning?(.microphoneUnavailable)
+        }
+    }
+
+    /// MicCapture brought the mic back after `micLost`: close the open outage.
+    private func micRecovered() {
+        let at = max(0, AudioMath.hostSeconds() - startHost)
+        queue.async { [weak self] in
+            guard let self, !self.stopping, var outages = self.manifest.micOutages,
+                  let last = outages.indices.last, outages[last].end == nil else { return }
+            outages[last].end = at
+            self.manifest.micOutages = outages
+            self.saveManifest()
+            self.onWarningCleared?(.microphoneUnavailable)
+            self.log.notice("Microphone recovered after \(at - outages[last].start, format: .fixed(precision: 1)) s")
         }
     }
 

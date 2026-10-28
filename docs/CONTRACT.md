@@ -1891,3 +1891,127 @@ Archivo · Enlace · Correo · Grabar.
 - `sb routing selftest` y `sb graph selftest` forman parte de `sb selftest` (no hay comandos separados).
 - Desviación de §16.8: en Pendientes los filtros (Proyecto ▾, Persona ▾, Buscar, Origen) viven en la barra de la vista y
   no en la barra de herramientas de la ventana.
+
+## 17. v0.7 — Adjuntos, Archivos, "Agregar al proyecto", hilos de correo de verdad, respuestas y enlaces al original (vinculante)
+
+Decidido con el usuario el 2026-10-27. §16 sigue vigente. Principios: **hacia atrás se pregunta, hacia adelante es
+automático**; nada útil se pierde (lo descartado se puede rescatar); el hilo de correo es la unidad, para el usuario y
+para el grafo. Solo lectura sobre el buzón: nunca se envía, borra, mueve ni marca nada.
+
+### 17.1 Adjuntos de correo (`BrainCore/Accounts/Attachments.swift`, `BrainCore/AttachmentTriage.swift`)
+- Proveedores: `listAttachments(messageId:)` → `[AttachmentInfo {id, name, mimeType, size, isInline, contentId}]` y
+  `downloadAttachment(messageId:, id:) -> Data`. Microsoft Graph: `/me/messages/{id}/attachments` (solo
+  `fileAttachment`; `itemAttachment`/`referenceAttachment` se listan como no descargables con su nombre). Gmail: partes
+  con `filename`/`attachmentId` → `users/me/messages/{id}/attachments/{aid}`. Demo: adjuntos sintéticos (un PDF de
+  contrato y un logo PNG de 4 KB) para capturas y selftests. Mismos scopes de lectura de hoy.
+- **Triage determinista** (`AttachmentTriage.classify`), en este orden → `keep` / `discard(reason)` / `ask`:
+  1. `> 25 MB` → `tooBig` (no se descarga solo; fila "Guardar de todos modos").
+  2. Basura obvia → `discard`: `isInline` con `contentId` referenciado en el HTML y < 100 KB (logos/firmas);
+     imágenes < 20 KB; nombres tipo `image001.png`, `logo*`, `signature*`, `firma*`, `outlook*`, `banner*`; `.ics`,
+     `.vcf`, `winmail.dat`, `smime.p7s`; mismo SHA-256 que un archivo ya guardado en el proyecto (`duplicate`).
+  3. Documentos (`pdf, doc(x), xls(x), ppt(x), key, pages, numbers, csv, txt, md, rtf, zip`) → `keep`.
+  4. Imágenes ≥ 20 KB no inline (fotos, capturas, escaneos) y cualquier otro tipo → `ambiguous`.
+- **Correos nuevos (hacia adelante, automático)**: `keep` se guarda; `ambiguous` lo decide Claude con el comando nuevo
+  del vault `.claude/commands/triage-attachments.md` (lee el correo + las imágenes con Read; devuelve JSON
+  `[{name, keep: Bool, reason}]`, sin escribir); lo descartado (reglas o Claude) va a **Descartados**.
+- **Hacia atrás (manual: guardar a mano, selección múltiple, traer anteriores)**: la hoja de guardar lista los adjuntos
+  con casillas preseleccionadas por el triage (keep ✓, ambiguous ✓, discard ☐ con su razón en gris) y el usuario
+  confirma. No se llama a Claude para el triage hacia atrás.
+- **Descartados**: `data/discarded/<vault>/<id>/` (archivo + `meta.json` {name, size, from, threadKey, project, reason,
+  discardedAt}); se borran solos a los 30 días. Vista: en Archivos, filtro "Descartados (n)" con "Rescatar" (lo importa
+  como si se hubiera guardado) y "Eliminar ya".
+- **Almacenamiento** de lo guardado: `projects/<p>/raw/emails/<thread>/attachments/<YYYY-MM-DD-HHmm>-<from-slug>/<nombre>`
+  (inmutable) y una entrada en `_thread.json` (`attachments: [{file, message, name, mime, size, sha256}]`). Cada
+  adjunto guardado es una **fuente** propia (`SourceKind.document` o `.image`, `parentSourceId` = el correo,
+  `threadKey`) que pasa por el pipeline: Claude lo lee (PDF/imagen directo; docx/rtf/pages vía `textutil`; xlsx/csv
+  convertido a CSV por hoja; pptx/keynote: texto de las diapositivas) y crea `wiki/sources/<key>.md` enlazada desde la
+  página del hilo ("Adjuntos") y viceversa. Sin proyecto → `_inbox/emails/<thread>/attachments/…` y viaja con el hilo.
+- `SourceKind` gana `image`. `hasAttachments` sigue mostrando 📎 en Correo; en el lector, lista de adjuntos con
+  estado: Guardado · Descartado (razón) · No guardado · Muy grande.
+
+### 17.2 Archivos (`Views/Files/FilesView.swift`, `BrainCore/FileIndex.swift`)
+- Ítem **Archivos** en el sidebar (sección principal, después de Personas, ⌘6; Correo ⌘7, Reuniones ⌘8) y pestaña
+  **Archivos** en cada proyecto (`ProjectTab.files`, después de Contenido). Misma vista `FilesView(scope:)`.
+- `FileIndex`: todos los archivos de `raw/docs`, `raw/assets`, `raw/emails/*/attachments` (y `_inbox` equivalentes),
+  con nombre, tipo (PDF · Documento · Hoja de cálculo · Presentación · Imagen · Otro), tamaño, fecha (del correo o de
+  importación), proyecto, origen (Correo: hilo + remitente · Subido · Agregar al proyecto · Captura), personas
+  (remitente/destinatarios o mencionadas en su página) y la página wiki que lo resume. Incremental en `vaultRevision`.
+- Vista: barra con búsqueda (nombre + texto de su página resumen), filtros Tipo ▾ · Origen ▾ · Persona ▾ (y Proyecto ▾
+  en global), orden Fecha/Nombre/Tamaño; lista con miniatura (QuickLookThumbnailing), nombre, origen ("✉️ Contrato
+  Acme · de Ana García"), fecha, tamaño, chip de proyecto. Clic → panel derecho con vista previa (`QLPreviewView`),
+  "En breve" de su página y acciones: Abrir (app por defecto), Mostrar en Finder, Ver ficha, Ir al hilo, Copiar.
+  Espacio = Quick Look. Arrastrar desde la lista a otra app copia el archivo. "Descartados (n)" según §17.1.
+- ⌘K: grupo **Archivos** (por nombre y por texto de su página). La ficha de un hilo/persona/empresa lista sus archivos.
+
+### 17.3 Agregar al proyecto (el "dump") (`Views/Project/ProjectDropBox.swift`, `.claude/commands/file-dump.md`)
+- En **Resumen** del proyecto, arriba: caja grande "Agregar al proyecto" — arrastra archivos (varios) y/o escribe o pega
+  texto libre ("Hoy en la visita a la planta…"). Botón Agregar ⌘↩. También accesible desde "+ Agregar ▸ Agregar al
+  proyecto…" (hoja con la misma caja) y la captura rápida (que ya acepta varias cosas).
+- Al agregar: los archivos se importan como fuentes (§17.1 almacenamiento sin correo: `raw/docs` / `raw/assets`) y el
+  texto como `raw/notes/<fecha>-dump-<slug>.md`; luego se lanza `/file-dump` (escritura) que **clasifica y archiva**:
+  nota · minuta de reunión presencial (`wiki/meetings/<fecha>-presencial-<slug>.md`, con fecha deducida del texto o
+  hoy) · documento · decisión · pendientes · actualización de persona/empresa — y actualiza el resto del wiki como
+  cualquier ingest. Devuelve un resumen "Lo archivé así: …" con enlaces, que la caja muestra debajo (historial de los
+  últimos 10 envíos, cada uno con Deshacer vía Historial).
+- `SourceKind` gana `inPerson` (reunión presencial, icono `person.2`), visible en Contenido/Timeline/Inicio como reunión.
+
+### 17.4 Hilos de correo como unidad
+- **Modelo**: el hilo (`threadKey`) es una entidad: `ThreadInfo {key, subject, participants, messages[{sourceId, date,
+  from, isFromOwner, externalId, webLink, attachments}], project, providerThreadIds: [account: id]}` derivado de
+  `_thread.json` (se le agrega `providerThreadIds` y por mensaje `externalId`, `webLink`, `isFromOwner`). Correos de la
+  cuenta con el mismo `conversationId`/`threadId` del proveedor **siempre** van al mismo hilo (prevalece sobre la
+  heurística de asunto de §11.5, que queda para pegados).
+- **Usuario**: en Contenido "Por fecha" y en Inicio el hilo es **una fila** ("✉️ Contrato Acme · 7 correos · último hace
+  2 h · Ana, Tú, Luis"), no una por correo. La ficha del hilo (EntityView para `wiki/emails/<thread>`) muestra arriba la
+  **conversación**: cada correo en orden (remitente, fecha, lo nuevo de ese correo — sin el historial citado —, adjuntos,
+  "Abrir en Outlook/Gmail"), los míos marcados "Tú" con fondo distinto; debajo la página de Claude y las secciones
+  automáticas. En Correo, un hilo guardado muestra "✓ En 🚀 Acme · Ver hilo".
+- **Grafo**: un nodo por hilo (`kind: emailThread`, etiqueta "asunto · n correos"), aristas a personas participantes,
+  empresa(s), proyecto, temas/decisiones que lo citan y a sus adjuntos guardados. Los correos individuales no son nodos.
+  Citas a un correo concreto (`[[<message key>]]`) resuelven al nodo de su hilo.
+- `EntityIndex`/`SearchIndex`: kind `emailThread`; ⌘K "Correos" muestra hilos (con n correos).
+
+### 17.5 Respuestas y seguimiento de hilos (`MailAutoImporter`)
+- **Todo hilo guardado se sigue solo**: cada ciclo (15 min y al abrir Correo), por cuenta, se listan los mensajes nuevos
+  desde el cursor (incluidos los **enviados** por el usuario: Graph `/me/messages` y Gmail sin filtrar SENT); si su
+  `conversationId`/`threadId` pertenece a un hilo guardado, se agrega a ese hilo (sin regla, sin tope de 20 — tope de
+  seguridad 100/ciclo) con sus adjuntos según §17.1, y se encola su ingest incremental. Esto aplica también a correos de
+  los demás en ese hilo.
+- **Mis respuestas**: `isFromOwner` → en la conversación aparecen como "Tú"; el ingest (plantilla `correo-hilo`,
+  `ingest.md`) registra lo que **yo** prometo/acuerdo como "Mis compromisos" en `tasks.md` con cita al correo enviado
+  (traceback), y lo que respondo que cierra un pendiente lo marca hecho con esa cita. Notificación "Agregué tu
+  respuesta a «Contrato Acme»" (agrupada por ciclo).
+- Respuestas mías a correos **no guardados** no se importan (salvo que caigan en una regla, §14.5).
+- Correos pegados a mano que coinciden con un hilo guardado siguen §11.5.
+
+### 17.6 Hacia atrás: selección múltiple y traer anteriores
+- **Correo › selección múltiple**: casillas en la lista (⌘clic / ⇧clic también); barra "n seleccionados · Guardar en
+  🚀 Acme ▾ · Cancelar". Guardar = hilos completos de los seleccionados (lo ya guardado se omite), con una hoja de
+  confirmación que lista adjuntos por correo con casillas (§17.1 hacia atrás). Progreso en `QueueStatusLine`.
+- **Traer anteriores al crear una regla de correo** (y desde el menú de una regla existente "Traer anteriores…"): busca
+  en el buzón lo que la regla habría capturado en los últimos 90 días (máx. 200), hoja "Encontré 15 correos anteriores
+  de @acme.com" con casillas por hilo (todos marcados salvo los ya guardados), sus adjuntos con el triage, y Guardar n.
+  Después, hacia adelante, la regla es automática como hoy.
+
+### 17.7 Abrir el original
+- Todo correo, hilo y evento de cuentas conectadas guarda su `webLink` (front-matter `web_link` en el raw del correo y
+  `_thread.json`; eventos ya lo tienen). Botón **"Abrir en Outlook"/"Abrir en Gmail"/"Abrir en Google Calendar"/
+  "Abrir en Outlook Calendar"** (abre en el navegador, `NSWorkspace.open`) en: lector de Correo, cada correo de la
+  conversación de un hilo, cabecera de la ficha del hilo (abre el último), detalle de evento en Reuniones, ficha de la
+  reunión grabada si vino de un evento del calendario, y fila de Archivos cuyo origen es un correo. Gmail sin `webLink`
+  del API → `https://mail.google.com/mail/u/<email>/#all/<threadId>`; Google Calendar → `htmlLink`. Correos pegados no
+  tienen botón.
+- Migración: correos ya guardados de cuentas conectadas (con `externalId`) obtienen `webLink` de forma perezosa (al
+  abrir el hilo, una llamada por mensaje faltante) y se persiste en `_thread.json`.
+
+### 17.8 Verificación y entrega
+- Selftests nuevos: `sb attachments selftest` (triage: logo inline, firma, foto, PDF, duplicado por hash, > 25 MB;
+  descartados y rescate; expiración 30 días), `sb threads selftest` (agrupación por id del proveedor, seguimiento de
+  respuestas propias y ajenas con DemoProvider, sin regla; hilo como un nodo del grafo; citas a mensajes → nodo hilo),
+  `sb files selftest` (índice, filtros, origen), `sb dump selftest` (importación de varios archivos + texto, prompt
+  armado; Claude simulado). Todos los existentes en verde.
+- Capturas (ambos tamaños, claro/oscuro): Archivos global y de proyecto (con panel), Descartados, Resumen con la caja,
+  ficha de hilo con conversación, Correo con selección múltiple y hoja de adjuntos, hoja "Traer anteriores", lector
+  con adjuntos y "Abrir en Outlook". El demo vault y DemoProvider cubren adjuntos, respuestas propias y hilos largos.
+- Versión **0.7.0**, notas (README + release.sh; cuidado: comillas invertidas escapadas en el heredoc), TODO, release
+  publicada.

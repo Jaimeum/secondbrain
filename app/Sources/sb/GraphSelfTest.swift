@@ -150,7 +150,8 @@ func testGraph(_ t: Tester, root: URL) async {
         .write(to: vaultURL.appendingPathComponent(question), atomically: true, encoding: .utf8)
     let og = KnowledgeGraphBuilder.build(vaultRoot: vaultURL, projectSlug: nil)
     let orgNodes = og.nodes.filter { $0.kind == .org }
-    t.eq(Set(orgNodes.map(\.id)), [acme, nubia], "org nodes (no README)")
+    // The demo vault brings its own orgs/ (acme, banco-nubia, dive); the README is never a node.
+    t.eq(Set(orgNodes.map(\.id)), [acme, nubia, "orgs/dive.md"], "org nodes (no README)")
     t.check(orgNodes.allSatisfy { $0.projectSlug == nil }, "orgs are global")
     t.check(og.edges.contains { Set([$0.source, $0.target]) == Set(["people/ana-garcia.md", acme]) }, "Ana ↔ Acme (organization:)")
     let atlasGraph = KnowledgeGraphBuilder.build(vaultRoot: vaultURL, projectSlug: "lanzamiento-atlas")

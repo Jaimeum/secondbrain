@@ -465,8 +465,10 @@ public final class EntityIndex: @unchecked Sendable {
 
         var projects = KnowledgeGraphBuilder.listField("projects", in: yaml)
         if let single = Frontmatter.field("project", in: text), projectSlug == nil { projects.append(single) }
-        let org = Frontmatter.field("org", in: text) ?? Frontmatter.field("organization", in: text)
-            ?? Frontmatter.field("company", in: text)
+        // The name to show: `organization:` (plain, CLAUDE.md §8.5) first; `org: "[[acme]]"` is the link (it still
+        // counts as a front-matter link below) and shows only as its label when it is all there is.
+        let org = Frontmatter.field("organization", in: text) ?? Frontmatter.field("company", in: text)
+            ?? Frontmatter.field("org", in: text).map(Self.plainName)
         let entity = Entity(
             id: String(path.dropLast(3)), path: path, kind: kind, title: page.title,
             aliases: KnowledgeGraphBuilder.listField("aliases", in: yaml), projectSlug: projectSlug,
@@ -475,7 +477,7 @@ public final class EntityIndex: @unchecked Sendable {
             status: Frontmatter.field("status", in: text), isOwner: Frontmatter.field("owner", in: text)?.lowercased() == "true",
             frontLinks: [], outgoing: [], isNavigation: isNavigation)
         let targets = wikilinkTargets(in: split.body)
-        // A plain `org: Acme` names an org page too, when one exists (resolved like a link).
+        // A plain `organization: Acme` names an org page too, when one exists (resolved like a link).
         var frontTargets = wikilinkTargets(in: yaml)
         if let org, !org.contains("[[") { frontTargets.append("orgs/\(slugify(org))") }
         var tasks: [TaskItem] = []
@@ -589,6 +591,17 @@ public final class EntityIndex: @unchecked Sendable {
             }
             return matches.min { (rank($0), $0) < (rank($1), $1) }
         }
+    }
+}
+
+extension EntityIndex {
+    /// `[[acme|Acme S.A.]]` → "Acme S.A."; `[[banco-nubia]]` → "Banco Nubia" (from the slug); a plain name as is.
+    public static func plainName(_ value: String) -> String {
+        guard value.hasPrefix("[["), value.hasSuffix("]]") else { return value }
+        let inner = String(value.dropFirst(2).dropLast(2))
+        if let bar = inner.firstIndex(of: "|") { return String(inner[inner.index(after: bar)...]).trimmingCharacters(in: .whitespaces) }
+        let slug = (inner as NSString).lastPathComponent
+        return slug.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
 }
 

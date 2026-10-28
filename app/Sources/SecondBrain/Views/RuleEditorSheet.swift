@@ -62,8 +62,8 @@ struct RuleEditorSheet: View {
                 }
                 .padding(Brand.spacing.contentWide)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack(spacing: 8) {
+            .brandScrollEdgeFade(.bottom)
+            BrandSheetFooter {
                 if let error {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .font(Brand.caption)
@@ -72,14 +72,13 @@ struct RuleEditorSheet: View {
                 }
                 Spacer()
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("rules.editor.save")) { save() }
                     .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(showIssues && !isValid)
             }
-            .padding(12)
         }
         .frame(minWidth: 580, idealWidth: 620, minHeight: 440, idealHeight: 520)
         .background(Brand.color.surface)
@@ -119,20 +118,25 @@ struct RuleEditorSheet: View {
                 Text(L("rules.editor.sendTo"))
                     .foregroundStyle(Brand.color.text2)
                     .frame(width: Self.labelWidth, alignment: .trailing)
-                Picker("", selection: projectBinding) {
+                BrandMenuPicker(title: projectTitle, selection: projectBinding, maxWidth: 240) {
                     ForEach(state.projects) { p in Text("\(p.emoji) \(p.name)").tag(p.slug) }
                     if !state.projects.isEmpty { Divider() }
                     Text(L("rules.unassigned")).tag("")
                     if let slug = draft.projectSlug, state.project(slug) == nil { Text(slug).tag(slug) }
                 }
-                .labelsHidden()
-                .frame(maxWidth: 280, alignment: .leading)
                 Spacer(minLength: 0)
             }
         }
         .padding(14)
         .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.lineSoft))
+    }
+
+    /// What the "mandar a" pull-down shows: the project, "Sin asignar", or a slug that no longer exists.
+    private var projectTitle: String {
+        guard let slug = draft.projectSlug, !slug.isEmpty else { return L("rules.unassigned") }
+        if let p = state.project(slug) { return "\(p.emoji) \(p.name)" }
+        return slug
     }
 
     /// «Cuando [campo ▾] [operador ▾]» on one line, the value on its own full-width line under it (so an address
@@ -145,7 +149,7 @@ struct RuleEditorSheet: View {
                 Text(i == 0 ? L("rules.editor.when") : L("rules.editor.andAlso"))
                     .foregroundStyle(Brand.color.text2)
                     .frame(width: Self.labelWidth, alignment: .trailing)
-                Picker("", selection: fieldBinding(i)) {
+                BrandMenuPicker(title: Self.fieldLabel(c.field), selection: fieldBinding(i), maxWidth: 200) {
                     Section(L("rules.editor.section.mail")) {
                         ForEach([RuleField.senderEmail, .senderDomain, .senderName, .recipient, .subject], id: \.self) {
                             Text(Self.fieldLabel($0)).tag($0)
@@ -160,27 +164,23 @@ struct RuleEditorSheet: View {
                         Text(Self.fieldLabel(.anyText)).tag(RuleField.anyText)
                     }
                 }
-                .labelsHidden()
-                .frame(maxWidth: 230, alignment: .leading)
-                Picker("", selection: opBinding(i)) {
+                BrandMenuPicker(title: Self.opLabel(c.op), selection: opBinding(i), maxWidth: 120) {
                     ForEach(RuleOperator.allCases, id: \.self) { Text(Self.opLabel($0)).tag($0) }
                 }
-                .labelsHidden()
-                .frame(maxWidth: 140, alignment: .leading)
                 Spacer(minLength: 0)
                 if draft.conditions.count > 1 {
                     Button {
                         draft.conditions.remove(at: i)
                     } label: {
-                        Image(systemName: "minus.circle").foregroundStyle(Brand.color.text2)
+                        Image(systemName: "minus.circle")
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.brandIcon)
                     .help(L("rules.editor.removeCondition"))
                 }
             }
             TextField(Self.placeholder(c.field, c.op), text: valueBinding(i))
-                .textFieldStyle(.roundedBorder)
                 .focused($focused, equals: i)
+                .brandField()
                 .onSubmit { save() }
                 .padding(.leading, Self.indent)
             Group {
@@ -204,10 +204,11 @@ struct RuleEditorSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L("rules.editor.name")).font(Brand.callout).foregroundStyle(Brand.color.text)
                 TextField(generatedName, text: $draft.name)
-                    .textFieldStyle(.roundedBorder)
+                    .brandField()
             }
             VStack(alignment: .leading, spacing: 2) {
                 Toggle(L("rules.editor.autoAdd"), isOn: $draft.autoAddMail)
+                    .toggleStyle(.brandCheckbox)
                 Text(L("rules.editor.autoAddHint"))
                     .font(Brand.caption)
                     .foregroundStyle(Brand.color.text2)

@@ -304,12 +304,11 @@ private struct ReposSheet: View {
                     .lineLimit(1)
                 Spacer()
                 Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, Brand.spacing.content)
             .padding(.vertical, Brand.spacing.l)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             ReposView(projectSlug: projectSlug)
         }
         .frame(minWidth: 600, idealWidth: 720, minHeight: 420, idealHeight: 520)

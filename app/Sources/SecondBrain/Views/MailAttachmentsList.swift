@@ -97,7 +97,7 @@ struct MailAttachmentsList: View {
             if isPending {
                 Toggle("", isOn: Binding(get: { checked.contains(a.id) },
                                          set: { if $0 { checked.insert(a.id) } else { checked.remove(a.id) } }))
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.brandCheckbox)
                     .labelsHidden()
                     .disabled(savingBatch)
                     .accessibilityLabel(a.name)

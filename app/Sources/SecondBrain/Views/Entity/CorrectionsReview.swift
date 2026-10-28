@@ -216,7 +216,6 @@ struct CorrectionsReviewSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if let session = model.session {
                 switch session.phase {
                 case .searching:
@@ -229,7 +228,6 @@ struct CorrectionsReviewSheet: View {
                 case .failed(let error):
                     message(icon: "exclamationmark.triangle", title: L("corrections.failed"), detail: error)
                 }
-                Rectangle().fill(Brand.color.line).frame(height: 1)
                 footer(session)
             }
         }
@@ -252,8 +250,9 @@ struct CorrectionsReviewSheet: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Brand.spacing.content)
-        .padding(.vertical, Brand.spacing.m)
+        .padding(.horizontal, Brand.spacing.contentWide)
+        .padding(.top, Brand.spacing.xl)
+        .padding(.bottom, Brand.spacing.s)
     }
 
     private func message(icon: String?, title: String, detail: String) -> some View {
@@ -313,9 +312,12 @@ struct CorrectionsReviewSheet: View {
                     }
                 }
             }
-            .padding(Brand.spacing.content)
+            .padding(.horizontal, Brand.spacing.contentWide)
+            .padding(.vertical, Brand.spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .brandScrollEdgeFade(.top)
+        .brandScrollEdgeFade(.bottom)
     }
 
     /// "Lo guardaré como hecho confirmado": the facts, wikilinks shown as plain names.
@@ -367,15 +369,16 @@ struct CorrectionsReviewSheet: View {
                     .keyboardShortcut(.defaultAction)
             case .failed:
                 Button(L("common.close")) { model.hide() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("corrections.retry")) { model.retry(state: state) }
                     .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(.horizontal, Brand.spacing.content)
-        .padding(.vertical, Brand.spacing.m)
+        .padding(.horizontal, Brand.spacing.contentWide)
+        .padding(.top, Brand.spacing.m)
+        .padding(.bottom, Brand.spacing.xl)
     }
 
     private func grouped(_ session: CorrectionsModel.Session) -> [(path: String, edits: [ProposedEdit])] {
@@ -413,7 +416,7 @@ private struct EditRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Brand.spacing.s) {
             Toggle("", isOn: Binding(get: { checked }, set: { _ in toggle() }))
-                .toggleStyle(.checkbox)
+                .toggleStyle(.brandCheckbox)
                 .labelsHidden()
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: Brand.spacing.xs) {
@@ -448,7 +451,7 @@ private struct EditRow: View {
                 .font(Brand.mono)
                 .textSelection(.enabled)
                 .clipShape(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.lineSoft))
             }
             .opacity(checked ? 1 : 0.55)
         }

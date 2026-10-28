@@ -58,7 +58,6 @@ struct ProjectDropBox: View {
         .padding(.horizontal, Brand.spacing.l)
         .padding(.vertical, Brand.spacing.m)
         .background(Brand.color.surface)
-        .overlay(alignment: .bottom) { Rectangle().fill(Brand.color.line).frame(height: 1) }
         .task(id: reloadKey) { reload() }
     }
 
@@ -225,12 +224,16 @@ struct DropBoxForm: View {
     }
 
     private var field: some View {
-        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
+        // A file over the box: a soft `accentSoft` wash and a `focusBorder` edge, not a hard 2 pt accent frame.
         return CaptureTextView(text: $model.text, onFiles: { model.add($0) }, onSubmit: submit, onCancel: nil,
                                autoFocus: !compact)
             .frame(height: fieldHeight)
             .background(Brand.color.card, in: shape)
-            .overlay(shape.strokeBorder(dropTargeted ? Brand.color.accent : Brand.color.line, lineWidth: dropTargeted ? 2 : 1))
+            .overlay { if dropTargeted { shape.fill(Brand.color.accentSoft).allowsHitTesting(false) } }
+            .overlay(shape.strokeBorder(dropTargeted ? Brand.color.focusBorder : Brand.color.lineSoft,
+                                        lineWidth: dropTargeted ? 1.5 : 1))
+            .brandFocusHalo(dropTargeted)
             .overlay(alignment: .topLeading) {
                 if model.text.isEmpty {
                     Text(L("dump.placeholder"))
@@ -286,7 +289,7 @@ struct DropBoxForm: View {
             .buttonStyle(.brandSecondary)
             .help(L("dump.chooseFilesHelp"))
             Toggle(L("dump.inPerson"), isOn: $model.inPerson)
-                .toggleStyle(.checkbox)
+                .toggleStyle(.brandCheckbox)
                 .font(Brand.body)
                 .foregroundStyle(Brand.color.text2)
                 .disabled(!model.hasText)
@@ -391,8 +394,8 @@ struct DumpRow: View {
             }
         }
         .padding(Brand.spacing.s)
-        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.lineSoft))
     }
 
     /// The text's first line, else the files' names.
@@ -550,12 +553,8 @@ struct ProjectDropSheet: View {
                     .font(Brand.body)
                     .foregroundStyle(Brand.color.text2)
                     .fixedSize()
-                Picker(L("dump.project"), selection: $slug) {
-                    if slug == nil { Text(L("dump.pickProject")).tag(String?.none) }
-                    ForEach(state.projects) { p in Text("\(p.emoji) \(p.name)").tag(Optional(p.slug)) }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 280)
+                BrandProjectMenu(selection: $slug, includeInbox: false, placeholder: L("dump.pickProject"), maxWidth: 240)
+                    .accessibilityLabel(L("dump.project"))
             }
             DropBoxForm(model: model, projectSlug: slug, compact: false, onAdded: {
                 dismiss()
@@ -564,11 +563,13 @@ struct ProjectDropSheet: View {
             HStack {
                 Spacer()
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
         }
-        .padding(Brand.spacing.xxl)
+        .padding(.horizontal, 28)
+        .padding(.top, 28)
+        .padding(.bottom, 22)
         .frame(minWidth: 520, idealWidth: 600, minHeight: 380, idealHeight: 460)
         .background(Brand.color.surface)
         .onAppear {

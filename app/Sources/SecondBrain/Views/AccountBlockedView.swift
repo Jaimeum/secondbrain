@@ -70,7 +70,7 @@ struct AccountBlockedView: View {
                 Spacer()
                 if let onClose {
                     Button(L("common.close"), action: onClose)
-                        .buttonStyle(.brandSecondary)
+                        .buttonStyle(.brandGhost)
                         .keyboardShortcut(.cancelAction)
                 }
             }
@@ -128,7 +128,7 @@ private struct ForkButton: View {
             .padding(.vertical, 9)
             .contentShape(shape)
             .background(shape.fill(hovering ? Brand.color.cardAlt : Brand.color.card))
-            .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
+            .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }

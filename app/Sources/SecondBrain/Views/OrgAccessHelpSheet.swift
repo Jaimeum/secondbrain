@@ -28,40 +28,37 @@ struct OrgAccessHelpSheet: View {
                 Text(L("orghelp.subtitle"))
                     .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
-                Picker("", selection: $tab) {
-                    Text(AccountProvider.microsoft.displayName).tag(AccountProvider.microsoft)
-                    Text(AccountProvider.google.displayName).tag(AccountProvider.google)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .padding(.top, 4)
+                BrandSegmentedControl(options: [(AccountProvider.microsoft, AccountProvider.microsoft.displayName),
+                                                (AccountProvider.google, AccountProvider.google.displayName)],
+                                      selection: $tab, minSegmentWidth: 96, height: 26)
+                    .fixedSize()
+                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
-            .padding(.bottom, 14)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.horizontal, 28)
+            .padding(.top, 28)
+            .padding(.bottom, 10)
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     forYou
                     if let clientId { forAdmin(clientId) }
                     technical
                 }
-                .padding(24)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 14)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack {
+            .brandScrollEdgeFade(.top)
+            .brandScrollEdgeFade(.bottom)
+            BrandSheetFooter {
                 if let copied {
                     Label(copied, systemImage: "checkmark").foregroundStyle(Brand.color.success).font(Brand.caption)
                 }
                 Spacer()
                 Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandPrimary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.defaultAction)
             }
-            .padding(12)
         }
         .frame(minWidth: 560, idealWidth: 620, minHeight: 400, idealHeight: 520)
         .background(Brand.color.surface)

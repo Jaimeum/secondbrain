@@ -26,9 +26,8 @@ struct MailAttachmentReviewSheet: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Brand.spacing.contentWide)
-            .padding(.top, 20)
-            .padding(.bottom, 14)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.top, 24)
+            .padding(.bottom, 6)
             ScrollView {
                 VStack(alignment: .leading, spacing: Brand.spacing.l) {
                     ForEach(review.messages, id: \.summary.id) { message in
@@ -48,18 +47,18 @@ struct MailAttachmentReviewSheet: View {
                 .padding(.vertical, Brand.spacing.l)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack(spacing: 8) {
+            .brandScrollEdgeFade(.top)
+            .brandScrollEdgeFade(.bottom)
+            BrandSheetFooter(horizontalPadding: Brand.spacing.contentWide) {
                 Text(L("readonly.promise"))
                     .font(Brand.caption)
                     .foregroundStyle(Brand.color.text2)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button(L("attach.review.done")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
-            .padding(12)
         }
         .frame(minWidth: 480, idealWidth: 560, minHeight: 320, idealHeight: 460)
         .background(Brand.color.surface)

@@ -1096,15 +1096,13 @@ struct SourceTasksSheet: View {
                 .padding(Brand.spacing.xxl)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack {
+            .brandScrollEdgeFade(.bottom)
+            BrandSheetFooter(horizontalPadding: Brand.spacing.xxl) {
                 Spacer()
                 Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandPrimary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
-            .padding(.horizontal, Brand.spacing.xxl)
-            .padding(.vertical, Brand.spacing.m)
         }
         .background(Brand.color.surface)
         .frame(minWidth: 520, idealWidth: 600, minHeight: 400, idealHeight: 520)

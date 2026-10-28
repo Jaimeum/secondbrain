@@ -141,6 +141,12 @@ final class AppState {
     @ObservationIgnored private var projectsReload: Task<Void, Never>?
 
     private init() {
+        // Snapshots seed chats and migrate the vault: never against the owner's real config.
+        let env = ProcessInfo.processInfo.environment
+        if !(env["SB_SNAPSHOT_DIR"] ?? "").isEmpty, (env["SB_CONFIG"] ?? "").isEmpty {
+            FileHandle.standardError.write(Data("SB_SNAPSHOT_DIR needs SB_CONFIG pointing at an isolated config.json\n".utf8))
+            exit(64)
+        }
         let config = AppConfig.load()
         self.config = config
         menuLanguageAtLaunch = config.uiLanguage

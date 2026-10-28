@@ -89,22 +89,27 @@ struct AskView: View {
     }
 
     /// "Guardar como página" (§16.3): the answer becomes a question page of this scope at once (one undoable
-    /// Historial entry), shown in Contenido and ⌘K. No Claude run: the answer is filed as given.
+    /// Historial entry), shown in Contenido and ⌘K; then Claude links it from the indexes, logs and related pages of
+    /// this same scope (`/save-answer`, its own Historial entry). While Claude is editing the brain the write waits
+    /// ("Guardando…") so the running job's Historial entry never takes the page.
     private func save(_ message: ChatMessage) {
         let conversations = self.conversations
         let model = conversations.current
         guard let index = model.messages.firstIndex(where: { $0.id == message.id }), !model.messages[index].saved else { return }
         model.messages[index].saved = true   // no second click while writing
-        let vault = state.engine.vault, history = state.engine.history, scope = self.scope
+        let engine = state.engine, scope = self.scope
         let question = message.question, answer = message.text
-        let title = L("ask.savedHistoryTitle", ChatStore.title(forQuestion: question))
         Task {
             do {
-                let path = try await Task.detached {
-                    try SavedAnswers.save(question: question, answer: answer, scope: scope, vault: vault, history: history,
-                                          title: title)
-                }.value
-                conversations.markSaved(messageId: message.id, path: path, in: model)
+                var path: String?
+                while path == nil {
+                    do {
+                        path = try engine.saveAnswer(question: question, answer: answer, scope: scope)
+                    } catch EngineError.busy {
+                        try await Task.sleep(for: .seconds(2))
+                    }
+                }
+                conversations.markSaved(messageId: message.id, path: path!, in: model)
                 state.bumpHistory()
             } catch {
                 Log.error("save answer: \(error)")

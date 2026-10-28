@@ -848,23 +848,23 @@ private struct TaskSegmentControl<Value: Hashable>: View {
                     .frame(height: 24)
                     .background {
                         if selected {
-                            // A lifted `card` with a soft shadow, no outline.
-                            RoundedRectangle(cornerRadius: Brand.radius.control - 2, style: .continuous)
+                            // A lifted `card` capsule, as in `BrandSegmentedControl` (the project tabs).
+                            Capsule(style: .continuous)
                                 .fill(Brand.color.card)
-                                .shadow(color: Brand.color.shadow.opacity(0.5), radius: 2, y: 1)
+                                .overlay(Capsule(style: .continuous).strokeBorder(Brand.color.lineSoft))
+                                .shadow(color: Brand.color.shadow.opacity(0.35), radius: 2, x: 0, y: 1)
                         }
                     }
-                    .contentShape(Rectangle())
+                    .contentShape(Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(count > 0 ? "\(title), \(count)" : title))
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).fill(Brand.color.cardAlt))
-        // A `lineSoft` edge keeps the track readable in dark mode, where sand is almost the surface's tone.
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.lineSoft))
+        .padding(3)
+        // The same faint capsule track as `BrandSegmentedControl`: a tonal shift, no outline (§15.1 calm surfaces).
+        .background(Brand.color.hover, in: Capsule(style: .continuous))
         .fixedSize()
     }
 }

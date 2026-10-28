@@ -11,6 +11,8 @@ struct InboxView: View {
     // MARK: v0.4 routing
     /// §14.3 offer after "Asignar" of an email (or a recording tied to a calendar event).
     @ViewState private var ruleOffer = RuleOffer()
+    /// A source the router asked to show (a "failed" notification, §16.12): its row is outlined.
+    @ViewState private var highlighted: String?
 
     /// Needs a project, or failed without one: one row per email thread (the engine moves the whole thread).
     private var toSort: [SourceRecord] {
@@ -50,6 +52,13 @@ struct InboxView: View {
                                 BrandSectionHeader(title: L("home.toSort"), count: toSort.count)
                                 ForEach(toSort) { source in
                                     InboxRow(source: source, onError: { error = $0 }, onAssigned: offerRule)
+                                        .overlay {
+                                            if highlighted == source.id {
+                                                RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
+                                                    .strokeBorder(Brand.color.accent, lineWidth: 2)
+                                                    .allowsHitTesting(false)
+                                            }
+                                        }
                                 }
                             }
                         }
@@ -85,6 +94,8 @@ struct InboxView: View {
         .animation(Brand.motion.standard, value: ruleOffer.current)
         .animation(Brand.motion.fast, value: toSort.map(\.id))
         .navigationTitle(L("inbox.title"))
+        .onAppear(perform: consumeHighlight)
+        .onChange(of: state.pendingSourceHighlight) { consumeHighlight() }
         .toolbar {
             Button { state.requestEmail(projectSlug: nil) } label: { Label(L("email.add"), systemImage: "envelope.badge") }
                 .help(L("email.addHelp"))
@@ -96,6 +107,12 @@ struct InboxView: View {
         } message: {
             Text(error ?? "")
         }
+    }
+
+    private func consumeHighlight() {
+        guard state.selection == .unassigned, let id = state.pendingSourceHighlight else { return }
+        state.pendingSourceHighlight = nil
+        highlighted = id
     }
 
     /// The row is gone once assigned, so the offer lives at the bottom of the list. `subject` was read before the move.
@@ -141,7 +158,7 @@ struct InboxRow: View {
     @ViewState private var showNewProject = false
     @ViewState private var confirmDelete = false
     @ViewState private var showThread = false
-    @ViewState private var preview: PagePreviewItem?
+    @ViewState private var preview: VaultPageItem?
 
     var body: some View {
         Group {
@@ -158,7 +175,7 @@ struct InboxRow: View {
             } else if let raw = source.rawPath {
                 if raw.lowercased().hasSuffix(".md") {
                     Button(source.kind == .meeting ? L("sources.openTranscript") : L("sources.openOriginal")) {
-                        preview = PagePreviewItem(path: raw)
+                        preview = VaultPageItem(path: raw)
                     }
                 }
                 Button(L("wiki.showInFinder")) {
@@ -168,7 +185,7 @@ struct InboxRow: View {
             Divider()
             Button(L("sources.delete"), role: .destructive) { confirmDelete = true }
         }
-        .sheet(item: $preview) { PagePreviewSheet(path: $0.path) }
+        .sheet(item: $preview) { PageSheet(path: $0.path) }
         .sheet(isPresented: $showNewProject) {
             NewProjectSheet { project in assign(project.slug) }
         }

@@ -82,23 +82,12 @@ final class TaskListModel {
     }
 }
 
-/// Which tasks a `TasksView` lists: every project (sidebar "Pendientes") or one project (its tab).
-enum TaskScope: Hashable {
-    case all
-    case project(String)
-
-    var projectSlug: String? {
-        if case .project(let slug) = self { return slug }
-        return nil
-    }
-}
-
-/// "Pendientes" (CONTRACT §15.2): one view for the sidebar item (`.all`) and the project tab (`.project`).
+/// "Pendientes" (CONTRACT §15.2, §16.8): one view for the sidebar item (`.brain`) and the project tab (`.project`).
 /// Segments Míos · De otros · Sin dueño · Hechos, an "Origen" menu and Exportar; a click on a task previews its
 /// meeting or email in a sheet without leaving the list.
 struct TasksView: View {
     @Environment(AppState.self) private var state
-    let scope: TaskScope
+    let scope: Scope
     /// "Abrir en el proyecto" from the preview (nil = `AppState.openProjectPage`).
     var onOpenPage: ((String) -> Void)? = nil
     /// Opens on this segment (nil = the first one with something: mine, then others', then no owner).
@@ -111,10 +100,12 @@ struct TasksView: View {
     /// A source group ("thread:<key>" for an email thread, else the citation key).
     @ViewState private var sourceFilter: String?
     @ViewState private var export: ExportRequest?
-    @ViewState private var preview: PagePreviewItem?
+    @ViewState private var preview: VaultPageItem?
     @ViewState private var pickedSegment = false
+    /// The task the router asked for (⌘K, a ficha): highlighted in the list. v0.6: filled in by F (scroll + highlight).
+    @ViewState private var highlightedTaskId: String?
 
-    private var isAll: Bool { scope == .all }
+    private var isAll: Bool { scope == .brain }
 
     // MARK: Filtering
 
@@ -255,13 +246,23 @@ struct TasksView: View {
         }
         .onChange(of: segment) { model.releaseSticky() }
         .onChange(of: sourceFilter) { model.releaseSticky() }
+        .onAppear(perform: consumePendingTask)
+        .onChange(of: state.pendingTaskId) { consumePendingTask() }
         .sheet(item: $export) { ExportSheet(request: $0) }
-        .sheet(item: $preview) { item in PagePreviewSheet(path: item.path, onOpenInProject: onOpenPage) }
+        .sheet(item: $preview) { item in PageSheet(path: item.path, onOpen: onOpenPage) }
         .alert(L("common.oops"), isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
             Button(L("common.ok")) { model.error = nil }
         } message: {
             Text(model.error ?? "")
         }
+    }
+
+    /// `AppState.navigate(to: .task(id))` selected this list (the sidebar's, or this project's tab).
+    private func consumePendingTask() {
+        guard let id = state.pendingTaskId else { return }
+        if let slug = scope.projectSlug, Scope.projectSlug(ofPath: id) != slug { return }
+        state.pendingTaskId = nil
+        highlightedTaskId = id
     }
 
     /// Segments left; Origen + Exportar right. Folds to icon-only buttons, then to two lines.
@@ -399,7 +400,7 @@ struct TasksView: View {
                             TaskRow(task: task, done: model.isDone(task), showOwner: segment != .mine,
                                     showProject: isAll,
                                     onToggle: { model.toggle(task, state: state) },
-                                    onOpen: { preview = PagePreviewItem(path: $0) })
+                                    onOpen: { preview = VaultPageItem(path: $0) })
                         }
                     }
                 }
@@ -541,19 +542,6 @@ private struct TaskSegmentControl<Value: Hashable>: View {
         .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
         .fixedSize()
     }
-}
-
-/// Sidebar "Pendientes" (kept for callers of the v0.2 name).
-struct MyTasksView: View {
-    var body: some View { TasksView(scope: .all) }
-}
-
-/// Project tab "Pendientes" (kept for callers of the v0.2 name).
-struct ProjectTasksView: View {
-    let project: Project
-    var onOpen: (String) -> Void
-
-    var body: some View { TasksView(scope: .project(project.slug), onOpenPage: onOpen) }
 }
 
 enum TaskSort {

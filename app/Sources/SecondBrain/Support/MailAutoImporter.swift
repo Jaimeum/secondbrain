@@ -84,7 +84,10 @@ final class MailAutoImporter {
             self.lastReport = report
             guard report.total > 0 else { return }
             state.bumpVault()
-            Notifier.post(title: L("rules.auto.title"), body: Self.message(report, state: state))
+            // §16.12: a click opens the project's Contenido ("automail-<time>-<slug>", see AppState.route).
+            let slug = report.added.max { $0.count < $1.count }?.projectSlug ?? ""
+            Notifier.post(title: L("rules.auto.title"), body: Self.message(report, state: state),
+                          id: "automail-\(Int(Date().timeIntervalSince1970))-\(slug)")
         }
     }
 

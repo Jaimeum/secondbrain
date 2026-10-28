@@ -1415,3 +1415,21 @@
 "record.repairPermission" = "Fix permission";
 "record.repairPermissionHelp" = "Use this if secondbrain already shows as on in System Settings but still can't record: the permission belongs to an earlier version. I'll clear it so macOS asks you again; allow it and reopen secondbrain.";
 "record.repairFailed" = "I couldn't fix the permission. In System Settings → Screen & System Audio Recording, remove secondbrain with “−” and open it again.";
+
+/* v0.6 foundation — navigation, sidebar, scope */
+"sidebar.ask" = "Ask";
+"sidebar.graph" = "Graph";
+"sidebar.sources" = "Sources";
+"project.tab.summary" = "Summary";
+"add.title" = "Add";
+"add.note" = "Note";
+"add.file" = "File…";
+"add.link" = "Link…";
+"add.email" = "Paste email";
+"add.stopRecording" = "Stop recording";
+"add.help" = "Add a note, a file, a link, an email or a recording";
+"search.askBrain" = "Ask the whole brain: “%@”";
+"page.open" = "Open";
+"page.openHelp" = "Open where it lives";
+"entity.edit" = "Edit";
+"entity.editHelp" = "Fix this page by hand";

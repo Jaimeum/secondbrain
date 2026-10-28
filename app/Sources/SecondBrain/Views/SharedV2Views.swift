@@ -348,63 +348,6 @@ struct WrapLayout: Layout {
     }
 }
 
-/// A vault page read in a sheet without leaving the list (a task's meeting or email). Links navigate inside the
-/// sheet; "Abrir en el proyecto" goes to the page in its project.
-struct PagePreviewSheet: View {
-    @Environment(AppState.self) private var state
-    @Environment(\.dismiss) private var dismiss
-    let path: String
-    /// Overrides "Abrir en el proyecto" (default: `AppState.openProjectPage`).
-    var onOpenInProject: ((String) -> Void)? = nil
-
-    @ViewState private var current: String?
-    @ViewState private var title = ""
-
-    private var shown: String { current ?? path }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: Brand.spacing.s) {
-                Image(systemName: SourceLabels.symbol(forPath: shown)).foregroundStyle(Brand.color.text2)
-                Text(title)
-                    .font(Brand.section)
-                    .foregroundStyle(Brand.color.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(title)
-                Spacer(minLength: Brand.spacing.s)
-                if shown.hasPrefix("projects/") {
-                    Button(L("preview.openInProject")) {
-                        let target = shown
-                        dismiss()
-                        if let onOpenInProject { onOpenInProject(target) } else { _ = state.openProjectPage(target) }
-                    }
-                    .buttonStyle(.brandSecondary)
-                }
-                Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandPrimary)
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(.horizontal, Brand.spacing.l)
-            .padding(.vertical, Brand.spacing.m)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            WikiWebView(vault: state.engine.vault, path: shown) { next in current = next }
-        }
-        .background(Brand.color.surface)
-        .frame(minWidth: 560, idealWidth: 680, minHeight: 420, idealHeight: 520)
-        .task(id: shown) {
-            let vault = state.engine.vault, page = shown
-            title = await Task.detached { vault.title(of: page) }.value
-        }
-    }
-}
-
-/// `.sheet(item:)` wrapper for a page preview.
-struct PagePreviewItem: Identifiable, Equatable {
-    let path: String
-    var id: String { path }
-}
-
 /// What a `[[key]]` citation is called on screen: the meeting/email title (never the raw slug), its kind symbol, and
 /// the page it opens (nil = not found in the vault).
 struct SourceLabel: Equatable {

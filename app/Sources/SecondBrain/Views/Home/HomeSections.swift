@@ -35,7 +35,7 @@ struct HomeNowSection: View {
                 if !today.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         BrandSectionHeader(title: L("home.today")) {
-                            HomeLink(title: L("home.seeAgenda")) { state.selection = .meetings }
+                            HomeLink(title: L("home.seeAgenda")) { state.navigate(to: .sidebar(.meetings)) }
                         }
                         BrandCard(padding: 0) {
                             VStack(spacing: 0) {
@@ -62,9 +62,7 @@ struct HomeNowSection: View {
 
     /// The event in Reuniones; "Prepararme" lands on its preparation, not on the plain detail.
     private func openInMeetings(_ event: CalendarEvent, prepare: Bool) {
-        state.pendingEventPrepare = prepare
-        state.pendingEventId = event.id
-        state.selection = .meetings
+        state.navigate(to: .event(event.id, prepare: prepare))
     }
 
     private var connectLine: some View {
@@ -187,9 +185,7 @@ struct HomeEventRow: View {
 
     var body: some View {
         Button {
-            state.pendingEventPrepare = false
-            state.pendingEventId = event.id
-            state.selection = .meetings
+            state.navigate(to: .event(event.id, prepare: false))
         } label: {
             HStack(spacing: 12) {
                 Text(event.isAllDay ? L("home.allDay") : Fmt.time(event.start))

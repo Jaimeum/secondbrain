@@ -22,10 +22,8 @@ struct HomeView: View {
     /// The latest timeline entries with a page (Recientes when few sources are learned on this Mac).
     @ViewState private var timelineRecents: [TimelineEntry] = []
     @ViewState private var timelineLoaded = false
-    /// A page cited by an answer, shown over Inicio so the answer stays where it was.
-    @ViewState private var citedPage: VaultPageItem?
     /// A task's meeting or email, read over Inicio (Pendientes para hoy never leaves Inicio).
-    @ViewState private var taskPreview: PagePreviewItem?
+    @ViewState private var taskPreview: VaultPageItem?
     /// The task just checked in Pendientes para hoy: "Hecho · Deshacer" for `undoSeconds`.
     @ViewState private var undoTask: TaskItem?
     /// Bumped on every check, so a newer one restarts the countdown.
@@ -46,7 +44,6 @@ struct HomeView: View {
         .onChange(of: state.homeRoute) { consumeRoute() }
         // "Inicio" (sidebar, ⌘1) while already here: back to the root.
         .onChange(of: state.homePopToken) { routes.removeAll() }
-        .sheet(item: $citedPage) { VaultPageSheet(path: $0.path) }
     }
 
     // MARK: Data
@@ -169,7 +166,7 @@ struct HomeView: View {
         }
         .animation(Brand.motion.animation(fast: true), value: ruleOffer.current)
         .animation(Brand.motion.animation(fast: true), value: undoTask?.id)
-        .sheet(item: $taskPreview) { PagePreviewSheet(path: $0.path) }
+        .sheet(item: $taskPreview) { PageSheet(path: $0.path) }
         .task(id: undoGeneration) {
             guard undoTask != nil else { return }
             try? await Task.sleep(for: .seconds(Self.undoSeconds))
@@ -220,39 +217,7 @@ struct HomeView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            if let question = lastQuestion { lastQuestionRow(question) }
         }
-    }
-
-    /// The last whole-brain question, while it is recent and its answer isn't on screen: back to it without asking again.
-    private var lastQuestion: String? {
-        guard let asked = state.homeChatAskedAt, MeetingsModel.shared.now.timeIntervalSince(asked) < 30 * 60,
-              !routes.contains(where: { if case .ask = $0 { true } else { false } }) else { return nil }
-        return state.homeChat.messages.last { $0.role == .user }?.text
-    }
-
-    private func lastQuestionRow(_ question: String) -> some View {
-        Button {
-            routes.append(.ask(question))
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "bubble.left.and.text.bubble.right")
-                    .foregroundStyle(Brand.color.accent)
-                Text(L("home.lastQuestion", question))
-                    .font(Brand.body)
-                    .foregroundStyle(Brand.color.text2)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Image(systemName: "arrow.right")
-                    .imageScale(.small)
-                    .foregroundStyle(Brand.color.accent)
-                Spacer(minLength: 0)
-            }
-            .frame(height: 20)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(question)
     }
 
     // MARK: Por ordenar
@@ -261,7 +226,7 @@ struct HomeView: View {
         let items = toSort
         return VStack(alignment: .leading, spacing: 10) {
             BrandSectionHeader(title: L("home.toSort"), count: items.count) {
-                HomeLink(title: L("home.seeAll")) { routes.append(.inbox) }
+                HomeLink(title: L("home.seeAll")) { state.navigate(to: .sidebar(.unassigned)) }
             }
             BrandCard(padding: 0) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -285,7 +250,7 @@ struct HomeView: View {
         let soon = dueSoon
         return VStack(alignment: .leading, spacing: 10) {
             BrandSectionHeader(title: L("home.tasksToday")) {
-                HomeLink(title: L("home.seeAllTasks", myOpen.count)) { state.selection = .tasks }
+                HomeLink(title: L("home.seeAllTasks", myOpen.count)) { state.navigate(to: .sidebar(.tasks)) }
             }
             BrandCard(padding: soon.isEmpty ? 14 : 0) {
                 if soon.isEmpty {
@@ -299,7 +264,7 @@ struct HomeView: View {
                             if offset > 0 { HomeDivider() }
                             TaskRow(task: task, done: tasks.isDone(task), showOwner: false, showProject: true,
                                     onToggle: { toggle(task) },
-                                    onOpen: { taskPreview = PagePreviewItem(path: $0) })
+                                    onOpen: { taskPreview = VaultPageItem(path: $0) })
                                 .frame(minHeight: 36)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 4)
@@ -355,7 +320,7 @@ struct HomeView: View {
 
     private var connectionsSection: some View {
         Button {
-            routes.append(.graph)
+            state.navigate(to: .sidebar(.graph))
         } label: {
             BrandCard(padding: 14) {
                 HStack(spacing: 10) {
@@ -447,34 +412,18 @@ struct HomeView: View {
 
     @ViewBuilder private func destination(_ route: HomeRoute) -> some View {
         switch route {
-        case .page(let path):
-            HomePageView(path: path)
+        case .entity(let path):
+            EntityView(path: path, scope: .brain)
         case .timeline:
             BrainTimelineView(projectSlug: nil) { path, _ in state.open(path: path) }
-        case .graph:
-            GraphView(scope: .global, focus: nil, onOpen: { state.open(path: $0) })
-        case .inbox:
-            InboxView()
-        case .ask:
-            // A cited page opens over the answer (a sheet), so the answer is still here after reading it.
-            ChatView(model: state.homeChat, projectSlug: nil, onOpenPage: { citedPage = VaultPageItem(path: $0) })
         }
     }
 
-    /// Pushes `state.homeRoute` (set by ⌘K, `AppState.open(path:)` or `ask`). A question is asked here, once; one
-    /// still being answered is stopped first (as a project's Preguntar does), else the new one would be dropped.
+    /// Pushes `state.homeRoute` (left by `AppState.navigate(to:)`): a global ficha opened from a link pushes on top
+    /// of the one showing, so Atrás goes back to it.
     private func consumeRoute() {
-        guard let route = state.homeRoute else { return }
+        guard state.selection == .home || state.selection == nil, let route = state.homeRoute else { return }
         state.homeRoute = nil
-        if case .ask(let question) = route, state.engineStarted {
-            if state.homeChat.isAsking { state.homeChat.stop() }
-            state.homeChat.draft = question
-            state.homeChat.ask(engine: state.engine, projectSlug: nil)
-            state.homeChatAskedAt = Date()
-            if let existing = routes.firstIndex(where: { if case .ask = $0 { true } else { false } }) {
-                routes.removeSubrange(existing...)
-            }
-        }
         if routes.last != route { routes.append(route) }
     }
 
@@ -554,23 +503,5 @@ struct HomeView: View {
             }
             if !failed.isEmpty { self.error = failed.joined(separator: "\n") }
         }
-    }
-}
-
-/// A global page (index.md, log.md…) inside Inicio's stack. Its title is read off the main thread (the file name
-/// until then).
-struct HomePageView: View {
-    @Environment(AppState.self) private var state
-    let path: String
-    @ViewState private var title: String?
-
-    var body: some View {
-        WikiWebView(vault: state.engine.vault, path: path) { next in state.open(path: next) }
-            .background(Brand.color.surface)
-            .navigationTitle(title ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension)
-            .task(id: path) {
-                let vault = state.engine.vault, path = self.path
-                title = await Task.detached { vault.title(of: path) }.value
-            }
     }
 }

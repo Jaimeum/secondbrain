@@ -3,15 +3,14 @@ import BrainCore
 import SwiftUI
 
 /// ⌘K (CONTRACT §15.2): a centered 560 pt overlay on `card` with the overlay shadow. ↑↓ move, ↩ opens (or asks when
-/// nothing matches), ⌘↩ always asks, ⌥ asks the project on screen, esc closes. The last row is always
-/// "Preguntar: «…»".
+/// nothing matches), ⌘↩ always asks, esc closes. Always global (§16.7, no ⌥): the last row is always "Preguntar a
+/// todo el cerebro: «…»", asked in a new conversation of the sidebar's Preguntar.
 struct SearchPalette: View {
     @Environment(AppState.self) private var state
     var initialQuery = ""
 
     @ViewState private var query = ""
     @ViewState private var selected = 0
-    @ViewState private var optionHeld = false
     @ViewState private var monitor: Any?
     /// The window the palette lives in: its key monitor only handles keys typed there, never in a sheet or Ajustes.
     @ViewState private var host = HostWindow()
@@ -55,11 +54,6 @@ struct SearchPalette: View {
         var out = groups.flatMap { $0.1.map { Row(kind: .item($0)) } }
         if !trimmed.isEmpty { out.append(Row(kind: .ask)) }
         return out
-    }
-
-    /// ⌥ asks the project on screen.
-    private var askProject: Project? {
-        optionHeld ? state.project(state.currentProjectSlug) : nil
     }
 
     var body: some View {
@@ -230,26 +224,14 @@ struct SearchPalette: View {
     private func title(_ row: Row) -> String {
         switch row.kind {
         case .item(let item): item.title
-        case .ask:
-            if let project = askProject {
-                L("search.askProject", "\(project.emoji) \(project.name)", trimmed)
-            } else {
-                L("search.ask", trimmed)
-            }
+        case .ask: L("search.askBrain", trimmed)
         }
     }
 
-    /// "↑↓ moverte · ↩ abrir · ⌘↩ preguntar · ⌥↩ preguntar a 🚀 Atlas (inside a project) · esc"; the project hint
-    /// gives way first when the palette is narrow.
+    /// "↑↓ moverte · ↩ abrir · ⌘↩ preguntar · esc".
     private var footer: some View {
-        let project = state.project(state.currentProjectSlug)
-        return HStack(spacing: 14) {
-            ViewThatFits(in: .horizontal) {
-                if let project {
-                    hints(project: project)
-                }
-                hints(project: nil)
-            }
+        HStack(spacing: 14) {
+            hints
             Spacer(minLength: 0)
             Text(verbatim: "esc")
                 .font(Brand.font(11, .medium))
@@ -259,14 +241,11 @@ struct SearchPalette: View {
         .frame(height: Self.footerHeight)
     }
 
-    private func hints(project: Project?) -> some View {
+    private var hints: some View {
         HStack(spacing: 14) {
             hint(["arrow.up.arrow.down"], L("search.hint.move"))
             hint(["return"], L("search.hint.open"))
             hint(["command", "return"], L("search.hint.askShort"))
-            if let project {
-                hint(["option", "return"], L("search.hint.askProject", "\(project.emoji) \(project.name)"))
-            }
         }
         .fixedSize()
     }
@@ -287,7 +266,7 @@ struct SearchPalette: View {
 
     private func installMonitor() {
         removeMonitor()
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
             let consumed = MainActor.assumeIsolated { handle(event) }
             return consumed ? nil : event
         }
@@ -302,10 +281,6 @@ struct SearchPalette: View {
     /// Ajustes window keeps its ↑↓, Return and Esc.
     private func handle(_ event: NSEvent) -> Bool {
         guard let window = event.window, window === host.window, window.attachedSheet == nil else { return false }
-        if event.type == .flagsChanged {
-            optionHeld = event.modifierFlags.contains(.option)
-            return false
-        }
         let rows = rows(groups)
         switch event.keyCode {
         case 125:   // ↓
@@ -320,13 +295,12 @@ struct SearchPalette: View {
             close()
             return true
         case 36, 76:   // return
-            let flags = event.modifierFlags
-            if flags.contains(.command) || flags.contains(.option) {
-                ask(project: flags.contains(.option))
+            if event.modifierFlags.contains(.command) {
+                ask()
             } else if rows.indices.contains(selected) {
                 activate(rows[selected])
             } else {
-                ask(project: false)
+                ask()
             }
             return true
         default:
@@ -343,15 +317,16 @@ struct SearchPalette: View {
             close()
             SearchIndex.perform(item.target, state: state)
         case .ask:
-            ask(project: askProject != nil)
+            ask()
         }
     }
 
-    private func ask(project: Bool) {
+    /// The whole brain, in a new conversation (§16.7).
+    private func ask() {
         let q = trimmed
         guard !q.isEmpty else { return }
         close()
-        state.ask(q, projectSlug: project ? state.currentProjectSlug : nil)
+        state.ask(q, scope: .brain)
     }
 
     private func close() {

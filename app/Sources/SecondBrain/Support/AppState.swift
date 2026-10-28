@@ -4,45 +4,7 @@ import Observation
 import Recorder
 import Transcription
 
-/// Sidebar destinations (CONTRACT §15.2): Inicio · Reuniones · Correo · Pendientes · Personas · Proyectos.
-enum SidebarItem: Hashable {
-    case home
-    case meetings
-    case mail
-    case tasks
-    case people
-    case project(String)
-    // Deprecated aliases, kept one release (MainView maps them): `.brain` → Inicio, `.inbox` → Inicio › Sin asignar,
-    // `.myTasks` → Pendientes, `.templates` → Ajustes › Formatos (then Inicio).
-    case brain
-    case inbox
-    case myTasks
-    case templates
-
-    /// The item the sidebar shows as selected (aliases resolved); nil for `.templates`, which opens Ajustes instead.
-    var normalized: SidebarItem? {
-        switch self {
-        case .brain, .inbox: .home
-        case .myTasks: .tasks
-        case .templates: nil
-        default: self
-        }
-    }
-}
-
-/// Screens pushed inside Inicio's NavigationStack (CONTRACT §15.2).
-enum HomeRoute: Hashable {
-    /// A global page (index.md, log.md…) shown in place.
-    case page(String)
-    /// "Ver todo por fecha": the timeline of every project.
-    case timeline
-    /// "Explorar cómo se conecta todo": the global graph.
-    case graph
-    /// "Por ordenar › Ver todo": Sin asignar.
-    case inbox
-    /// "Preguntar: «…»" from ⌘K for the whole brain (asked in `AppState.homeChat`).
-    case ask(String)
-}
+// SidebarItem, HomeRoute, Destination and the router: Support/Navigation.swift (CONTRACT §16.12).
 
 /// "Nueva nota" from ⌘K (MainView presents `NoteSheet`).
 struct NoteRequest: Identifiable, Equatable {
@@ -125,33 +87,43 @@ final class AppState {
         return notice
     }
     private var dismissedMigrationNotice = UserDefaults.standard.string(forKey: "migration.dismissed")
-    /// A page to open when the selected project appears (from "Mis pendientes" or the global timeline).
+    // MARK: v0.6 navigation (CONTRACT §16.12) — requests left by `navigate(to:)` for the screen it selects. Only the
+    // router sets them (it clears them all first); the screen that consumes one clears it.
+    /// A vault page to open: a project's own page in Contenido, a foreign page as a ficha filtered to the project
+    /// (ProjectView), a person in Personas (PeopleView).
     var pendingPage: String?
-    /// v0.3: a page to focus in the Grafo tab ("Ver en el grafo" from a wiki page header).
+    /// A page to center the Grafo on (GraphView of the brain, or ProjectView's Grafo tab).
     var pendingGraphFocus: String?
-    // MARK: v0.5 navigation (CONTRACT §15.2)
-    /// Set by Inicio or the search palette; MeetingsView selects this event and clears it.
+    /// MeetingsView selects this event and clears it.
     var pendingEventId: String?
-    /// Set by Inicio or the search palette; ProjectView switches to this tab and clears it.
+    /// With `pendingEventId`: open the event on its preparation ("Prepararme" from Inicio), not the plain detail.
+    var pendingEventPrepare = false
+    /// ProjectView switches to this tab and clears it.
     var pendingProjectTab: ProjectTab?
-    /// Question typed in the search palette, sent by ChatView when it appears.
-    var pendingQuestion: String?
+    /// TasksView highlights this task (`TaskItem.id`) and clears it.
+    var pendingTaskId: String?
+    /// AskView (or a project's Preguntar tab) opens this conversation / asks this question and clears it.
+    var pendingChat: ChatRequest?
+    /// InboxView (Sin asignar) highlights this source's row and clears it ("failed" notification).
+    var pendingSourceHighlight: String?
     /// A screen to push inside Inicio's NavigationStack; HomeView consumes it and clears it.
     var homeRoute: HomeRoute?
     /// Bumped by "Inicio" (sidebar row re-selected, ⌘1) while Inicio is on screen: HomeView pops back to its root.
     var homePopToken = 0
-    /// With `pendingEventId`: open the event on its preparation ("Prepararme" from Inicio), not the plain detail.
-    var pendingEventPrepare = false
-    /// When the last whole-brain question was asked from ⌘K (Inicio offers to go back to its answer).
-    var homeChatAskedAt: Date?
+    /// "Editar" on a page or ficha (§16.6): MainView presents the editor over everything while set.
+    var editingPage: String?
+    /// "Historial" over any screen (MainView presents `ActivitySheet`).
+    var historyRequest: HistoryRequest?
+    /// "Enlace…" from the sidebar's "+ Agregar".
+    var linkRequest: LinkRequest?
     /// The ⌘K palette is on screen.
     var searchPresented = false
     /// "Nuevo proyecto" sheet (⌘N, sidebar, ⌘K).
     var showNewProject = false
     /// "Nueva nota" from ⌘K.
     var noteRequest: NoteRequest?
-    /// The whole-brain conversation of Inicio ("Preguntar" from ⌘K without a project).
-    let homeChat = ChatModel()
+    /// The whole brain's conversation (sidebar Preguntar). v0.6: replaced by ChatStore threads (§16.3, area A).
+    let brainChat = ChatModel()
     /// Each project's "Preguntar" conversation, kept while the app runs: leaving a project and coming back (or asking
     /// it from ⌘K) continues the same conversation. Created on first use; dropped when the vault changes.
     @ObservationIgnored private(set) var projectChats: [String: ChatModel] = [:]
@@ -365,9 +337,8 @@ final class AppState {
         if vaultChanged {
             for chat in projectChats.values { chat.stop() }
             projectChats.removeAll()
-            homeChat.clear()
-            homeChatAskedAt = nil
-            homeRoute = nil
+            brainChat.clear()
+            clearPending()
         }
         vaultGeneration += 1
         bumpHistory()
@@ -456,6 +427,11 @@ final class AppState {
         projects = Self.sorted(projects.map { $0.slug == project.slug ? project : $0 })
         reloadProjects()
         vaultRevision += 1
+    }
+
+    /// The conversation of a scope (v0.6: AskView keeps it; area A moves it to ChatStore threads).
+    func chat(for scope: Scope) -> ChatModel {
+        scope.projectSlug.map(projectChat(for:)) ?? brainChat
     }
 
     /// The project's persistent conversation (see `projectChats`).

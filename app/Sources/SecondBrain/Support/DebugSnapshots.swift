@@ -32,11 +32,11 @@ enum DebugSnapshots {
             let email = (ProcessInfo.processInfo.environment["SB_SNAPSHOT_EMAIL"]).flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }
             var shots: [(String, CGSize, AnyView)] = []
             if let project {
-                shots.append(("tasks", CGSize(width: 900, height: 560), AnyView(ProjectTasksView(project: project, onOpen: { _ in }))))
+                shots.append(("tasks", CGSize(width: 900, height: 560), AnyView(TasksView(scope: .project(project.slug), onOpenPage: { _ in }))))
                 shots.append(("timeline", CGSize(width: 900, height: 700), AnyView(BrainTimelineView(projectSlug: slug) { _, _ in })))
                 shots.append(("sources", CGSize(width: 900, height: 560), AnyView(SourcesView(projectSlug: slug, onOpen: { _ in }))))
             }
-            shots.append(("mytasks", CGSize(width: 900, height: 560), AnyView(MyTasksView())))
+            shots.append(("mytasks", CGSize(width: 900, height: 560), AnyView(TasksView(scope: .brain))))
             shots.append(("timeline-all", CGSize(width: 900, height: 700), AnyView(BrainTimelineView(projectSlug: nil) { _, _ in })))
             // Sheets at their declared ideal size and at their minimum (CONTRACT §15.3).
             shots.append(("email", CGSize(width: 760, height: 520),
@@ -56,8 +56,8 @@ enum DebugSnapshots {
             shots.append(("menubar", CGSize(width: 320, height: 440), AnyView(MenuBarView())))
             // v0.3 (CONTRACT §12.6); run with SB_DEMO_ACCOUNTS=1 for mail/meetings with data.
             shots.append(("graph", CGSize(width: 1000, height: 680),
-                          AnyView(GraphView(scope: project.map { .project($0.slug) } ?? .global, focus: nil, onOpen: { _ in }))))
-            shots.append(("graph-all", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: nil, onOpen: { _ in }))))
+                          AnyView(GraphView(scope: Scope(projectSlug: project?.slug), onOpen: { _ in }))))
+            shots.append(("graph-all", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .brain, onOpen: { _ in }))))
             shots.append(("mail", CGSize(width: 1000, height: 640), AnyView(MailView())))
             shots.append(("meetings", CGSize(width: 1000, height: 640), AnyView(MeetingsView())))
             shots.append(("meetings-week", CGSize(width: 1000, height: 640), AnyView(MeetingsView(initialSegment: .week))))   // MARK: v0.3 meetings
@@ -133,7 +133,7 @@ enum DebugSnapshots {
             }
             // MARK: v0.3 graph — focused graph + web views need a run loop and WKWebView.takeSnapshot.
             if let topic = await state.engine.graph(projectSlug: nil).nodes.filter({ $0.kind == .topic }).max(by: { $0.links < $1.links }) {
-                shots.append(("graph-focus", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .global, focus: topic.id, onOpen: { _ in }))))
+                shots.append(("graph-focus", CGSize(width: 1000, height: 680), AnyView(GraphView(scope: .brain, focus: topic.id, onOpen: { _ in }))))
                 if let slug = topic.projectSlug {   // the wiki page header with "Ver en el grafo"
                     shots.append(("graph-wiki", CGSize(width: 1000, height: 400),
                                   AnyView(WikiBrowser(scope: .project(slug), selection: .constant(topic.id)))))
@@ -265,16 +265,17 @@ enum DebugSnapshots {
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
     }
 
-    /// Every top-level screen inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer), and
-    /// the project on each tab (`window-project-<tab>-…`, through `pendingProjectTab`). `min` = the minimum window.
+    /// Every sidebar item inside the real `MainView` (NavigationSplitView, toolbar, tab bar, sidebar footer), and the
+    /// project on each tab (`window-project-<tab>-…`), all through the router. `min` = the minimum window.
     private static func renderWindows(state: AppState, dir: URL) async {
         var items: [(name: String, item: SidebarItem, tab: ProjectTab?)] = [
-            ("home", .home, nil), ("meetings", .meetings, nil), ("mail", .mail, nil), ("tasks", .tasks, nil),
-            ("people", .people, nil),
+            ("home", .home, nil), ("ask", .ask, nil), ("graph", .graph, nil), ("tasks", .tasks, nil),
+            ("people", .people, nil), ("mail", .mail, nil), ("meetings", .meetings, nil), ("unassigned", .unassigned, nil),
         ]
         if let project = state.projects.first {
             items.append(("project", .project(project.slug), nil))
-            let tabs: [(String, ProjectTab)] = [("content", .content), ("tasks", .tasks), ("ask", .ask), ("graph", .graph)]
+            let tabs: [(String, ProjectTab)] = [("summary", .summary), ("content", .content), ("ask", .ask), ("graph", .graph),
+                                                ("tasks", .tasks), ("people", .people)]
             for (tabName, tab) in tabs { items.append(("project-\(tabName)", .project(project.slug), tab)) }
         }
         // ⌘K over Inicio (the palette inside the real window, with its query).
@@ -283,8 +284,11 @@ enum DebugSnapshots {
         for entry in items where only.isEmpty || entry.name.hasPrefix(only) {
             for (sizeName, size) in [("1100", CGSize(width: 1100, height: 720)), ("min", CGSize(width: 920, height: 620))] {
                 for dark in [false, true] {
-                    state.selection = entry.item
-                    state.pendingProjectTab = entry.tab
+                    if case .project(let slug) = entry.item, let tab = entry.tab {
+                        state.navigate(to: .projectTab(slug, tab))
+                    } else {
+                        state.navigate(to: .sidebar(entry.item))
+                    }
                     state.searchPresented = false   // "search" lays its own palette (with a query) over the window
                     let file = "window-\(entry.name)-\(sizeName)-\(dark ? "dark" : "light").png"
                     let view = entry.name == "search"

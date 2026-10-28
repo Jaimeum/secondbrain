@@ -392,17 +392,10 @@ struct WikiPagePane: View {
         NSWorkspace.shared.activateFileViewerSelecting([state.engine.vault.url(for: path)])
     }
 
-    /// "Ver en el grafo": the Grafo tab of the page's project; people and global pages open the whole brain's graph
-    /// in Inicio (`HomeRoute.graph`, whose `GraphView` takes the focus from `pendingGraphFocus`). Never `.brain`.
+    /// "Ver en el grafo": the Grafo of the page's project, else the whole brain's Grafo, centered on the page.
+    /// v0.6: filled in by C/B — the graph of the *current* scope (§16.5).
     private func showInGraph(_ path: String) {
-        state.pendingGraphFocus = path
-        let parts = path.split(separator: "/")
-        if parts.count > 2 && parts[0] == "projects" {
-            state.selection = .project(String(parts[1]))
-        } else {
-            state.selection = .home
-            state.homeRoute = .graph
-        }
+        state.navigate(to: .graph(Scope(projectSlug: Scope.projectSlug(ofPath: path)), path))
     }
 }
 

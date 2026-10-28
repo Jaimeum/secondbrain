@@ -16,7 +16,7 @@ struct ChatMessage: Identifiable {
     var failure: Failure?
     var saved = false
     /// The project an answer was asked in (nil = the whole brain): its [[links]] resolve from there and "Guardar"
-    /// files it there, even after the scope switch changes.
+    /// files it there.
     var projectSlug: String?
 
     /// The page an answer's [[links]] resolve from.
@@ -26,7 +26,6 @@ struct ChatMessage: Identifiable {
 @MainActor @Observable
 final class ChatModel {
     var messages: [ChatMessage] = []
-    var wholeBrain = false
     var draft = ""
     private(set) var isAsking = false
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -116,7 +115,8 @@ final class ChatModel {
     }
 }
 
-/// "Preguntar": ask the wiki questions, answers cite pages with clickable [[links]].
+/// "Preguntar": ask the wiki questions, answers cite pages with clickable [[links]]. The place fixes the scope
+/// (§16: no "Este proyecto | Todo el cerebro" switch): `projectSlug` nil = the whole brain. Hosted by `AskView`.
 struct ChatView: View {
     @Environment(AppState.self) private var state
     @Bindable var model: ChatModel
@@ -125,12 +125,15 @@ struct ChatView: View {
 
     @ViewState private var showReconnect = false
 
-    private var effectiveScope: String? { model.wholeBrain ? nil : projectSlug }
+    private var effectiveScope: String? { projectSlug }
 
     var body: some View {
         VStack(spacing: 0) {
-            topBar
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            // Only "Borrar" lives here now (no scope switch, §16): no empty band before the first question.
+            if !model.messages.isEmpty {
+                topBar
+                Rectangle().fill(Brand.color.line).frame(height: 1)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Brand.spacing.l) {
@@ -156,29 +159,10 @@ struct ChatView: View {
         .sheet(isPresented: $showReconnect) {
             ReconnectClaudeSheet()
         }
-        .onAppear(perform: sendPendingQuestion)
-        .onChange(of: state.pendingQuestion) { sendPendingQuestion() }
-    }
-
-    /// A question typed in the search palette (⌘K): asked as soon as this view shows.
-    private func sendPendingQuestion() {
-        guard let question = state.pendingQuestion?.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-        state.pendingQuestion = nil
-        guard !question.isEmpty else { return }
-        if model.isAsking { model.stop() }
-        // "Preguntar a 🚀 X" (⌘K, ⌥) promised this project: the scope switch must not send it to the whole brain.
-        if projectSlug != nil { model.wholeBrain = false }
-        model.draft = question
-        model.ask(engine: state.engine, projectSlug: effectiveScope)
     }
 
     private var topBar: some View {
         HStack(spacing: Brand.spacing.m) {
-            if projectSlug != nil {
-                BrandSegmentedControl(options: [(false, L("chat.scopeProject")), (true, L("chat.scopeBrain"))],
-                                      selection: $model.wholeBrain)
-                    .frame(maxWidth: 280)
-            }
             Spacer(minLength: Brand.spacing.s)
             if !model.messages.isEmpty {
                 Button { model.clear() } label: {

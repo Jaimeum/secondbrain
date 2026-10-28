@@ -1415,3 +1415,21 @@
 "record.repairPermission" = "Reparar permiso";
 "record.repairPermissionHelp" = "Úsalo si secondbrain ya aparece activado en Ajustes del Sistema y aun así no graba: el permiso quedó de una versión anterior. Lo borro para que macOS te lo vuelva a pedir; acéptalo y vuelve a abrir secondbrain.";
 "record.repairFailed" = "No pude reparar el permiso. En Ajustes del Sistema → Grabación de pantalla y audio del sistema, quita secondbrain con «−» y vuelve a abrirlo.";
+
+/* v0.6 foundation — navigation, sidebar, scope */
+"sidebar.ask" = "Preguntar";
+"sidebar.graph" = "Grafo";
+"sidebar.sources" = "Fuentes";
+"project.tab.summary" = "Resumen";
+"add.title" = "Agregar";
+"add.note" = "Nota";
+"add.file" = "Archivo…";
+"add.link" = "Enlace…";
+"add.email" = "Pegar correo";
+"add.stopRecording" = "Detener grabación";
+"add.help" = "Agrega una nota, un archivo, un enlace, un correo o una grabación";
+"search.askBrain" = "Preguntar a todo el cerebro: «%@»";
+"page.open" = "Abrir";
+"page.openHelp" = "Abrir en su lugar";
+"entity.edit" = "Editar";
+"entity.editHelp" = "Corregir esta página a mano";

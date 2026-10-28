@@ -431,14 +431,11 @@ final class SearchIndex {
         case .source(let id):
             if let source = state.engine.sources.first(where: { $0.id == id }) { state.open(source: source) }
         case .event(let id):
-            state.pendingEventPrepare = false
-            state.pendingEventId = id
-            state.selection = .meetings
+            state.navigate(to: .event(id, prepare: false))
         case .project(let slug):
-            state.selection = .project(slug)
+            state.navigate(to: .sidebar(.project(slug)))
         case .projectTasks(let slug):
-            state.pendingProjectTab = .tasks
-            state.selection = .project(slug)
+            state.navigate(to: .projectTab(slug, .tasks))
         case .action(let action):
             switch action {
             case .record:

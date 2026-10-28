@@ -1,7 +1,8 @@
 import BrainCore
 import SwiftUI
 
-/// The main window (CONTRACT §15.2): sidebar (200/220/280) + detail, the banners on top, and the ⌘K palette over it.
+/// The main window (CONTRACT §15.2, §16.1): sidebar (200/220/280) + detail, the banners on top, and the ⌘K palette
+/// over it. Sheets that any screen can ask for through AppState (editor, Historial, nota, enlace, correo) live here.
 struct MainView: View {
     @Environment(AppState.self) private var state
     @Environment(\.openSettings) private var openSettings
@@ -25,7 +26,7 @@ struct MainView: View {
         }
         .animation(Brand.motion.animation(fast: true), value: state.searchPresented)
         .sheet(isPresented: $state.showNewProject) {
-            NewProjectSheet { project in state.selection = .project(project.slug) }
+            NewProjectSheet { project in state.navigate(to: .sidebar(.project(project.slug))) }
         }
         .sheet(item: $state.emailRequest) { request in
             AddEmailSheet(request: request)
@@ -33,11 +34,23 @@ struct MainView: View {
         .sheet(item: $state.noteRequest) { request in
             NoteSheet(projectSlug: request.projectSlug)
         }
+        .sheet(item: $state.linkRequest) { request in
+            PasteLinkSheet(projectSlug: request.projectSlug)
+        }
+        .sheet(item: $state.historyRequest) { request in
+            ActivitySheet(projectSlug: request.projectSlug) { path in
+                state.historyRequest = nil
+                state.navigate(to: .entity(path, Scope(projectSlug: request.projectSlug)))
+            }
+        }
+        // §16.6: "Editar" from any page or ficha.
+        .sheet(item: Binding(get: { state.editingPage.map(VaultPageItem.init(path:)) },
+                             set: { state.editingPage = $0?.path })) { item in
+            PageEditorHost(path: item.path)
+        }
         .onAppear {
             SettingsLinkOpener.opener = { openSettings() }
-            normalizeSelection()
         }
-        .onChange(of: state.selection) { normalizeSelection() }
         // Keeps ⌘K's index fresh (debounced; the palette also refreshes when it opens).
         .task(id: "\(state.vaultRevision)-\(state.tasksRevision)-\(state.accountsRevision)-\(state.projects.count)-\(state.config.uiLanguage)") {
             SearchIndex.shared.refresh(state: state)
@@ -65,33 +78,24 @@ struct MainView: View {
             } else {
                 // Deleted on disk or not in this vault: offer a way out instead of a blank page.
                 EmptyStateView(symbol: "folder", title: L("project.missing"), message: L("project.missing.message"),
-                               actionTitle: L("project.missing.action")) { state.selection = .home }
+                               actionTitle: L("project.missing.action")) { state.navigate(to: .sidebar(.home)) }
             }
+        case .ask:
+            AskView(scope: .brain).navigationTitle(L("sidebar.ask"))
+        case .graph:
+            GraphView(scope: .brain).navigationTitle(L("sidebar.graph"))
+        case .tasks:
+            TasksView(scope: .brain)
+        case .people:
+            PeopleView()
         case .mail:
             MailView()
         case .meetings:
             MeetingsView()
-        case .people:
-            PeopleView()
-        case .tasks, .myTasks:
-            MyTasksView()
-        case .home, .brain, .inbox, .templates, nil:
+        case .unassigned:
+            InboxView()
+        case .home, nil:
             HomeView()
-        }
-    }
-
-    /// Deprecated aliases (CONTRACT §15.2): `.brain` → Inicio, `.inbox` → Inicio with Sin asignar pushed,
-    /// `.myTasks` → Pendientes, `.templates` → Ajustes › Formatos and Inicio behind it.
-    private func normalizeSelection() {
-        guard let selection = state.selection else { return }
-        if selection == .inbox {
-            state.selection = .home
-            state.homeRoute = .inbox
-        } else if selection == .templates {
-            state.selection = .home
-            SettingsLink.open(tab: "formats")
-        } else if let normalized = selection.normalized, normalized != selection {
-            state.selection = normalized
         }
     }
 }

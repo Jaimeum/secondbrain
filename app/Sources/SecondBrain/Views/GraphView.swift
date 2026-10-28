@@ -6,22 +6,23 @@ import WebKit
 /// "Grafo" tab (CONTRACT §12.2 + §12.7): how everything the brain learned connects. The whole brain is colored by
 /// project (soft halos, a name at each cluster); inside a project, by kind (chips filter). One click focuses a node and
 /// opens its peek card; the time strip replays how the brain grew. Rendering lives in `web/graph.*` (canvas + D3).
-/// `focus` = a vault-relative page to center on ("Ver en el grafo"); `onOpen` opens a page.
+/// `focus` = a vault-relative page to center on ("Ver en el grafo"); `onOpen` opens a page (default: the router, in
+/// this scope). v0.6 (§16.5): `.brain` is the sidebar's Grafo, `.project` the project tab; C adds the ficha panel.
 struct GraphView: View {
     @Environment(AppState.self) private var state
-    let scope: WikiScope
-    var focus: String?
-    var onOpen: (String) -> Void
+    let scope: Scope
+    var focus: String? = nil
+    var onOpen: ((String) -> Void)? = nil
 
     @ViewState private var loaded: GraphPayloadData?
     @ViewState private var controller = GraphController()
-    /// The whole brain's graph (Inicio) takes "Ver en el grafo" of a person or global page from `pendingGraphFocus`.
+    /// The sidebar's Grafo takes "Ver en el grafo" from `pendingGraphFocus` (a project's tab gets it from ProjectView).
     @ViewState private var requestedFocus: String?
 
     var body: some View {
         Group {
             if let loaded, loaded.knowledgeCount > 0 {
-                GraphWebView(data: loaded, payload: payloadBase(), focus: graphFocus, controller: controller, onOpen: onOpen)
+                GraphWebView(data: loaded, payload: payloadBase(), focus: graphFocus, controller: controller, onOpen: open)
                     .background(alignment: .topLeading) {
                         // ⌘F: the page also listens, but the web view does not always get the key first.
                         Button("") { controller.toggleSearch() }
@@ -36,7 +37,7 @@ struct GraphView: View {
                 // No extra "Grabar" here (§15.2: one record control); "+ Agregar" is in the toolbar.
                 EmptyStateView(symbol: "point.3.connected.trianglepath.dotted", title: L("graph.empty.title"),
                                message: L("graph.empty.message"), actionTitle: L("graph.empty.seeContent")) {
-                    state.pendingProjectTab = .content
+                    if let slug = projectSlug { state.navigate(to: .projectTab(slug, .content)) }
                 }
             } else {
                 EmptyStateView(symbol: "point.3.connected.trianglepath.dotted", title: L("graph.empty.title"),
@@ -57,16 +58,17 @@ struct GraphView: View {
 
     private struct TaskKey: Hashable { let revision: Int; let scope: String }
 
-    private var projectSlug: String? {
-        if case .project(let slug) = scope { return slug }
-        return nil
-    }
+    private var projectSlug: String? { scope.projectSlug }
 
     private var scopeKey: String { projectSlug.map { "project:\($0)" } ?? "global" }
 
-    /// Only the whole brain's graph shown without a focus of its own; project pages are ProjectView's.
+    private func open(_ path: String) {
+        if let onOpen { onOpen(path) } else { state.navigate(to: .entity(path, scope)) }
+    }
+
+    /// Only the sidebar's Grafo (on screen, without a focus of its own); a project's focus is ProjectView's.
     private func consumePendingFocus() {
-        guard projectSlug == nil, focus == nil, let page = state.pendingGraphFocus, !page.hasPrefix("projects/") else { return }
+        guard projectSlug == nil, focus == nil, state.selection == .graph, let page = state.pendingGraphFocus else { return }
         state.pendingGraphFocus = nil
         requestedFocus = page
     }

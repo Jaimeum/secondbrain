@@ -174,7 +174,7 @@ struct OnboardingView: View {
             OnboardingStep.clearSaved()
             state.completeOnboarding()
             if let createdProject {
-                state.selection = .project(createdProject.slug)
+                state.navigate(to: .sidebar(.project(createdProject.slug)))
                 state.recordingProjectSlug = createdProject.slug
             }
         default:

@@ -14,6 +14,10 @@
   --card: #FFFFFF;
   --card-alt: #E9E0D4;
   --line: #DAD3C9;
+  --line-soft: rgba(218, 211, 201, 0.60);
+  --hover: rgba(35, 43, 37, 0.04);
+  --focus-ring: rgba(71, 82, 67, 0.18);
+  --focus-border: rgba(71, 82, 67, 0.45);
   --text: #232B25;
   --text2: #5F665D;
   --text3: #AEB5A4;
@@ -52,6 +56,10 @@
   --card: #3A4238;
   --card-alt: #2A322A;
   --line: rgba(255, 255, 255, 0.10);
+  --line-soft: rgba(255, 255, 255, 0.06);
+  --hover: rgba(245, 240, 232, 0.05);
+  --focus-ring: rgba(174, 181, 164, 0.26);
+  --focus-border: rgba(174, 181, 164, 0.55);
   --text: #F5F0E8;
   --text2: #AEB5A4;
   --text3: #818979;
@@ -81,6 +89,10 @@
     --card: #3A4238;
     --card-alt: #2A322A;
     --line: rgba(255, 255, 255, 0.10);
+    --line-soft: rgba(255, 255, 255, 0.06);
+    --hover: rgba(245, 240, 232, 0.05);
+    --focus-ring: rgba(174, 181, 164, 0.26);
+    --focus-border: rgba(174, 181, 164, 0.55);
     --text: #F5F0E8;
     --text2: #AEB5A4;
     --text3: #818979;
@@ -116,6 +128,12 @@ html, body {
   -webkit-user-select: none; user-select: none;
 }
 button { font: inherit; color: inherit; cursor: default; }
+
+/* A quiet overlay-style scroller in the floating panels: no grey track, a rounded thumb. */
+::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; border: 3px solid var(--card); }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 svg.g { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; fill: none; stroke: currentColor;
         stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -130,7 +148,7 @@ svg.g { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; 
 #chips:empty { pointer-events: none; }
 .chip {
   display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; max-width: 220px; white-space: nowrap;
-  border: 1px solid var(--line); border-radius: 13px; background: var(--glass);
+  border: 1px solid var(--line-soft); border-radius: 13px; background: var(--glass);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   transition: opacity .15s, background .15s;
 }
@@ -144,7 +162,7 @@ svg.g { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; 
 #tools { display: flex; gap: 6px; pointer-events: auto; }
 button.icon, button.pill {
   height: 28px; min-width: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  border: 1px solid var(--line); border-radius: 14px; background: var(--glass); color: var(--text2);
+  border: 1px solid var(--line-soft); border-radius: 14px; background: var(--glass); color: var(--text2);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
 }
 button.pill { padding: 0 12px; font-weight: 500; color: var(--accent); white-space: nowrap; }
@@ -154,8 +172,11 @@ button.icon.on { color: var(--accent); }
 /* --top-inset = measured bottom of the top bar (graph.js `measureChrome`): chips may wrap to several rows. */
 #searchBox {
   position: absolute; top: var(--top-inset, 48px); right: 14px; width: min(260px, calc(100% - 28px)); height: 32px; display: flex; align-items: center; gap: 6px;
-  padding: 0 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
+  padding: 0 10px; border-radius: 10px; background: var(--card); border: 1px solid var(--line-soft); box-shadow: var(--shadow);
+  transition: border-color .15s ease-out, box-shadow .15s ease-out;
 }
+/* The brand focus halo (§15.1): a soft ring and a lighter edge, never a dark outline. */
+#searchBox:focus-within { border-color: var(--focus-border); box-shadow: 0 0 0 3px var(--focus-ring), var(--shadow); }
 #searchBox .glyph { color: var(--text2); display: flex; }
 #searchInput { flex: 1; border: none; outline: none; background: transparent; color: var(--text); font: inherit; -webkit-user-select: text; user-select: text; }
 #searchInput::placeholder { color: var(--text3); }
@@ -177,7 +198,7 @@ button.icon.on { color: var(--accent); }
 #peek {
   position: absolute; top: var(--top-inset, 52px); right: 14px; width: min(270px, calc(100% - 28px));
   max-height: calc(100% - var(--top-inset, 52px) - var(--bottom-inset, 66px)); overflow: auto;
-  padding: 14px 16px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line);
+  padding: 14px 16px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line-soft);
   box-shadow: var(--shadow); animation: slide .22s ease-out both;
 }
 #peek .close { position: absolute; top: 8px; right: 8px; border: none; background: transparent; color: var(--text3); font-size: 17px;
@@ -200,7 +221,7 @@ button.primary:hover { filter: brightness(1.06); }
 #peekNeighbours { list-style: none; padding: 0; margin: 0; }
 #peekNeighbours li { display: flex; align-items: center; gap: 7px; padding: 4px 6px; margin: 0 -6px; border-radius: 6px;
                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#peekNeighbours li:hover { background: var(--accent-soft); }
+#peekNeighbours li:hover { background: var(--hover); }
 #peekNeighbours li .g { color: var(--c); flex: none; }
 #peekNeighbours li span { overflow: hidden; text-overflow: ellipsis; }
 
@@ -215,7 +236,7 @@ button.primary:hover { filter: brightness(1.06); }
 /* Time strip: dots per meeting, "Hoy" at the right, ▶ plays it. */
 #timebar {
   position: absolute; left: 14px; right: 14px; bottom: 12px; height: 42px; display: flex; align-items: center; gap: 12px;
-  padding: 0 16px 0 7px; border-radius: 21px; background: var(--glass); border: 1px solid var(--line);
+  padding: 0 16px 0 7px; border-radius: 21px; background: var(--glass); border: 1px solid var(--line-soft);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
 #timebar[hidden] { display: none; }

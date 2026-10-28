@@ -32,12 +32,9 @@ struct ExportSheet: View {
                                 .font(Brand.callout)
                                 .foregroundStyle(Brand.color.text)
                                 .lineLimit(1)
-                            Picker("", selection: $formatRaw) {
+                            BrandMenuPicker(title: format.label, selection: $formatRaw, maxWidth: 180) {
                                 ForEach(ExportFormat.menuOrder, id: \.self) { Text($0.label).tag($0.rawValue) }
                             }
-                            .pickerStyle(.menu)
-                            .labelsHidden()
-                            .frame(maxWidth: 200, alignment: .leading)
                         }
                         Text(formatHint)
                             .font(Brand.caption)
@@ -71,7 +68,7 @@ struct ExportSheet: View {
                                 Toggle(L("export.opt.frontmatter"), isOn: $options.keepFrontmatter)
                             }
                         }
-                        .toggleStyle(.checkbox)
+                        .toggleStyle(.brandCheckbox)
                         .font(Brand.body)
                         .foregroundStyle(Brand.color.text)
                     }
@@ -109,9 +106,9 @@ struct ExportSheet: View {
                 .padding(Brand.spacing.xxl)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .brandScrollEdgeFade(.bottom)
 
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack(spacing: Brand.spacing.s) {
+            BrandSheetFooter(horizontalPadding: Brand.spacing.xxl) {
                 Button {
                     Task { await copy() }
                 } label: {
@@ -124,7 +121,7 @@ struct ExportSheet: View {
                 Spacer(minLength: Brand.spacing.s)
                 if busy { BrandLoader(size: 16) }
                 Button(savedURL == nil ? L("common.cancel") : L("common.close")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .fixedSize()
                     .keyboardShortcut(.cancelAction)
                 Button(L("export.save")) { Task { await save() } }
@@ -133,8 +130,6 @@ struct ExportSheet: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(busy || nothingSelected)
             }
-            .padding(.horizontal, Brand.spacing.xxl)
-            .padding(.vertical, Brand.spacing.m)
         }
         .background(Brand.color.surface)
         .frame(minWidth: 440, idealWidth: 500, maxWidth: 640, minHeight: 300, idealHeight: 440, maxHeight: 640)

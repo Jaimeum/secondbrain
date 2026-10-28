@@ -35,7 +35,7 @@ struct WikiBrowser: View {
                 } else {
                     WikiPageList(groups: groups, selection: $selection)
                         .frame(width: ContentLayout.listWidth(for: geo.size.width))
-                    Rectangle().fill(Brand.color.line).frame(width: 1)
+                    ContentLayout.columnRule
                     WikiPagePane(selection: $selection,
                                  title: WikiGrouping.title(of: selection, in: pages, projectName: projectName))
                 }
@@ -85,6 +85,10 @@ struct WikiBrowser: View {
 /// Shared widths of the two-column content views (§15.2/§15.3: list 200–260, page takes the rest).
 enum ContentLayout {
     static func listWidth(for total: CGFloat) -> CGFloat { min(260, max(200, (total * 0.3).rounded())) }
+
+    /// The rule between a list column and its detail (§15.1 calm surfaces): the shared `BrandColumnDivider`, so every
+    /// split (Ask, People, Files, Graph, project tabs, Mail, Meetings) uses one inset `lineSoft` capsule.
+    static var columnRule: some View { BrandColumnDivider() }
 }
 
 // MARK: - Page list
@@ -202,9 +206,10 @@ struct ContentListRow<Trailing: View>: View {
         .padding(.horizontal, Brand.spacing.s)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-            .fill(isSelected ? Brand.color.accentSoft : (hovering ? Brand.color.cardAlt.opacity(0.55) : Color.clear)))
+            .fill(isSelected ? Brand.color.accentSoft : (hovering ? Brand.color.hover : Color.clear)))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
         .onTapGesture(perform: action)
         .help(title)
         .accessibilityElement(children: .combine)
@@ -246,7 +251,6 @@ struct WikiPagePane: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             // v0.7 (§17.4): a thread page opened in Contenido shows its conversation on top too.
             if let key = selection.flatMap(ThreadConversationView.threadKey(forPage:)) {
                 ThreadConversationView(threadKey: key, paneHeight: height)
@@ -286,13 +290,10 @@ struct WikiPagePane: View {
                 }
             } label: {
                 Image(systemName: "chevron.left")
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(Brand.color.text2)
+            .buttonStyle(.brandIcon)
             .disabled(history.isEmpty)
-            .opacity(history.isEmpty ? 0 : 1)   // keeps its 22 pt: the title never shifts
+            .opacity(history.isEmpty ? 0 : 1)   // keeps its 28 pt: the title never shifts
             .accessibilityHidden(history.isEmpty)
             .help(L("wiki.back"))
 
@@ -371,11 +372,11 @@ struct WikiPagePane: View {
             }
             Button { showInFinder(path) } label: { Label(L("wiki.showInFinder"), systemImage: "folder") }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(Brand.color.text2)
+            Image(systemName: "ellipsis")
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
         .menuIndicator(.hidden)
+        .buttonStyle(.brandIcon)
         .fixedSize()
         .help(L("project.more"))
     }
@@ -384,11 +385,8 @@ struct WikiPagePane: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(Brand.font(13))
-                .foregroundStyle(Brand.color.text2)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.brandIcon)
         .help(help)
         .accessibilityLabel(Text(help))
     }

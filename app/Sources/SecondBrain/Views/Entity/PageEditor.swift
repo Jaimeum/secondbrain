@@ -30,7 +30,6 @@ struct PageEditorHost: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if !Corrections.isEditable(path) || unreadable {
                 Text(L(unreadable ? "editor.notText" : "editor.notEditable"))
                     .font(Brand.body)
@@ -38,9 +37,10 @@ struct PageEditorHost: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 if let yaml = frontMatter { frontMatterSection(yaml) }
+                // The page as a soft rounded sheet of `card` inset on `surface` (not a full-bleed white band).
                 PlainTextEditor(text: $content)
-                    .background(Brand.color.card)
-                    .overlay { if !loaded { ProgressView().controlSize(.small) } }
+                    .overlay { if !loaded { BrandLoader(size: 16) } }
+                    .modifier(EditorTile(fill: Brand.color.card))
                 footer
             }
         }
@@ -60,7 +60,7 @@ struct PageEditorHost: View {
                 .help(title)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(L("common.cancel")) { dismiss() }
-                .buttonStyle(.brandSecondary)
+                .buttonStyle(.brandGhost)
                 .keyboardShortcut(.cancelAction)
             Button(L("editor.save")) { save() }
                 .buttonStyle(.brandPrimary)
@@ -68,8 +68,9 @@ struct PageEditorHost: View {
                 .disabled(!loaded || unreadable || !Corrections.isEditable(path))
                 .help(L("editor.saveHelp"))
         }
-        .padding(.horizontal, Brand.spacing.l)
-        .padding(.vertical, Brand.spacing.m)
+        .padding(.horizontal, Brand.spacing.xl)
+        .padding(.top, Brand.spacing.l)
+        .padding(.bottom, Brand.spacing.m)
     }
 
     /// Front-matter folded by default: one line "Propiedades · n líneas"; unfolded, its own small editor.
@@ -98,9 +99,9 @@ struct PageEditorHost: View {
             if showsFrontMatter {
                 PlainTextEditor(text: Binding(get: { frontMatter ?? "" }, set: { frontMatter = $0 }))
                     .frame(height: 140)
-                    .background(Brand.color.cardAlt.opacity(0.5))
+                    .modifier(EditorTile(fill: Brand.color.cardAlt))
+                    .padding(.bottom, Brand.spacing.s)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
         }
     }
 
@@ -132,8 +133,9 @@ struct PageEditorHost: View {
             Spacer(minLength: 0)
         }
         .font(Brand.caption)
-        .padding(.horizontal, Brand.spacing.l)
-        .padding(.vertical, Brand.spacing.s)
+        .padding(.horizontal, Brand.spacing.xl)
+        .padding(.top, Brand.spacing.m)
+        .padding(.bottom, Brand.spacing.l)
     }
 
     private func load() async {
@@ -257,5 +259,21 @@ struct PlainTextEditor: NSViewRepresentable {
             guard let view = notification.object as? NSTextView else { return }
             text.wrappedValue = view.string
         }
+    }
+}
+
+/// A text editor inside the sheet as an inset rounded tile (`card` for the page, `cardAlt` for the properties) with a
+/// `lineSoft` edge, so no full-bleed white area meets the sheet's edges (§15.1 calm surfaces).
+private struct EditorTile: ViewModifier {
+    let fill: Color
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
+        content
+            .padding(10)
+            .background(fill, in: shape)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
+            .padding(.horizontal, Brand.spacing.l)
     }
 }

@@ -90,17 +90,18 @@ struct SearchPalette: View {
                     .onTapGesture(perform: close)
                 VStack(spacing: 0) {
                     field
+                    // No rules between field, list and footer (§15.1): the list follows the field with a little
+                    // space, and the footer is a faint tonal band clipped by the palette's rounded shape.
                     if !rows.isEmpty || !trimmed.isEmpty {
-                        Rectangle().fill(Brand.color.line).frame(height: 1)
                         list(groups: groups, rows: rows, maxHeight: maxList)
                     }
-                    Rectangle().fill(Brand.color.line).frame(height: 1)
                     footer
+                        .background(Brand.color.cardAlt.opacity(0.4))
                 }
                 .frame(width: min(Self.width, max(320, geo.size.width - 32)))
                 .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.sheet, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Brand.radius.sheet, style: .continuous)
-                    .strokeBorder(Brand.color.line, lineWidth: 1))
+                    .strokeBorder(Brand.color.lineSoft, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: Brand.radius.sheet, style: .continuous))
                 .brandOverlayShadow()
                 .padding(.top, top)
@@ -165,6 +166,7 @@ struct SearchPalette: View {
                 }
                 .padding(6)
             }
+            .scrollIndicators(.never)   // no legacy scroller track against the rounded edge; arrows and the wheel scroll
             .frame(height: height)
             .onChange(of: selected) { _, new in
                 if rows.indices.contains(new) { proxy.scrollTo(rows[new].id) }

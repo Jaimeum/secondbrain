@@ -148,7 +148,6 @@ struct ChatView: View {
             // The conversation's title and "Nueva conversación": no empty band before the first question.
             if !model.messages.isEmpty {
                 topBar
-                Rectangle().fill(Brand.color.line).frame(height: 1)
             }
             ScrollViewReader { proxy in
                 ScrollView {
@@ -172,8 +171,15 @@ struct ChatView: View {
                     if let last = model.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             inputBar
+                // The conversation fades into the input instead of meeting it at a full-width rule (§15.1).
+                .overlay(alignment: .top) {
+                    LinearGradient(colors: [Brand.color.surface.opacity(0), Brand.color.surface],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 16)
+                        .offset(y: -16)
+                        .allowsHitTesting(false)
+                }
         }
         .background(Brand.color.surface)
         .sheet(isPresented: $showReconnect) {
@@ -192,11 +198,8 @@ struct ChatView: View {
             Spacer(minLength: Brand.spacing.s)
             Button(action: onNew) {
                 Image(systemName: "square.and.pencil")
-                    .foregroundStyle(Brand.color.text2)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.brandIcon)
             .help(L("ask.new"))
             .accessibilityLabel(Text(L("ask.new")))
         }
@@ -223,13 +226,8 @@ struct ChatView: View {
                         Text(L(key)).foregroundStyle(Brand.color.text).multilineTextAlignment(.leading)
                     }
                     .font(Brand.body)
-                    .padding(.horizontal, Brand.spacing.m)
-                    .padding(.vertical, Brand.spacing.s)
-                    .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ChatSuggestionStyle())
             }
         }
         .padding(.top, Brand.spacing.xxl)
@@ -238,13 +236,8 @@ struct ChatView: View {
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: Brand.spacing.s) {
             TextField(L("chat.placeholder"), text: $model.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(Brand.body)
                 .lineLimit(1...6)
-                .padding(.horizontal, Brand.spacing.m)
-                .padding(.vertical, 9)
-                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
+                .brandField()
                 .onSubmit { model.ask(engine: state.engine, projectSlug: projectSlug) }
             if model.isAsking {
                 Button { model.stop() } label: {
@@ -266,6 +259,31 @@ struct ChatView: View {
         }
         .padding(.horizontal, Brand.spacing.l)
         .padding(.vertical, Brand.spacing.m)
+    }
+}
+
+/// An empty-state suggestion: a soft capsule on `card` with a `lineSoft` edge and the `hover` veil under the pointer,
+/// a prompt to tap rather than a form field.
+private struct ChatSuggestionStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { SuggestionBody(configuration: configuration) }
+
+    private struct SuggestionBody: View {
+        let configuration: ButtonStyle.Configuration
+        @ViewState private var hovering = false
+
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
+            configuration.label
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(shape.fill(Brand.color.card))
+                .overlay { if hovering { shape.fill(Brand.color.hover) } }
+                .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
+                .contentShape(shape)
+                .opacity(configuration.isPressed ? 0.92 : 1)
+                .onHover { hovering = $0 }
+                .animation(Brand.motion.fast, value: hovering)
+        }
     }
 }
 
@@ -349,7 +367,7 @@ struct MessageView: View {   // v0.3: also used by MeetingPrepView
             .padding(Brand.spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
+            .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.lineSoft))
             .task(id: message.isStreaming) { await findEmailCitations() }
         }
     }
@@ -463,9 +481,12 @@ struct MarkdownText: View {
                 inline(text)
             }
         case .quote(let text):
+            // A soft `accentSoft` panel, as wiki.css draws blockquotes: one look for the same content.
             inline(text)
-                .padding(.leading, 10)
-                .overlay(alignment: .leading) { Rectangle().fill(Brand.color.sage).frame(width: 3) }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
         case .paragraph(let text):
             inline(text)
         case .code(let text):

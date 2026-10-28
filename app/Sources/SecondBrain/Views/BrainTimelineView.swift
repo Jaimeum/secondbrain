@@ -24,7 +24,6 @@ struct BrainTimelineView: View {
             VStack(spacing: 0) {
                 if !presentKinds.isEmpty {
                     filterBar(presentKinds, proxy)
-                    Rectangle().fill(Brand.color.line).frame(height: 1)
                 }
                 if !loaded {
                     BrandLoader(size: 28).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -44,7 +43,7 @@ struct BrainTimelineView: View {
                                         Button(showAllUpcoming ? L("content.showLess") : L("home.seeAllTasks", total)) {
                                             withAnimation(Brand.motion.animation(fast: true)) { showAllUpcoming.toggle() }
                                         }
-                                        .buttonStyle(.borderless)
+                                        .buttonStyle(.plain)
                                         .font(Brand.caption)
                                         .foregroundStyle(Brand.color.accent)
                                         .padding(.horizontal, Brand.spacing.content + 80)
@@ -106,7 +105,13 @@ struct BrainTimelineView: View {
             .padding(.horizontal, Brand.spacing.content)
             .frame(maxWidth: .infinity, minHeight: TimelineGroups.fullHeaderHeight, alignment: .leading)
             .background(Brand.color.surface)
-            .overlay(alignment: .bottom) { Rectangle().fill(Brand.color.line).frame(height: 1) }
+            // The pinned header fades into the days scrolling under it instead of cutting them with a rule (§15.1).
+            .overlay(alignment: .bottom) {
+                LinearGradient(colors: [Brand.color.surface, Brand.color.surface.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 10)
+                    .offset(y: 10)
+                    .allowsHitTesting(false)
+            }
     }
 
     @ViewBuilder private func dayView(_ day: TimelineGroups.Day) -> some View {
@@ -136,7 +141,7 @@ struct BrainTimelineView: View {
             }
             .padding(.leading, 14)
             .overlay(alignment: .leading) {
-                Rectangle().fill(Brand.color.line).frame(width: 2)
+                Capsule().fill(Brand.color.lineSoft).frame(width: 2).padding(.vertical, 4)
             }
         }
         .padding(.horizontal, Brand.spacing.content)
@@ -281,10 +286,11 @@ struct TimelineKindMenu: View {
                 }
             }
         } label: {
-            BrandChip(text: label, symbol: "line.3.horizontal.decrease", active: !selected.isEmpty)
+            BrandMenuChip(text: label, symbol: "line.3.horizontal.decrease", active: !selected.isEmpty)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
         .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
         .help(L("timeline.filterHelp"))
     }
@@ -319,7 +325,7 @@ private struct EntryRow: View {
                 .foregroundStyle(Brand.color.text2)
                 .frame(width: 26, height: 26)
                 .background(Circle().fill(Brand.color.card))
-                .overlay(Circle().strokeBorder(Brand.color.line))
+                .overlay(Circle().strokeBorder(Brand.color.lineSoft))
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }   // an image has no text baseline
                 .offset(x: -28)
                 .padding(.trailing, -28)

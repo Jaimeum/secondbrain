@@ -15,8 +15,8 @@ struct OwnerNameField: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(L("owner.label")).font(Brand.callout).foregroundStyle(Brand.color.text)
             TextField("", text: $name, prompt: Text(L("owner.placeholder")))
-                .textFieldStyle(.roundedBorder)
                 .onSubmit(save)
+                .brandField()
             if let saveError { OwnerSaveError(message: saveError) }
             if showsHint {
                 Text(L("owner.hint"))
@@ -104,8 +104,8 @@ struct OwnerAddressesField: View {
             }
             TextField("", text: $text, prompt: Text(accountEmails.isEmpty ? L("owner.emailsPlaceholder")
                                                                            : L("settings.ownerEmails.extraPlaceholder")))
-                .textFieldStyle(.roundedBorder)
                 .onSubmit(save)
+                .brandField()
             if let saveError { OwnerSaveError(message: saveError) }
             if showsHint {
                 Text(accountEmails.isEmpty ? L("owner.emailsHint") : L("settings.ownerEmails.hint"))

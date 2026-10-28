@@ -75,7 +75,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 16) {
                 OwnerNameField()
                 OwnerAddressesField()
-                Rectangle().fill(Brand.color.line).frame(height: 1).padding(.vertical, 4)
+                Color.clear.frame(height: 8)   // space, not a hairline, between "you" and the first project (§15.1)
                 ProjectFormFields(form: $form)
                 if let projectError { Text(projectError).foregroundStyle(Brand.color.danger) }
             }
@@ -88,7 +88,6 @@ struct OnboardingView: View {
     /// Pinned under the scroll view, so the primary button is never below the fold.
     private var footer: some View {
         VStack(spacing: 0) {
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             HStack(spacing: 8) {
                 if step != .welcome && step != .done {
                     Button(L("common.back")) { go(-1) }
@@ -277,13 +276,10 @@ private struct LanguageSwitch: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        Picker("", selection: Binding(get: { state.config.uiLanguage }, set: { lang in state.update { $0.uiLanguage = lang } })) {
-            Text(verbatim: "Español").tag("es")
-            Text(verbatim: "English").tag("en")
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
+        BrandSegmentedControl(options: [("es", "Español"), ("en", "English")],
+                              selection: Binding(get: { state.config.uiLanguage }, set: { lang in state.update { $0.uiLanguage = lang } }),
+                              minSegmentWidth: 76)
+            .fixedSize()
     }
 }
 

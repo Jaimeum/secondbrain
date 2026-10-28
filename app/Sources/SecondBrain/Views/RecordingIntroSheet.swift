@@ -85,10 +85,12 @@ struct RecordingIntroSheet: View {
                     ConsentCard(consent: $consent)
                     ModelsStatusLine().padding(.horizontal, 4)
                 }
-                .padding(20)
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
+                .padding(.bottom, 12)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack(spacing: 8) {
+            .brandScrollEdgeFade(.bottom)
+            BrandSheetFooter {
                 if !ready {
                     Text(consent ? L("record.intro.needsPermission") : L("record.intro.needsConsent"))
                         .font(Brand.caption)
@@ -97,16 +99,13 @@ struct RecordingIntroSheet: View {
                 }
                 Spacer(minLength: 8)
                 Button(L("common.cancel")) { close() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("record.start")) { start() }
                     .buttonStyle(.brandRecord)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!ready)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .background(Brand.color.bg)
         }
         .background(Brand.color.surface)
         .frame(minWidth: 520, idealWidth: 560, minHeight: 440, idealHeight: 520)
@@ -266,7 +265,7 @@ struct ConsentCard: View {
                     .foregroundStyle(Brand.color.text2)
                     .fixedSize(horizontal: false, vertical: true)
                 Toggle(L("onb.consent.accept"), isOn: $consent)
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.brandCheckbox)
                     .padding(.top, 2)
             }
             Spacer(minLength: 0)

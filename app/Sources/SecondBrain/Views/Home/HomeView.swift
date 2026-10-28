@@ -147,14 +147,13 @@ struct HomeView: View {
         .background(Brand.color.surface)
         .navigationTitle(L("home.title"))
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showHistory = true
-                } label: {
-                    Label(L("home.history"), systemImage: "clock.arrow.circlepath")
-                        .labelStyle(.titleAndIcon)
-                }
-                .help(L("home.history"))
+            // A ghost button with no system bordered box (and, on macOS 26+, no shared glass capsule) so the
+            // toolbar stays as calm as the blended titlebar (§15.1).
+            if #available(macOS 26, *) {
+                ToolbarItem(placement: .primaryAction) { historyButton }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .primaryAction) { historyButton }
             }
         }
         .sheet(isPresented: $showHistory) { historySheet }
@@ -213,11 +212,23 @@ struct HomeView: View {
                 .frame(height: 44)
                 .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
-                    .strokeBorder(Brand.color.line, lineWidth: 1))
+                    .strokeBorder(Brand.color.lineSoft, lineWidth: 1))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
+    }
+
+    /// "Historial" in the toolbar: a ghost button with title and icon.
+    private var historyButton: some View {
+        Button {
+            showHistory = true
+        } label: {
+            Label(L("home.history"), systemImage: "clock.arrow.circlepath")
+                .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(.brandGhost)
+        .help(L("home.history"))
     }
 
     // MARK: Por ordenar
@@ -299,7 +310,7 @@ struct HomeView: View {
         .padding(.horizontal, Brand.spacing.m)
         .padding(.vertical, 8)
         .background(Capsule().fill(Brand.color.card))
-        .overlay(Capsule().strokeBorder(Brand.color.line))
+        .overlay(Capsule().strokeBorder(Brand.color.lineSoft))
         .shadow(color: Brand.color.shadow, radius: 12, y: 4)
         .accessibilityElement(children: .combine)
     }
@@ -387,11 +398,10 @@ struct HomeView: View {
                 Text(L("home.history")).font(Brand.section).foregroundStyle(Brand.color.text)
                 Spacer()
                 Button(L("common.close")) { showHistory = false }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
             .padding(12)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             ActivityView(projectSlug: nil) { path in
                 showHistory = false
                 state.open(path: path)

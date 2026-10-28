@@ -39,8 +39,9 @@ struct ThreadConversationView: View {
                     if expanded {
                         messages(loaded)
                     }
-                    Rectangle().fill(Brand.color.line).frame(height: 1)
                 }
+                // Space, not a full-width rule, between the conversation and the ficha under it (§15.1).
+                .padding(.bottom, Brand.spacing.m)
                 .background(Brand.color.surface)
             } else {
                 Color.clear.frame(height: 0)
@@ -177,7 +178,7 @@ struct ThreadMessageCard: View {
                 Button(showAll ? L("thread.showLess") : L("thread.showMore")) {
                     withAnimation(Brand.motion.animation(fast: true)) { showAll.toggle() }
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .font(Brand.font(11, .medium))
                 .foregroundStyle(Brand.color.accent)
             }
@@ -186,12 +187,12 @@ struct ThreadMessageCard: View {
             }
         }
         .padding(Brand.spacing.m)
-        // Mine: `cardAlt` (clearly apart from the others' `card` in light and dark, and text2 stays AA on it) with an
-        // accent outline.
+        // Mine: `cardAlt` (clearly apart from the others' `card` in light and dark, and text2 stays AA on it) with no
+        // outline: the tone alone sets it apart. Theirs: `card` with a `lineSoft` edge.
         .background(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
             .fill(message.isFromOwner ? Brand.color.cardAlt : Brand.color.card))
         .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
-            .strokeBorder(message.isFromOwner ? Brand.color.accent.opacity(0.55) : Brand.color.line))
+            .strokeBorder(message.isFromOwner ? Color.clear : Brand.color.lineSoft))
         .padding(.leading, message.isFromOwner ? 32 : 0)
         .padding(.trailing, message.isFromOwner ? 0 : 32)
         .accessibilityElement(children: .contain)

@@ -69,7 +69,7 @@ struct ProjectContentView: View {
             HStack(spacing: 0) {
                 listColumn(processing: processing)
                     .frame(width: ContentLayout.listWidth(for: geo.size.width))
-                Rectangle().fill(Brand.color.line).frame(width: 1)
+                BrandColumnDivider()
                 pageColumn
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -152,7 +152,7 @@ struct ProjectContentView: View {
                         Button(L("timeline.today")) {
                             withAnimation(Brand.motion.animation()) { proxy.scrollTo(TimelineGroups.topAnchor, anchor: .top) }
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.plain)
                         .font(Brand.font(11, .medium))
                         .foregroundStyle(Brand.color.accent)
                         .help(L("timeline.todayHelp"))
@@ -160,7 +160,6 @@ struct ProjectContentView: View {
                     .padding(.horizontal, Brand.spacing.m)
                     .padding(.bottom, Brand.spacing.xs)
                 }
-                Rectangle().fill(Brand.color.line).frame(height: 1)
                 if !entriesLoaded && processing.isEmpty {
                     BrandLoader(size: 24).frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if feed.isEmpty && processing.isEmpty {
@@ -233,7 +232,7 @@ struct ProjectContentView: View {
         Button(expanded ? L("content.showLess") : L("home.seeAllTasks", count)) {
             withAnimation(Brand.motion.animation(fast: true)) { toggle() }
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .font(Brand.caption)
         .foregroundStyle(Brand.color.accent)
         .padding(.horizontal, Brand.spacing.s)
@@ -456,7 +455,7 @@ private struct ProcessingRow: View {
                     smallIcon("arrow.clockwise", help: L("sources.retry"), action: onRetry)
                 } else {
                     Button(L("sources.retry"), action: onRetry)
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.plain)
                         .font(Brand.font(11, .medium))
                         .foregroundStyle(Brand.color.accent)
                         .lineLimit(1)
@@ -475,7 +474,7 @@ private struct ProcessingRow: View {
                 .frame(width: 18, height: 18)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(Text(help))
     }
@@ -539,8 +538,9 @@ private struct ProcessingPanel: View {
 
 // MARK: - Brand segmented control
 
-/// A two-to-four option switcher in brand colors: `cardAlt` track, selected = `card` with a hairline. Never wider
-/// than its container; labels truncate.
+/// A two-to-seven option switcher in brand colors (§15.1 organic shapes): a faint `hover` capsule track, the
+/// selected segment a `card` capsule with a `lineSoft` edge. No sand slab, no hard stroke. Never wider than its
+/// container; labels truncate.
 struct BrandSegmentedControl<Value: Hashable>: View {
     let options: [(Value, String)]
     @Binding var selection: Value
@@ -558,7 +558,7 @@ struct BrandSegmentedControl<Value: Hashable>: View {
                 } label: {
                     Text(title)
                         .font(Brand.font(height > 24 ? 13 : 12, selected ? .semibold : .medium))
-                        // Unselected: the text token softened, still ≥ 4.5:1 on the cardAlt track (text2 is 3.6:1).
+                        // Unselected: the text token softened, still ≥ 4.5:1 on the faint track.
                         .foregroundStyle(selected ? Brand.color.text : Brand.color.text.opacity(0.78))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -567,19 +567,19 @@ struct BrandSegmentedControl<Value: Hashable>: View {
                         .frame(height: height)
                         .background {
                             if selected {
-                                RoundedRectangle(cornerRadius: Brand.radius.control - 2, style: .continuous)
+                                Capsule(style: .continuous)
                                     .fill(Brand.color.card)
-                                    .overlay(RoundedRectangle(cornerRadius: Brand.radius.control - 2, style: .continuous)
-                                        .strokeBorder(Brand.color.line))
+                                    .overlay(Capsule(style: .continuous).strokeBorder(Brand.color.lineSoft))
+                                    .shadow(color: Brand.color.shadow.opacity(0.35), radius: 2, x: 0, y: 1)
                             }
                         }
-                        .contentShape(Rectangle())
+                        .contentShape(Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
-        .padding(2)
-        .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+        .padding(3)
+        .background(Brand.color.hover, in: Capsule(style: .continuous))
     }
 }

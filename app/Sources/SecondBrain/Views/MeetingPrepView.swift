@@ -92,7 +92,7 @@ struct MeetingPrepView: View {
             }
             .padding(.horizontal, Brand.spacing.content)
             .frame(minHeight: 48)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.bottom, Brand.spacing.xs)
         }
         .background(Brand.color.surface)
     }
@@ -337,13 +337,8 @@ struct MeetingPrepView: View {
                 }
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField(L("prep.askPlaceholder"), text: $chat.draft, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(Brand.body)
                         .lineLimit(1...4)
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).fill(Brand.color.card))
-                        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-                            .strokeBorder(Brand.color.line, lineWidth: 1))
+                        .brandField()
                         .onSubmit { chat.ask(engine: state.engine, projectSlug: projectSlug) }
                     if chat.isAsking {
                         Button { chat.stop() } label: { Image(systemName: "stop.circle.fill").font(Brand.font(22)) }

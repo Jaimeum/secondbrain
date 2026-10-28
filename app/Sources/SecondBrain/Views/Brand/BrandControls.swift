@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: Buttons
 
 /// Shared shape of the brand buttons: radius `control`, height 28 (34 with `.controlSize(.large)`), one line,
-/// pressed = 0.92 opacity, disabled = 0.45 opacity, no springs.
+/// hover = a faint `hover` veil, pressed = 0.92 opacity, disabled = 0.45 opacity, no springs.
 private struct BrandButtonBody: View {
     let configuration: ButtonStyle.Configuration
     let background: Color
@@ -11,6 +11,7 @@ private struct BrandButtonBody: View {
     var border: Color? = nil
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
+    @ViewState private var hovering = false
 
     var body: some View {
         let large = controlSize == .large || controlSize == .extraLarge
@@ -23,10 +24,13 @@ private struct BrandButtonBody: View {
             .padding(.horizontal, large ? 16 : 12)
             .frame(minHeight: large ? 34 : 28, maxHeight: large ? 34 : 28)
             .background(shape.fill(background))
+            .overlay { if hovering && isEnabled { shape.fill(Brand.color.hover) } }
             .overlay { if let border { shape.strokeBorder(border, lineWidth: 1) } }
             .contentShape(shape)
             .opacity(isEnabled ? (configuration.isPressed ? 0.92 : 1) : 0.45)
+            .onHover { hovering = $0 }
             .animation(Brand.motion.fast, value: configuration.isPressed)
+            .animation(Brand.motion.fast, value: hovering)
     }
 }
 
@@ -37,11 +41,19 @@ struct BrandPrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Secondary action: `cardAlt` background, `text` label, hairline `line` border.
+/// Secondary action: a soft `cardAlt` tone with the `text` label and no border (§15.1 quiet controls: a tone, not
+/// an outline, sets it apart from the primary).
 struct BrandSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        BrandButtonBody(configuration: configuration, background: Brand.color.cardAlt, foreground: Brand.color.text,
-                        border: Brand.color.line)
+        BrandButtonBody(configuration: configuration, background: Brand.color.cardAlt, foreground: Brand.color.text)
+    }
+}
+
+/// Ghost action (Cancelar, Cerrar, quiet toolbar-like buttons inside content): no fill at rest, `text2` label, the
+/// `hover` veil under the pointer.
+struct BrandGhostButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        BrandButtonBody(configuration: configuration, background: .clear, foreground: Brand.color.text2)
     }
 }
 
@@ -58,6 +70,10 @@ extension ButtonStyle where Self == BrandPrimaryButtonStyle {
 
 extension ButtonStyle where Self == BrandSecondaryButtonStyle {
     static var brandSecondary: BrandSecondaryButtonStyle { BrandSecondaryButtonStyle() }
+}
+
+extension ButtonStyle where Self == BrandGhostButtonStyle {
+    static var brandGhost: BrandGhostButtonStyle { BrandGhostButtonStyle() }
 }
 
 extension ButtonStyle where Self == BrandRecordButtonStyle {
@@ -97,7 +113,8 @@ struct BrandChip: View {
 
 // MARK: Card
 
-/// Container: `card` background, 1 px `line` border, radius `card`. No shadow (shadows are for overlays only).
+/// Container: `card` background, 1 px `lineSoft` border, radius `card`. No shadow (shadows are for overlays only). The
+/// tone step from `surface` to `card` does the separating; the edge only keeps the card's shape in dark mode.
 struct BrandCard<Content: View>: View {
     let padding: CGFloat
     let content: Content
@@ -113,7 +130,7 @@ struct BrandCard<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(shape.fill(Brand.color.card))
-            .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
+            .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
     }
 }
 
@@ -154,5 +171,142 @@ struct BrandSectionHeader<Trailing: View>: View {
 extension BrandSectionHeader where Trailing == EmptyView {
     init(title: String, count: Int? = nil) {
         self.init(title: title, count: count) { EmptyView() }
+    }
+}
+
+// MARK: Text field
+
+/// The brand text field (§15.1): plain text on `card`, radius `field`, 12 × 9 pt of inner room, a `lineSoft` edge at
+/// rest (`line` under the pointer) and, when focused, a soft halo: a 3 pt `focusRing` glow outside the field and a
+/// `focusBorder` edge. Never the system focus ring and never a dark stroke. Works for one-line and `axis: .vertical`
+/// fields alike, so a form's fields share one look and one height per line.
+struct BrandFieldStyle: ViewModifier {
+    @FocusState private var focused: Bool
+    @ViewState private var hovering = false
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
+        content
+            .textFieldStyle(.plain)
+            .font(Brand.body)
+            .foregroundStyle(Brand.color.text)
+            .focused($focused)
+            .focusEffectDisabled()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(shape.fill(Brand.color.card))
+            .overlay(shape.strokeBorder(focused ? Brand.color.focusBorder : hovering ? Brand.color.line : Brand.color.lineSoft,
+                                        lineWidth: 1))
+            .brandFocusHalo(focused)
+            .onHover { hovering = $0 }
+            .animation(Brand.motion.fast, value: hovering)
+    }
+}
+
+extension View {
+    /// `BrandFieldStyle` on a `TextField` (or `TextEditor`-like content): the one text-field look of the app.
+    func brandField() -> some View { modifier(BrandFieldStyle()) }
+
+    /// The soft focus halo of `brandField`, for any control that tracks its own focus: a `focusRing` glow 3 pt
+    /// outside the view's bounds (corner `cornerRadius` + 3) while `active`.
+    func brandFocusHalo(_ active: Bool, cornerRadius: CGFloat = Brand.radius.field) -> some View {
+        background {
+            RoundedRectangle(cornerRadius: cornerRadius + 3, style: .continuous)
+                .fill(Brand.color.focusRing)
+                .padding(-3)
+                .opacity(active ? 1 : 0)
+        }
+        .animation(Brand.motion.fast, value: active)
+    }
+}
+
+// MARK: Form label
+
+/// A form field's label (12 medium, `text2`) with an optional hint under it (`caption`, `text2`).
+struct BrandFieldLabel: View {
+    let title: String
+    var hint: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(Brand.font(12, .medium))
+                .foregroundStyle(Brand.color.text2)
+            if let hint {
+                Text(hint)
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+// MARK: Icon button
+
+/// Icon-only action in a header (‹ Atrás, ✕ Cerrar, ⋯): a 28 × 28 round hit area, `text2` glyph, a `hover` circle
+/// under the pointer and the pressed veil of the other brand buttons. One quiet, round affordance for every header.
+struct BrandIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { BrandIconButtonBody(configuration: configuration) }
+}
+
+private struct BrandIconButtonBody: View {
+    let configuration: ButtonStyle.Configuration
+    @Environment(\.isEnabled) private var isEnabled
+    @ViewState private var hovering = false
+
+    var body: some View {
+        configuration.label
+            .labelStyle(.iconOnly)
+            .font(Brand.callout)
+            .foregroundStyle(Brand.color.text2)
+            .frame(width: 28, height: 28)
+            .background(Circle().fill(hovering && isEnabled ? Brand.color.hover : .clear))
+            .contentShape(Circle())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.45)
+            .onHover { hovering = $0 }
+            .animation(Brand.motion.fast, value: configuration.isPressed)
+            .animation(Brand.motion.fast, value: hovering)
+    }
+}
+
+extension ButtonStyle where Self == BrandIconButtonStyle {
+    static var brandIcon: BrandIconButtonStyle { BrandIconButtonStyle() }
+}
+
+// MARK: Menu chip
+
+/// The label of a filter or sort menu: a `BrandChip` look with the value first and a faint `text3` chevron after it
+/// ("Tipo ⌄", "2 proyectos ⌄"). Pair it with `.menuStyle(.button)`, `.menuIndicator(.hidden)` and
+/// `.buttonStyle(.plain)` so the capsule survives (a borderless menu flattens custom labels) and no system indicator
+/// or tint shows. `text` nil = icon-only (compact toolbars).
+struct BrandMenuChip: View {
+    let text: String?
+    var symbol: String? = nil
+    var active: Bool = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .imageScale(.small)
+                    .foregroundStyle(active ? Brand.color.accent : Brand.color.text2)
+            }
+            if let text {
+                Text(text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(active ? Brand.color.accent : Brand.color.text)
+            }
+            Image(systemName: "chevron.down")
+                .imageScale(.small)
+                .font(Brand.font(9, .semibold))
+                .foregroundStyle(active ? Brand.color.accent.opacity(0.7) : Brand.color.text3)
+        }
+        .font(Brand.font(11, .medium))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(active ? Brand.color.accentSoft : Brand.color.cardAlt))
+        .contentShape(Capsule())
     }
 }

@@ -36,11 +36,9 @@ struct GitHubSettingsPage: View {
                 if github.isConnected {
                     SettingsDivider()
                     SettingsRow(title: L("github.interval")) {
-                        Picker("", selection: intervalBinding) {
+                        BrandMenuPicker(title: GitHubModel.intervalTitle(intervalBinding.wrappedValue), selection: intervalBinding) {
                             ForEach(GitHubLimits.syncIntervalChoices, id: \.self) { Text(GitHubModel.intervalTitle($0)).tag($0) }
                         }
-                        .labelsHidden()
-                        .fixedSize()
                     }
                     SettingsDivider()
                     SettingsRow(title: L("github.lastSync")) {
@@ -249,8 +247,8 @@ private struct GitHubTokenGroup: View {
                 if expanded {
                     HStack(spacing: 8) {
                         SecureField(L("github.token"), text: $token)
-                            .textFieldStyle(.roundedBorder)
                             .onSubmit(saveToken)
+                            .brandField()
                         if saving {
                             BrandLoader(size: 16)
                         } else {
@@ -473,7 +471,7 @@ struct GitHubConnectSheet: View {
                     .padding(.horizontal, 22)
                     .padding(.vertical, 12)
                     .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
+                    .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.lineSoft))
             }
             .buttonStyle(.plain)
             .help(L("github.code.copy"))
@@ -621,10 +619,9 @@ struct GitHubOrgHelpSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
-            .padding(.bottom, 14)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.horizontal, 28)
+            .padding(.top, 28)
+            .padding(.bottom, 6)
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -659,22 +656,23 @@ struct GitHubOrgHelpSheet: View {
                                 }
                                 .buttonStyle(.brandSecondary)
                             }
-                            Link(L("github.token.create"), destination: GitHubAuth.personalTokenHelpURL)
-                                .foregroundStyle(Brand.color.accent)
+                            Button(L("github.token.create")) { NSWorkspace.shared.open(GitHubAuth.personalTokenHelpURL) }
+                                .buttonStyle(.settingsExternalLink)
                         }
                     }
                 }
-                .padding(24)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack {
+            .brandScrollEdgeFade(.top)
+            .brandScrollEdgeFade(.bottom)
+            BrandSheetFooter {
                 Spacer()
                 Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandPrimary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.defaultAction)
             }
-            .padding(12)
         }
         .frame(minWidth: 520, idealWidth: 560, minHeight: 380, idealHeight: 520)
         .background(Brand.color.surface)

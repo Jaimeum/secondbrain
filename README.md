@@ -159,7 +159,7 @@ scripts/release.sh <versión>          # publica en GitHub Releases
 - **Marca:** el kit está en `docs/brand/` y su uso en código en `docs/brand/USAGE.md`; todos los colores y fuentes salen de `app/Sources/SecondBrain/Support/Brand.swift` (y de las variables `:root` de `wiki.css`/`graph.css`). Reglas de UX y layout: `docs/CONTRACT.md` §15 (v0.5) y §16 (v0.6, vinculante).
 - **Nombre:** el ejecutable y el paquete siguen siendo `SecondBrain` / `SecondBrain.app`; lo que ve el usuario (`CFBundleName`, `CFBundleDisplayName`, textos) es `secondbrain`.
 - **Pruebas:** `sb selftest` (incluye ruteo y grafo), `sb github selftest`, `sb entity selftest` (índice y backlinks), `sb chat selftest` (conversaciones guardadas), `sb facts selftest` (ediciones propuestas y `facts.md`) y `sb search selftest` (texto completo), `sb attachments selftest`, `sb threads selftest`, `sb files selftest`, `sb dump selftest` (Agregar al proyecto), `sb replies selftest` y `sb backfill selftest`. `sb chat list [--project]` lista conversaciones guardadas.
-- **Capturas para revisar la UI:** `SB_SNAPSHOT_DIR=<carpeta>` renderiza cada vista a PNG y sale; con `SB_SNAPSHOT_WINDOW=1` renderiza la ventana completa (1100×720 y 920×620, claro y oscuro); `SB_SNAPSHOT_ONLY=<prefijo>` limita cuáles; `SB_DEMO_ACCOUNTS=1` y `SB_DEMO_GITHUB=1` usan datos de ejemplo.
+- **Capturas para revisar la UI:** `SB_SNAPSHOT_DIR=<carpeta>` renderiza cada vista a PNG y sale; con `SB_SNAPSHOT_WINDOW=1` renderiza la ventana completa (1100×720 y 920×620, claro y oscuro); `SB_SNAPSHOT_ONLY=<prefijo>` limita cuáles; `SB_SNAPSHOT_CHROME=1` (con `SB_SNAPSHOT_WINDOW=1`) incluye la barra de título y la barra de herramientas; `SB_DEMO_ACCOUNTS=1` y `SB_DEMO_GITHUB=1` usan datos de ejemplo.
 
 ---
 

@@ -52,14 +52,12 @@ struct RulesSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             RulesPanel(store: routing, mail: mail)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack {
+            BrandSheetFooter {
                 Spacer()
                 Button(L("common.done")) { dismiss() }
-                    .buttonStyle(.brandPrimary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.defaultAction)
             }
-            .padding(12)
         }
         .frame(minWidth: 560, idealWidth: 600, minHeight: 380, idealHeight: 520)
         .background(Brand.color.surface)
@@ -86,7 +84,7 @@ struct RulesPanel: View {
     private var lang: String { state.config.uiLanguage }
 
     /// One row of the list (two lines of text + padding), used to size the card to its rows.
-    private static let rowHeight: CGFloat = 48
+    private static let rowHeight: CGFloat = 52
     private var listHeight: CGFloat { CGFloat(store.rules.count) * Self.rowHeight + 22 }
 
     var body: some View {
@@ -155,8 +153,9 @@ struct RulesPanel: View {
     private var list: some View {
         List {
             ForEach(store.rules) { rule in
+                // No row rules: the rows breathe apart instead (§15.1 calm surfaces).
                 row(rule)
-                    .listRowSeparatorTint(Brand.color.line)
+                    .listRowSeparator(.hidden)
             }
             .onMove { from, to in attempt { try store.move(fromOffsets: from, toOffset: to) } }
         }
@@ -165,7 +164,7 @@ struct RulesPanel: View {
         .scrollContentBackground(.hidden)
         .background(Brand.color.card)
         .clipShape(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.line))
+        .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous).strokeBorder(Brand.color.lineSoft))
         // Sized to its rows (scrolls when they don't fit), so no empty block sits under the last rule.
         .frame(minHeight: min(120, listHeight), idealHeight: listHeight, maxHeight: listHeight)
         .padding(.horizontal, Brand.spacing.contentWide)
@@ -193,14 +192,12 @@ struct RulesPanel: View {
                     .foregroundStyle(Brand.color.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Picker("", selection: defaultBinding) {
+                BrandMenuPicker(title: defaultTitle, selection: defaultBinding, maxWidth: 200) {
                     Text(L("rules.unassigned")).tag("")
                     if !state.projects.isEmpty { Divider() }
                     ForEach(state.projects) { p in Text("\(p.emoji) \(p.name)").tag(p.slug) }
                     if let slug = store.settings.defaultProjectSlug, state.project(slug) == nil { Text(slug).tag(slug) }
                 }
-                .labelsHidden()
-                .frame(maxWidth: 240)
             }
             // v0.7 (§17.5): the switch also drives following saved threads, so it shows with any mail account.
             if store.rules.contains(where: \.autoAddMail) || state.engine.accounts.accounts.contains(where: \.provider.hasMail) {
@@ -271,14 +268,15 @@ struct RulesPanel: View {
                 Divider()
                 Button(L("rules.delete"), role: .destructive) { delete(rule) }
             } label: {
-                Image(systemName: "ellipsis.circle").foregroundStyle(Brand.color.text2)
+                BrandMoreLabel()
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
             .menuIndicator(.hidden)
-            .frame(width: 28)
+            .buttonStyle(.plain)
+            .fixedSize()
             .help(L("rules.more"))
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { editing = RuleEditorItem(rule: rule, isNew: false) }
     }
@@ -302,6 +300,13 @@ struct RulesPanel: View {
         case 1: L("rules.hits.one")
         default: L("rules.hits.other", n)
         }
+    }
+
+    /// What the "el resto va a" pull-down shows: the project, "Sin asignar", or a slug that no longer exists.
+    private var defaultTitle: String {
+        guard let slug = store.settings.defaultProjectSlug, !slug.isEmpty else { return L("rules.unassigned") }
+        if let p = state.project(slug) { return "\(p.emoji) \(p.name)" }
+        return slug
     }
 
     private var defaultBinding: Binding<String> {

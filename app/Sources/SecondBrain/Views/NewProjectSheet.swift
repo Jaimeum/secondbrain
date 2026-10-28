@@ -1,3 +1,4 @@
+import AppKit
 import BrainCore
 import SwiftUI
 
@@ -28,7 +29,7 @@ struct NewProjectSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 24) {
                     Text(editing == nil ? L("newProject.title") : L("newProject.editTitle"))
                         .font(Brand.title)
                         .foregroundStyle(Brand.color.text)
@@ -40,24 +41,27 @@ struct NewProjectSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .padding(24)
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
+                .padding(.bottom, 12)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            // No hairline over the footer: space and the page's own tone separate it (§15.1 calm surfaces).
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(editing == nil ? L("newProject.create") : L("newProject.save")) { save() }
                     .buttonStyle(.brandPrimary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!form.isValid)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 28)
+            .padding(.top, 12)
+            .padding(.bottom, 22)
         }
         .background(Brand.color.surface)
-        .frame(minWidth: 440, idealWidth: 480, minHeight: 360, idealHeight: 440)
+        .frame(minWidth: 440, idealWidth: 480, minHeight: 360, idealHeight: 480)
     }
 
     private func save() {
@@ -97,22 +101,15 @@ struct ProjectFormFields: View {
     @Binding var form: ProjectForm
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("newProject.name")).font(Brand.callout).foregroundStyle(Brand.color.text)
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                BrandFieldLabel(title: L("newProject.name"))
                 TextField(L("newProject.namePlaceholder"), text: $form.name)
                     .brandField()
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("newProject.emoji")).font(Brand.callout).foregroundStyle(Brand.color.text)
-                EmojiPicker(selection: $form.emoji)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("newProject.description")).font(Brand.callout).foregroundStyle(Brand.color.text)
-                Text(L("newProject.descriptionHint"))
-                    .font(Brand.caption)
-                    .foregroundStyle(Brand.color.text2)
-                    .fixedSize(horizontal: false, vertical: true)
+            EmojiPicker(selection: $form.emoji)
+            VStack(alignment: .leading, spacing: 8) {
+                BrandFieldLabel(title: L("newProject.description"), hint: L("newProject.descriptionHint"))
                 // Room for the 1–2 sentences it asks for: three lines reserved, up to five.
                 TextField(L("newProject.descriptionPlaceholder"), text: $form.description, axis: .vertical)
                     .lineLimit(3...5)
@@ -122,56 +119,132 @@ struct ProjectFormFields: View {
     }
 }
 
-/// A brand text field: plain text on `card` with a hairline `line` border and 8 pt of inner room, so the name and
-/// the description share one look and one height per line.
-private struct BrandFieldStyle: ViewModifier {
-    @FocusState private var focused: Bool
-
-    func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-        content
-            .textFieldStyle(.plain)
-            .font(Brand.body)
-            .foregroundStyle(Brand.color.text)
-            .focused($focused)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(shape.fill(Brand.color.card))
-            .overlay(shape.strokeBorder(focused ? Brand.color.accent : Brand.color.line, lineWidth: focused ? 1.5 : 1))
-    }
-}
-
-private extension View {
-    func brandField() -> some View { modifier(BrandFieldStyle()) }
-}
-
-/// Two rows of six (fits a 380 pt sheet). A project's own emoji outside the list shows first.
+/// Any emoji can be a project's icon. On the left, the icon itself in a well that is also a one-emoji field: type,
+/// paste or pick from the system Character Viewer ("More emoji…", which focuses the well first) and the newest emoji
+/// typed becomes the icon; letters, digits and other text are ignored. On the right, suggestions in two rows of six
+/// (the well is as tall as both). It draws its own "Ícono" label, with the quiet "More emoji…" capsule at its end.
+/// `Project.emoji` stays a plain string.
 struct EmojiPicker: View {
     static let options = ["📁", "🚀", "💼", "🎯", "🧪", "📚", "🏠", "💡", "🎨", "🤝", "🌱", "⭐️"]
     @Binding var selection: String
-
-    private var choices: [String] {
-        Self.options.contains(selection) ? Self.options : [selection] + Self.options
-    }
+    @ViewState private var draft = ""
+    @FocusState private var wellFocused: Bool
+    @ViewState private var wellHovering = false
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 6), count: 6), alignment: .leading, spacing: 6) {
-            ForEach(choices, id: \.self) { emoji in
-                let selected = selection == emoji
-                let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-                Button {
-                    selection = emoji
-                } label: {
-                    Text(emoji)
-                        .font(Brand.font(18))
-                        .frame(width: 34, height: 34)
-                        .background(shape.fill(selected ? Brand.color.accentSoft : Brand.color.cardAlt))
-                        .overlay(shape.strokeBorder(selected ? Brand.color.accent : .clear, lineWidth: 1.5))
-                        .contentShape(shape)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                BrandFieldLabel(title: L("newProject.emoji"))
+                Spacer(minLength: 8)
+                moreButton
+            }
+            HStack(alignment: .top, spacing: 14) {
+                well
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 6), count: 6), alignment: .leading,
+                          spacing: 6) {
+                    ForEach(Self.options, id: \.self) { emoji in
+                        EmojiTile(emoji: emoji, selected: selection == emoji) { selection = emoji }
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selected ? .isSelected : [])
+                .fixedSize()
             }
         }
+        .onAppear { draft = selection }
+        .onChange(of: selection) { _, new in if draft != new { draft = new } }
+        .onChange(of: draft) { _, new in accept(new) }
+    }
+
+    /// "More emoji…": opens the Character Viewer into the well.
+    private var moreButton: some View {
+        Button(action: openCharacterViewer) {
+            HStack(spacing: 4) {
+                Image(systemName: "face.smiling")
+                Text(L("newProject.emojiMore")).lineLimit(1)
+            }
+            .font(Brand.font(12, .medium))
+            .foregroundStyle(Brand.color.accent)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule(style: .continuous).fill(Brand.color.accentSoft))
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(L("newProject.emojiMoreHelp"))
+    }
+
+    /// The current icon, large, in a field that takes one emoji. The caret sits after it while focused.
+    private var well: some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
+        return TextField("", text: $draft)
+            .textFieldStyle(.plain)
+            .font(Brand.font(30))
+            .multilineTextAlignment(.center)
+            .focused($wellFocused)
+            .focusEffectDisabled()
+            .frame(width: 70, height: 70)
+            .background(shape.fill(Brand.color.card))
+            .overlay(shape.strokeBorder(wellFocused ? Brand.color.focusBorder
+                                        : wellHovering ? Brand.color.line : Brand.color.lineSoft, lineWidth: 1))
+            .brandFocusHalo(wellFocused, cornerRadius: Brand.radius.card)
+            .onHover { wellHovering = $0 }
+            .animation(Brand.motion.fast, value: wellHovering)
+            .help(L("newProject.emojiFieldHelp"))
+            .accessibilityLabel(L("newProject.emoji"))
+            .accessibilityHint(L("newProject.emojiFieldHelp"))
+    }
+
+    /// Focus the well, then open the Character Viewer: what is picked there is typed into the well.
+    private func openCharacterViewer() {
+        wellFocused = true
+        DispatchQueue.main.async { NSApp.orderFrontCharacterPalette(nil) }
+    }
+
+    /// The field's text after an edit: the newest emoji in it (one other than the current icon, wherever the caret
+    /// was) becomes the icon; then the field shows just the icon again.
+    private func accept(_ text: String) {
+        let emojis = Self.emojis(in: text)
+        if let picked = emojis.last(where: { $0 != selection }) ?? emojis.last {
+            if picked != selection { selection = picked }
+        }
+        if draft != selection { draft = selection }
+    }
+
+    /// The grapheme clusters of `text` that are emoji: a scalar shown as emoji by default (🚀), or an emoji-capable
+    /// scalar made into an emoji by what follows it (☺️ with U+FE0F, 1️⃣, flags, ZWJ sequences, skin tones). Plain
+    /// letters, digits, "#" or "*" alone are not.
+    static func emojis(in text: String) -> [String] {
+        text.compactMap { character -> String? in
+            let scalars = character.unicodeScalars
+            guard let first = scalars.first else { return nil }
+            let isEmoji = scalars.contains { $0.properties.isEmojiPresentation }
+                || (first.properties.isEmoji && scalars.count > 1)
+            return isEmoji ? String(character) : nil
+        }
+    }
+}
+
+/// One suggestion: the emoji on a soft `cardAlt` tile; selected = `accentSoft` with a light `focusBorder` ring.
+private struct EmojiTile: View {
+    let emoji: String
+    let selected: Bool
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous)
+        Button(action: action) {
+            Text(emoji)
+                .font(Brand.font(17))
+                .frame(width: 32, height: 32)
+                .background(shape.fill(selected ? Brand.color.accentSoft : hovering ? Brand.color.cardAlt : Brand.color.card))
+                .overlay(shape.strokeBorder(selected ? Brand.color.focusBorder : Brand.color.lineSoft, lineWidth: 1))
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
+        .animation(Brand.motion.fast, value: selected)
+        .accessibilityLabel(emoji)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

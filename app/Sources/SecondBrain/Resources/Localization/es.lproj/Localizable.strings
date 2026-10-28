@@ -233,6 +233,9 @@
 "newProject.name" = "Nombre";
 "newProject.namePlaceholder" = "Ej. Lanzamiento app, Cliente Acme, Tesis";
 "newProject.emoji" = "Ícono";
+"newProject.emojiMore" = "Más emojis…";
+"newProject.emojiMoreHelp" = "Abre el selector de emojis: lo que elijas será el ícono";
+"newProject.emojiFieldHelp" = "Escribe o pega cualquier emoji para usarlo como ícono";
 "newProject.description" = "¿De qué trata?";
 "newProject.descriptionHint" = "Una o dos frases. Me ayuda a saber qué reuniones van aquí.";
 "newProject.descriptionPlaceholder" = "Ej. Rediseño del sitio web con el equipo de marketing";

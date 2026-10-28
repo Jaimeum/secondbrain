@@ -26,7 +26,7 @@ struct ProjectSummaryView: View {
             GeometryReader { geo in
                 HStack(spacing: 0) {
                     brief.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Rectangle().fill(Brand.color.line).frame(width: 1)
+                    BrandColumnDivider()
                     sideColumn.frame(width: Self.sideWidth(for: geo.size.width))
                 }
             }
@@ -53,13 +53,12 @@ struct ProjectSummaryView: View {
                     Button { state.editPage(overview) } label: {
                         Label(L("entity.edit"), systemImage: "pencil").labelStyle(.titleAndIcon)
                     }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .help(L("entity.editHelp"))
                 }
             }
             .padding(.horizontal, Brand.spacing.l)
             .frame(height: 44)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if let overview {
                 WikiWebView(vault: state.engine.vault, path: overview, hideType: true, showsChrome: false) { onOpen($0) }
             } else if loaded {

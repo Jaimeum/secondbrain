@@ -42,7 +42,6 @@ struct EntityView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             if let threadKey = ThreadConversationView.threadKey(forPage: path) {   // v0.7 (§17.4)
                 ThreadConversationView(threadKey: threadKey, scope: scope, paneHeight: paneHeight)
             }
@@ -80,11 +79,8 @@ struct EntityView: View {
                 if let onBack {
                     Button(action: onBack) {
                         Image(systemName: "chevron.left")
-                            .frame(width: 22, height: 22)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(Brand.color.text2)
+                    .buttonStyle(.brandIcon)
                     .keyboardShortcut("[", modifiers: .command)
                     .help(L("wiki.back"))
                 }
@@ -150,7 +146,7 @@ struct EntityView: View {
                 Button { state.navigate(to: .graph(scope, path)) } label: {
                     Image(systemName: "point.3.connected.trianglepath.dotted")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.brandIcon)
                 .help(L("graph.seeInGraph"))
             }
             Button {
@@ -158,7 +154,7 @@ struct EntityView: View {
             } label: {
                 Image(systemName: "folder")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.brandIcon)
             .help(L("wiki.showInFinder"))
         }
         .foregroundStyle(Brand.color.text2)

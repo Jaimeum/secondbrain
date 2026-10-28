@@ -13,7 +13,8 @@ struct MenuBarView: View {
 
     var body: some View {
         @Bindable var state = state
-        VStack(alignment: .leading, spacing: 12) {
+        // No rules between the parts (§15.1 calm surfaces): spacing groups them.
+        VStack(alignment: .leading, spacing: 16) {
             BrandLogo(size: 18)
                 .help(state.config.hotkeyEnabled ? L("record.hotkeyHint") : "")
 
@@ -24,8 +25,6 @@ struct MenuBarView: View {
                     .onAppear { capture.refreshDestination() }
                     .onChange(of: state.engineStarted) { capture.refreshDestination() }
                     .onChange(of: state.projects.map(\.slug)) { capture.refreshDestination() }
-
-                Rectangle().fill(Brand.color.line).frame(height: 1)
 
                 RecordControl(placement: .menuBar)
 
@@ -42,25 +41,19 @@ struct MenuBarView: View {
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                         GridRow {
                             fieldLabel(L("menu.project"))
-                            Picker(L("menu.project"), selection: $state.recordingProjectSlug) {
-                                Text(L("inbox.title")).tag(String?.none)
-                                Divider()
-                                ForEach(state.projects) { project in
-                                    Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
-                                }
-                            }
-                            .labelsHidden()
+                            BrandProjectMenu(selection: $state.recordingProjectSlug, maxWidth: 170)
+                                .accessibilityLabel(L("menu.project"))
                         }
                         GridRow {
                             fieldLabel(L("tpl.pickerShort"))
                             TemplatePicker(scope: .meeting, selection: $state.recordingTemplateId,
-                                           projectSlug: state.recordingProjectSlug, label: L("tpl.pickerShort"))
-                                .labelsHidden()
+                                           projectSlug: state.recordingProjectSlug, label: L("tpl.pickerShort"),
+                                           showsLabel: false)
                         }
                         GridRow {
                             fieldLabel(L("menu.titleLabel"))
                             TextField(L("menu.titlePlaceholder"), text: $state.recordingTitle)
-                                .textFieldStyle(.roundedBorder)
+                                .brandField()
                         }
                     }
                     .padding(.top, 8)
@@ -92,8 +85,6 @@ struct MenuBarView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-
             HStack {
                 Button(L("menu.open"), action: openMain)
                 Spacer()
@@ -122,7 +113,7 @@ struct MenuBarView: View {
 
     private func fieldLabel(_ text: String) -> some View {
         Text(text)
-            .font(Brand.caption)
+            .font(Brand.font(12, .medium))
             .foregroundStyle(Brand.color.text2)
             .lineLimit(1)
             .gridColumnAlignment(.trailing)

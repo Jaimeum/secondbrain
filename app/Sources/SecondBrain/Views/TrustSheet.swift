@@ -63,7 +63,7 @@ struct TrustSheet: View {
             HStack(spacing: 8) {
                 Spacer()
                 Button(L("common.cancel")) { connector.cancel() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button {
                     connector.continueInBrowser(state: state)
@@ -95,7 +95,7 @@ struct TrustSheet: View {
             Button(L("accounts.waiting.reopen")) { connector.reopenBrowser() }
                 .buttonStyle(.settingsExternalLink)
             Button(L("common.cancel")) { connector.cancel() }
-                .buttonStyle(.brandSecondary)
+                .buttonStyle(.brandGhost)
                 .keyboardShortcut(.cancelAction)
                 .padding(.top, 4)
         }
@@ -121,7 +121,7 @@ struct TrustSheet: View {
                 .textSelection(.enabled)
             HStack(spacing: 8) {
                 Button(L("common.close")) { connector.cancel() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("accounts.failed.retry")) { connector.retry() }
                     .buttonStyle(.brandPrimary)
@@ -173,7 +173,7 @@ struct TrustLine: View {
                 .font(Brand.font(15, .medium))
                 .foregroundStyle(Brand.color.accent)
                 .frame(width: 32, height: 32)
-                .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
+                .background(Brand.color.accentSoft, in: RoundedRectangle(cornerRadius: Brand.radius.tile, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(Brand.callout).foregroundStyle(Brand.color.text)
                 Text(detail)

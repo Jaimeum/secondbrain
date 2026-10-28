@@ -1,3 +1,4 @@
+import AppKit
 import BrainCore
 import SwiftUI
 
@@ -24,7 +25,7 @@ struct SidebarView: View {
                 // Only while something waits (or while on it, so assigning the last one doesn't pull the screen away).
                 let waiting = state.unassignedCount
                 if waiting > 0 || state.selection == .unassigned {
-                    item(SidebarItem.unassigned.title, symbol: SidebarItem.unassigned.symbol)
+                    item(SidebarItem.unassigned)
                         .badge(waiting)
                         .tag(SidebarItem.unassigned)
                 }
@@ -35,6 +36,7 @@ struct SidebarView: View {
             Section {
                 ForEach(state.projects) { project in
                     ProjectRow(project: project, inProgress: state.inProgressCount(project.slug))
+                        .brandSidebarRow(selected: state.selection == .project(project.slug))
                         .tag(SidebarItem.project(project.slug))
                         .contextMenu {
                             Button(L("project.edit")) { editing = project }
@@ -54,6 +56,7 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .listItemTint(Brand.color.text2)
+                .brandSidebarRow(selected: false)
             } header: {
                 sectionHeader(L("sidebar.projects"))
             }
@@ -61,6 +64,7 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(Brand.color.bg)
+        .background(SidebarHighlightRemover())
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarHeader()
         }
@@ -75,18 +79,18 @@ struct SidebarView: View {
     @ViewBuilder private func row(_ entry: SidebarItem) -> some View {
         switch entry {
         case .home:
-            item(entry.title, symbol: entry.symbol).tag(entry)
+            item(entry).tag(entry)
                 // Re-clicking the selected row doesn't go through the selection binding: pop Inicio to its root.
                 .simultaneousGesture(TapGesture().onEnded {
                     if state.selection == .home { state.homePopToken += 1 }
                 })
         case .tasks:
-            item(entry.title, symbol: entry.symbol)
+            item(entry)
                 .badge(overdueBadge)
                 .help(state.overdueCount > 0 ? L("mytasks.overdueHelp", state.overdueCount) : "")
                 .tag(entry)
         default:
-            item(entry.title, symbol: entry.symbol).tag(entry)
+            item(entry).tag(entry)
         }
     }
 
@@ -103,14 +107,17 @@ struct SidebarView: View {
         })
     }
 
-    /// The icon has a fixed tint: the sidebar list's own tint follows vibrancy and goes dark olive on the dark `bg`.
-    private func item(_ title: String, symbol: String) -> some View {
-        Label {
-            Text(title).lineLimit(1)
+    /// The icon has a fixed tint (the sidebar list's own tint follows vibrancy and goes dark olive on the dark `bg`):
+    /// `text2`, or `accent` with the title when the row is the selected one.
+    private func item(_ entry: SidebarItem) -> some View {
+        let selected = state.selection == entry
+        return Label {
+            Text(entry.title).lineLimit(1)
         } icon: {
-            Image(systemName: symbol).foregroundStyle(Brand.color.text2)
+            Image(systemName: entry.symbol).foregroundStyle(selected ? Brand.color.accent : Brand.color.text2)
         }
-        .listItemTint(Brand.color.text2)
+        .listItemTint(selected ? Brand.color.accent : Brand.color.text2)
+        .brandSidebarRow(selected: selected)
     }
 
     /// Count of my overdue tasks in the warning tone (a plain badge can't be tinted, so it's text).
@@ -145,7 +152,7 @@ private struct SidebarHeader: View {
                 .frame(height: 28)
                 .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-                    .strokeBorder(Brand.color.line, lineWidth: 1))
+                    .strokeBorder(Brand.color.lineSoft, lineWidth: 1))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -226,12 +233,17 @@ private struct SidebarFooter: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Brand.color.bg)
-        .overlay(alignment: .top) {
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+        // No hard top line: the list fades into `bg` above the footer (§15.1 calm surfaces).
+        .background(alignment: .top) {
+            LinearGradient(colors: [Brand.color.bg.opacity(0), Brand.color.bg], startPoint: .top, endPoint: .bottom)
+                .frame(height: 16)
+                .offset(y: -16)
+                .allowsHitTesting(false)
         }
+        .background(Brand.color.bg)
     }
 }
 
@@ -266,17 +278,11 @@ struct AddControl: View {
             }
             .disabled(state.isRecorderBusy)
         } label: {
-            if compact {
-                Image(systemName: "plus")
-            } else {
-                Label(L("add.title"), systemImage: "plus")
-                    .frame(maxWidth: .infinity)
-            }
+            AddControlLabel(compact: compact, secondary: secondary)
         }
         .menuStyle(.button)
-        .menuIndicator(compact ? .hidden : .visible)
-        .buttonStyle(.bordered)
-        .controlSize(compact ? .small : secondary ? .regular : .large)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .frame(maxWidth: compact ? nil : .infinity)
         .fixedSize(horizontal: compact, vertical: false)
         .help(L("add.help"))
@@ -295,6 +301,126 @@ struct AddControl: View {
         Task {
             let failed = await SourceImport.importURLs(batch.urls, projectSlug: slug, state: state)
             if !failed.isEmpty { error = failed.joined(separator: "\n") }
+        }
+    }
+}
+
+/// The face of "+ Agregar": a quiet capsule on `card` (no system bordered button, no blue chevron box) with the "+"
+/// in a small `accentSoft` circle, the label in `text` and a faint `text3` chevron that says it opens a menu. Hover
+/// warms the capsule to `cardAlt` and fills the circle with `accent`. `secondary` is shorter (under the Grabar card);
+/// `compact` is the circle alone.
+private struct AddControlLabel: View {
+    let compact: Bool
+    let secondary: Bool
+    @ViewState private var hovering = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Group {
+            if compact {
+                plusGlyph(size: 22)
+            } else {
+                HStack(spacing: 8) {
+                    plusGlyph(size: secondary ? 18 : 20)
+                    Text(L("add.title"))
+                        .font(Brand.callout)
+                        .foregroundStyle(Brand.color.text)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.down")
+                        .font(Brand.font(9, .semibold))
+                        .foregroundStyle(Brand.color.text3)
+                }
+                .padding(.leading, secondary ? 5 : 6)
+                .padding(.trailing, 12)
+                .frame(height: secondary ? 28 : 32)
+                .background(Capsule(style: .continuous).fill(hovering ? Brand.color.cardAlt : Brand.color.card))
+                .overlay(Capsule(style: .continuous).strokeBorder(Brand.color.lineSoft, lineWidth: 1))
+            }
+        }
+        .contentShape(Capsule(style: .continuous))
+        .opacity(isEnabled ? 1 : 0.45)
+        .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
+        .accessibilityLabel(L("add.title"))
+    }
+
+    private func plusGlyph(size: CGFloat) -> some View {
+        Image(systemName: "plus")
+            .font(Brand.font(size * 0.5, .semibold))
+            .foregroundStyle(hovering ? Brand.color.onAccent : Brand.color.accent)
+            .frame(width: size, height: size)
+            .background(Circle().fill(hovering ? Brand.color.accent : Brand.color.accentSoft))
+    }
+}
+
+// MARK: Sidebar rows
+
+private struct BrandSidebarRow: ViewModifier {
+    let selected: Bool
+    @ViewState private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(selected ? Brand.color.accent : Brand.color.text)
+            .fontWeight(selected ? .medium : .regular)
+            .onHover { hovering = $0 }
+            .listRowBackground(
+                RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
+                    .fill(selected ? Brand.color.accentSoft : hovering ? Brand.color.hover : .clear)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 1)
+                    .animation(Brand.motion.fast, value: hovering)
+                    .animation(Brand.motion.fast, value: selected)
+            )
+    }
+}
+
+private extension View {
+    /// Brand selection for a sidebar row (§15.1): `accentSoft` rounded fill with `accent` title and icon, a faint
+    /// `hover` fill under the pointer. Replaces the system highlight (the user's macOS accent, often blue), which
+    /// `SidebarHighlightRemover` switches off.
+    func brandSidebarRow(selected: Bool) -> some View { modifier(BrandSidebarRow(selected: selected)) }
+}
+
+/// Turns off the sidebar table's own selection highlight (it paints the user's macOS accent color, which `.tint`
+/// doesn't reach) while keeping its selection, keyboard navigation and accessibility: the brand fill is drawn by
+/// `brandSidebarRow`. Finds the nearest `NSTableView` around the list it sits behind.
+private struct SidebarHighlightRemover: NSViewRepresentable {
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ nsView: Probe, context: Context) { nsView.apply() }
+
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply()
+            DispatchQueue.main.async { [weak self] in self?.apply() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.apply() }
+        }
+
+        /// Only a source-list table under this probe (the sidebar's), never a table of the detail column.
+        func apply() {
+            guard window != nil else { return }
+            let mine = convert(bounds, to: nil)
+            var ancestor = superview
+            while let view = ancestor {
+                if let table = Self.firstSourceList(in: view, overlapping: mine) {
+                    if table.selectionHighlightStyle != .none { table.selectionHighlightStyle = .none }
+                    return
+                }
+                ancestor = view.superview
+            }
+        }
+
+        private static func firstSourceList(in view: NSView, overlapping rect: CGRect) -> NSTableView? {
+            if let table = view as? NSTableView, table.style == .sourceList || table.selectionHighlightStyle == .sourceList,
+               let scroll = table.enclosingScrollView, scroll.convert(scroll.bounds, to: nil).intersects(rect) {
+                return table
+            }
+            for sub in view.subviews {
+                if let table = firstSourceList(in: sub, overlapping: rect) { return table }
+            }
+            return nil
         }
     }
 }

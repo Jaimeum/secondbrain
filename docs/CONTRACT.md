@@ -1524,6 +1524,10 @@ hex sueltos o `rgba` fuera de `Brand`/los `:root` de CSS. Los valores claro / os
 | `card` | blanco `#FFFFFF` | `#3A4238` (dark2 +6 %) | tarjetas, filas seleccionables, campos |
 | `cardAlt` | arena `#E9E0D4` | `#2A322A` | chips, pills, fondos de resaltado suaves |
 | `line` | `#DAD3C9` | `rgba(255,255,255,0.10)` | divisores, bordes 1 px |
+| `lineSoft` | `#DAD3C9` 60 % | `rgba(255,255,255,0.06)` | borde de campos en reposo, cápsulas tranquilas, separadores con sangría |
+| `hover` | tinta 4 % | marfil 5 % | hover de filas y controles tranquilos (nunca se confunde con selección) |
+| `focusRing` | olivo 18 % | mid 26 % | halo de foco de 3 pt por fuera de campos y controles |
+| `focusBorder` | olivo 45 % | mid 55 % | borde de un campo enfocado (nunca un trazo oscuro) |
 | `text` | tinta `#232B25` | marfil `#F5F0E8` | texto principal |
 | `text2` | `#5F665D` | mid `#AEB5A4` | texto secundario (WCAG AA sobre bg, surface y cardAlt; antes `#6F766D`, no llegaba a 4.5:1 sobre bg) |
 | `text3` | mid `#AEB5A4` | salvia `#818979` | placeholders, metadatos no esenciales |
@@ -1548,7 +1552,16 @@ hex sueltos o `rgba` fuera de `Brand`/los `:root` de CSS. Los valores claro / os
   (menús, pickers, barra de herramientas) se quedan en la fuente del sistema: aceptado. Las WebViews usan Inter vía
   `@font-face` (`web/fonts/InterVariable.ttf`, copiado en el build desde Brand/Fonts) con `-apple-system` de respaldo.
   Pesos 400–600 en la UI; 700 solo en títulos de página del wiki.
-- **Forma**: radio `control` 8, `card` 12, `sheet` 14, chips = cápsula. Espaciado base 4; padding de contenido 20
+- **Superficies tranquilas** (pase de UI 0.7.x: "minimalista, orgánica y sofisticada"): se separa con espacio y
+  cambios de tono suaves (`bg` ↔ `surface`), no con líneas de 1 px a todo lo ancho; si hace falta un separador, con
+  sangría o en `lineSoft`. La barra de título/herramientas de la ventana es transparente y sin separador
+  (`brandWindowChrome()`), así el sidebar y el detalle llegan hasta arriba sin esquina. Nada de azul del sistema:
+  la selección del sidebar es `accentSoft` redondeado con texto/icono `accent` (el resaltado del sistema se apaga);
+  los menús usan etiquetas propias (`.menuStyle(.button)` + `.buttonStyle(.plain)`), no botones `.bordered`. Foco =
+  halo suave (`focusRing` + borde `focusBorder`), nunca un trazo oscuro. Controles compartidos en
+  `Views/Brand/BrandControls.swift`: `.brandField()`, `.brandFocusHalo(_:)`, `BrandFieldLabel`, botones
+  `.brandPrimary` / `.brandSecondary` (tono `cardAlt`, sin borde) / `.brandGhost` / `.brandRecord`.
+- **Forma**: radio `control` 8, `field` y `tile` 10, `card` 12, `sheet` 14, chips y acciones tranquilas = cápsula. Espaciado base 4; padding de contenido 20
   (24 en pantallas de una columna). Sombras: solo en overlays (`0 8 24 rgba(35,43,37,0.10)`), nunca en tarjetas.
 - **Iconografía**: SF Symbols, peso `.regular`, tamaño del texto que acompañan. **Nunca emoji como icono de UI**
   (🎙️ ✉️ 📄 📅 📥 💬 ✓ ▶ desaparecen de strings y vistas). El emoji del proyecto es dato del usuario y se conserva

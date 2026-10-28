@@ -62,9 +62,11 @@ struct ProjectView: View {
                         Label(L("project.history"), systemImage: "clock.arrow.circlepath")
                             .labelStyle(.titleAndIcon)
                     }
+                    .buttonStyle(.brandGhost)
                     .help(L("project.historyHelp"))
                     moreMenu
                 }
+                .brandOwnBackground()
             }
             .sheet(item: $sheet) { sheetView($0) }
             .onAppear(perform: consumePending)
@@ -148,9 +150,13 @@ struct ProjectView: View {
             }
             .disabled(state.isRecording)
         } label: {
-            Label(L("project.add"), systemImage: "plus")
-                .labelStyle(.titleAndIcon)
+            BrandAddLabel(title: L("project.add"))
         }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(L("project.add"))
         .help(L("project.addHelp"))
     }
 
@@ -188,8 +194,13 @@ struct ProjectView: View {
                 Label(L("wiki.showInFinder"), systemImage: "folder")
             }
         } label: {
-            Label(L("project.more"), systemImage: "ellipsis.circle")
+            BrandMoreLabel()
         }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(L("project.more"))
         .help(L("project.more"))
     }
 
@@ -304,12 +315,11 @@ private struct ReposSheet: View {
                     .lineLimit(1)
                 Spacer()
                 Button(L("common.close")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, Brand.spacing.content)
             .padding(.vertical, Brand.spacing.l)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             ReposView(projectSlug: projectSlug)
         }
         .frame(minWidth: 600, idealWidth: 720, minHeight: 420, idealHeight: 520)
@@ -328,29 +338,24 @@ struct TabPicker: View {
         ViewThatFits(in: .horizontal) {
             BrandSegmentedControl(options: tabs.map { ($0, $0.title) }, selection: $selection,
                                   minSegmentWidth: 84, height: 26)
-            Picker("", selection: $selection) {
-                ForEach(tabs, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .frame(maxWidth: 220)
+            BrandPicker(selection: $selection, options: tabs.map { ($0, $0.title) }, height: 26)
+                .frame(maxWidth: 220)
         }
     }
 }
 
 extension View {
-    /// The section switcher in a slim bar above the content (centered, at most 720 pt, 16 pt from the edges).
+    /// The section switcher in a slim bar above the content (centered, at most 720 pt, 16 pt from the edges). No
+    /// line under it (§15.1 calm surfaces): it sits on the same `surface` as the tab, and spacing separates them.
     func tabBar(_ picker: TabPicker) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                picker
-                    .frame(maxWidth: 720)
-                    .padding(.horizontal, Brand.spacing.l)
-                    .padding(.vertical, Brand.spacing.s)
-                    .frame(maxWidth: .infinity)
-                Rectangle().fill(Brand.color.line).frame(height: 1)
-            }
-            .background(Brand.color.surface)
+            picker
+                .frame(maxWidth: 720)
+                .padding(.horizontal, Brand.spacing.l)
+                .padding(.top, Brand.spacing.s)
+                .padding(.bottom, Brand.spacing.xs)
+                .frame(maxWidth: .infinity)
+                .background(Brand.color.surface)
         }
     }
 }

@@ -27,9 +27,10 @@ struct TemplatesView: View {
                 .id(editing.id + editing.name)
             } else {
                 HStack(spacing: 0) {
+                    // The list on `bg`, the detail on `surface`: a tone step, as between the main sidebar and detail,
+                    // instead of a full-height rule.
                     listColumn
                         .frame(minWidth: 200, idealWidth: 230, maxWidth: 260)
-                    Rectangle().fill(Brand.color.line).frame(width: 1)
                     Group {
                         if let selected {
                             detail(selected)
@@ -97,7 +98,7 @@ struct TemplatesView: View {
             .listStyle(.inset)
             .alternatingRowBackgrounds(.disabled)
             .scrollContentBackground(.hidden)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .brandScrollEdgeFade(.bottom, color: Brand.color.bg)
             HStack {
                 Button {
                     editing = TemplateInfo(id: "", name: "", description: "", scope: .meeting, isBuiltIn: false,
@@ -109,9 +110,11 @@ struct TemplatesView: View {
                 .help(L("tpl.new"))
                 Spacer(minLength: 0)
             }
-            .padding(10)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .padding(.bottom, 12)
         }
-        .background(Brand.color.surface)
+        .background(Brand.color.bg)
     }
 
     private func header(_ title: String) -> some View {
@@ -184,8 +187,8 @@ struct TemplatesView: View {
                 }
             }
             .padding(.horizontal, Brand.spacing.content)
-            .padding(.vertical, 16)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
             MarkdownPreview(markdown: TemplateEditor.previewMarkdown(t.body))
         }
     }
@@ -218,6 +221,7 @@ struct TemplatesView: View {
                 SettingsMenuLabel(title: n > 0 ? L("tpl.defaultIn", n) : L("tpl.useAsDefault"), symbol: n > 0 ? "star.fill" : "star")
             }
             .menuStyle(.button)
+            .menuIndicator(.hidden)
             .buttonStyle(.plain)
             .fixedSize()
             .disabled(state.projects.isEmpty)
@@ -232,11 +236,12 @@ struct TemplatesView: View {
                     Button(L("sources.delete"), role: .destructive) { pendingDelete = t }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle").foregroundStyle(Brand.color.text2)
+                BrandMoreLabel()
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
             .menuIndicator(.hidden)
-            .frame(width: 28)
+            .buttonStyle(.plain)
+            .fixedSize()
             .help(L("rules.more"))
         }
     }
@@ -295,18 +300,16 @@ struct TemplateEditor: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     TextField(L("tpl.name"), text: $draft.name)
-                        .textFieldStyle(.roundedBorder)
                         .font(Brand.font(15, .medium))
+                        .brandField()
                     // v0.6 (§16.10): notes and documents have formats too.
-                    Picker("", selection: $draft.scope) {
+                    BrandMenuPicker(title: draft.scope.label, selection: $draft.scope, maxWidth: 180) {
                         ForEach(TemplateScope.allCases, id: \.self) { scope in
                             Text(scope.label).tag(scope)
                         }
                     }
-                    .labelsHidden()
-                    .frame(maxWidth: 200)
                 }
-                TextField(L("tpl.description"), text: $draft.description).textFieldStyle(.roundedBorder)
+                TextField(L("tpl.description"), text: $draft.description).brandField()
                 if original.isBuiltIn {
                     Label(L("tpl.builtinCopyNote"), systemImage: "info.circle")
                         .font(Brand.caption)
@@ -314,37 +317,33 @@ struct TemplateEditor: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(16)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 4)
             GeometryReader { geo in
                 if geo.size.width >= 700 {
-                    HStack(spacing: 0) {
+                    // Structure and preview side by side, separated by space rather than a rule.
+                    HStack(spacing: 4) {
                         structurePane.frame(maxWidth: .infinity)
-                        Rectangle().fill(Brand.color.line).frame(width: 1)
                         previewPane.frame(maxWidth: .infinity)
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
-                        Picker("", selection: $pane) {
-                            Text(L("tpl.edit")).tag(Pane.edit)
-                            Text(L("tpl.preview")).tag(Pane.preview)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
-                        .padding([.top, .leading], 12)
+                        BrandSegmentedControl(options: [(Pane.edit, L("tpl.edit")), (Pane.preview, L("tpl.preview"))],
+                                              selection: $pane, minSegmentWidth: 88)
+                            .fixedSize()
+                            .padding([.top, .leading], 12)
                         if pane == .edit { structurePane } else { previewPane }
                     }
                 }
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
-            HStack(spacing: 8) {
+            BrandSheetFooter(horizontalPadding: 16) {
                 if let error {
                     Text(error).foregroundStyle(Brand.color.danger).font(Brand.caption).lineLimit(2)
                 }
                 Spacer()
                 Button(L("common.cancel")) { onDone(nil) }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(L("tpl.save"), action: save)
                     .buttonStyle(.brandPrimary)
@@ -352,7 +351,6 @@ struct TemplateEditor: View {
                     .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty
                               || draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .padding(12)
         }
         .background(Brand.color.surface)
         .onAppear {
@@ -375,10 +373,7 @@ struct TemplateEditor: View {
             Text(L("tpl.structure")).font(Brand.font(11, .semibold)).foregroundStyle(Brand.color.text2)
             TextEditor(text: $draft.body)
                 .font(Brand.mono)
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                .brandTextArea()
             Text(L("tpl.structureHint"))
                 .font(Brand.caption)
                 .foregroundStyle(Brand.color.text2)
@@ -393,7 +388,12 @@ struct TemplateEditor: View {
                 .font(Brand.font(11, .semibold))
                 .foregroundStyle(Brand.color.text2)
                 .padding([.top, .leading], 12)
+            // An inset rounded pane, the same shape as the structure editor beside it.
             MarkdownPreview(markdown: preview)
+                .clipShape(RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
+                    .strokeBorder(Brand.color.lineSoft, lineWidth: 1))
+                .padding([.horizontal, .bottom], 12)
         }
     }
 
@@ -451,14 +451,11 @@ struct MakeTemplateSheet: View {
             Text(L("tpl.makeTitle")).font(Brand.title).foregroundStyle(Brand.color.text)
             Text(L("tpl.makeHint")).foregroundStyle(Brand.color.text2).fixedSize(horizontal: false, vertical: true)
             TextField(L("tpl.name"), text: $name, prompt: Text(L("tpl.makeNamePlaceholder")))
-                .textFieldStyle(.roundedBorder)
+                .brandField()
                 .disabled(jobId != nil)
             TextEditor(text: $description)
-                .scrollContentBackground(.hidden)
                 .frame(minHeight: 140)
-                .padding(6)
-                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+                .brandTextArea()
                 .disabled(jobId != nil)
                 .overlay(alignment: .topLeading) {
                     if description.isEmpty {
@@ -483,7 +480,7 @@ struct MakeTemplateSheet: View {
                 Spacer()
                 if jobId == nil {
                     Button(L("common.cancel")) { dismiss() }
-                        .buttonStyle(.brandSecondary)
+                        .buttonStyle(.brandGhost)
                         .keyboardShortcut(.cancelAction)
                     Button(L("tpl.makeGo"), action: make)
                         .buttonStyle(.brandPrimary)

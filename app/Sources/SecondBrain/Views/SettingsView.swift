@@ -39,16 +39,18 @@ struct SettingsView: View {
         _tab = ViewState(initialValue: initialTab)
     }
 
+    /// The six tabs as our own strip on `surface` (the system TabView drew a grey NSToolbar band with the selected tab
+    /// in the system accent over the content: a hard tone change and a corner, §15.1 calm surfaces), then the page.
     var body: some View {
-        TabView(selection: $tab) {
-            ForEach(SettingsTab.allCases) { t in
-                page(t)
-                    .tabItem { Label(t.title, systemImage: t.symbol) }
-                    .tag(t)
-            }
+        VStack(spacing: 0) {
+            SettingsTabStrip(selection: $tab)
+            page(tab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .id(tab)
         }
         .frame(minWidth: 760, idealWidth: 820, maxWidth: .infinity, minHeight: 520, idealHeight: 600, maxHeight: .infinity)
         .background(Brand.color.surface)
+        .background(SettingsWindowChrome())
         .onAppear(perform: applyRequest)
         .onChange(of: requested) { applyRequest() }
     }
@@ -71,6 +73,78 @@ struct SettingsView: View {
     }
 }
 
+/// Icon-over-label tabs in soft rounded tiles, centered: selected = `accentSoft` fill with `accent` icon and title,
+/// hover = the `hover` veil. Sits on `surface` like the page under it, so there is no band and no rule.
+private struct SettingsTabStrip: View {
+    @Binding var selection: SettingsTab
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(SettingsTab.allCases) { t in
+                SettingsTabButton(tab: t, selected: t == selection) {
+                    withAnimation(Brand.motion.animation(fast: true)) { selection = t }
+                }
+            }
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct SettingsTabButton: View {
+    let tab: SettingsTab
+    let selected: Bool
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Brand.radius.field, style: .continuous)
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: tab.symbol)
+                    .font(Brand.font(15))
+                    .frame(height: 18)
+                Text(tab.title)
+                    .font(Brand.font(11, selected ? .semibold : .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(selected ? Brand.color.accent : Brand.color.text2)
+            .frame(minWidth: 64)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(shape.fill(selected ? Brand.color.accentSoft : hovering ? Brand.color.hover : .clear))
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(Brand.motion.fast, value: hovering)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
+
+/// The Settings window's titlebar blends into the page (as `brandWindowChrome` does for the main window): transparent,
+/// no separator, the window background in `surface`, so the tab strip and the title share one tone.
+private struct SettingsWindowChrome: NSViewRepresentable {
+    func makeNSView(context: Context) -> AccessorView { AccessorView() }
+    func updateNSView(_ nsView: AccessorView, context: Context) { nsView.apply() }
+
+    final class AccessorView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply()
+            DispatchQueue.main.async { [weak self] in self?.apply() }
+        }
+
+        func apply() {
+            guard let window else { return }
+            if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
+            if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
+            window.backgroundColor = NSColor(Brand.color.surface)
+        }
+    }
+}
+
 // MARK: - General
 
 private struct GeneralSettings: View {
@@ -81,26 +155,20 @@ private struct GeneralSettings: View {
             RestartNotice()
             SettingsGroup(title: L("settings.group.look")) {
                 SettingsRow(title: L("settings.language")) {
-                    Picker("", selection: settingsBinding(state, \.uiLanguage)) {
+                    BrandMenuPicker(title: state.config.uiLanguage == "en" ? "English" : "Español",
+                                    selection: settingsBinding(state, \.uiLanguage)) {
                         Text(verbatim: "Español").tag("es")
                         Text(verbatim: "English").tag("en")
                     }
-                    .labelsHidden()
-                    .fixedSize()
                 }
                 if state.menuLanguageNeedsRestart {
                     MenuLanguageNotice().padding(.horizontal, 14).padding(.bottom, 10)
                 }
                 SettingsDivider()
                 SettingsRow(title: L("theme.title")) {
-                    Picker("", selection: settingsBinding(state, \.appearance)) {
-                        ForEach(AppearanceMode.allCases) { mode in
-                            Label(mode.title, systemImage: mode.symbol).labelStyle(.titleAndIcon).tag(mode.rawValue)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
+                    BrandSegmentedControl(options: AppearanceMode.allCases.map { ($0.rawValue, $0.title) },
+                                          selection: settingsBinding(state, \.appearance), minSegmentWidth: 64, height: 26)
+                        .fixedSize()
                 }
             }
             if state.engineStarted {
@@ -148,7 +216,7 @@ private struct CaptureHotKeyRow: View {
                     .fixedSize()
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
                 Button(recording ? L("common.cancel") : L("settings.captureHotkey.change")) {
                     recording ? stop(restore: true) : start()
                 }
@@ -249,6 +317,19 @@ private struct AdvancedSettings: View {
         ("sonnet", "settings.model.sonnet"), ("opus", "settings.model.opus"), ("haiku", "settings.model.haiku"),
     ]
 
+    /// The pull-down's label for a model id (the id itself if it's not one of ours).
+    private func modelTitle(_ id: String) -> String {
+        claudeModels.first { $0.id == id }.map { L($0.key) } ?? id
+    }
+
+    private var whisperTitle: String {
+        switch state.config.whisperModel {
+        case "large-v3": L("settings.whisper.precise")
+        case "large-v3-v20240930_turbo": L("settings.whisper.fast")
+        default: state.config.whisperModel
+        }
+    }
+
     var body: some View {
         SettingsPage {
             RestartNotice()
@@ -285,12 +366,10 @@ private struct AdvancedSettings: View {
 
             SettingsGroup(title: L("settings.transcription"), footer: L("settings.whisper.footer")) {
                 SettingsRow(title: L("settings.whisper")) {
-                    Picker("", selection: settingsBinding(state, \.whisperModel)) {
+                    BrandMenuPicker(title: whisperTitle, selection: settingsBinding(state, \.whisperModel)) {
                         Text(L("settings.whisper.precise")).tag("large-v3")
                         Text(L("settings.whisper.fast")).tag("large-v3-v20240930_turbo")
                     }
-                    .labelsHidden()
-                    .fixedSize()
                 }
                 SettingsDivider()
                 SettingsRow(title: L("settings.whisper.status")) {
@@ -300,19 +379,15 @@ private struct AdvancedSettings: View {
 
             SettingsGroup(title: L("settings.group.models")) {
                 SettingsRow(title: L("settings.ingestModel")) {
-                    Picker("", selection: settingsBinding(state, \.ingestModel)) {
+                    BrandMenuPicker(title: modelTitle(state.config.ingestModel), selection: settingsBinding(state, \.ingestModel)) {
                         ForEach(claudeModels, id: \.id) { Text(L($0.key)).tag($0.id) }
                     }
-                    .labelsHidden()
-                    .fixedSize()
                 }
                 SettingsDivider()
                 SettingsRow(title: L("settings.queryModel")) {
-                    Picker("", selection: settingsBinding(state, \.queryModel)) {
+                    BrandMenuPicker(title: modelTitle(state.config.queryModel), selection: settingsBinding(state, \.queryModel)) {
                         ForEach(claudeModels, id: \.id) { Text(L($0.key)).tag($0.id) }
                     }
-                    .labelsHidden()
-                    .fixedSize()
                 }
             }
 
@@ -432,9 +507,12 @@ struct SettingsGroup<Content: View, Footer: View>: View {
                     .foregroundStyle(Brand.color.text)
                     .accessibilityAddTraits(.isHeader)
             }
-            BrandCard(padding: 0) {
-                VStack(alignment: .leading, spacing: 0) { content }
-            }
+            // A card felt by its tone, with only a `lineSoft` edge (a full `line` frame read as a boxed table).
+            VStack(alignment: .leading, spacing: 0) { content }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
+                    .strokeBorder(Brand.color.lineSoft, lineWidth: 1))
             footer
                 .font(Brand.caption)
                 .foregroundStyle(Brand.color.text2)
@@ -485,12 +563,12 @@ struct SettingsRow<Control: View>: View {
     }
 }
 
-/// 1 px `line` between rows of a group.
+/// A faint `lineSoft` rule between rows of a group, inset on both sides so it never meets the card's edge.
 struct SettingsDivider: View {
     var inset: CGFloat = 14
 
     var body: some View {
-        Rectangle().fill(Brand.color.line).frame(height: 1).padding(.leading, inset)
+        Rectangle().fill(Brand.color.lineSoft).frame(height: 1).padding(.horizontal, inset)
     }
 }
 
@@ -539,24 +617,13 @@ extension ButtonStyle where Self == SettingsLinkButtonStyle {
 }
 
 /// The label of a brand-styled pull-down ("Usar por defecto ▾", "Conectar otra cuenta ▾"): use inside
-/// `Menu { … } label: { SettingsMenuLabel(…) }.menuStyle(.button).buttonStyle(.plain).fixedSize()`.
+/// `Menu { … } label: { SettingsMenuLabel(…) }.menuStyle(.button).buttonStyle(.plain).fixedSize()`. It is the shared
+/// `BrandMenuLabel` (quiet tone, no border, hover veil, faint chevron); the name stays for the existing call sites.
 struct SettingsMenuLabel: View {
     let title: String
     var symbol: String? = nil
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous)
-        HStack(spacing: 6) {
-            if let symbol { Image(systemName: symbol).imageScale(.small) }
-            Text(title).lineLimit(1).truncationMode(.tail)
-            Image(systemName: "chevron.down").font(Brand.font(9, .semibold)).foregroundStyle(Brand.color.text2)
-        }
-        .font(Brand.callout)
-        .foregroundStyle(Brand.color.text)
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .background(shape.fill(Brand.color.cardAlt))
-        .overlay(shape.strokeBorder(Brand.color.line, lineWidth: 1))
-        .contentShape(shape)
+        BrandMenuLabel(title: title, symbol: symbol)
     }
 }

@@ -420,17 +420,10 @@ struct QuickCaptureView: View {
                     .lineLimit(1)
                     .fixedSize()
             }
-            Picker(L("capture.destination"), selection: Binding(get: { model.projectSlug },
-                                                                 set: { model.pickProject($0) })) {
-                Text(L("inbox.title")).tag(String?.none)
-                Divider()
-                ForEach(state.projects) { project in
-                    Text("\(project.emoji) \(project.name)").tag(Optional(project.slug))
-                }
-            }
-            .labelsHidden()
-            .frame(minWidth: 120, maxWidth: embedded ? 150 : 220)
-            .help(L("capture.destinationHelp"))
+            BrandProjectMenu(selection: Binding(get: { model.projectSlug }, set: { model.pickProject($0) }),
+                             maxWidth: embedded ? 110 : 180)
+                .accessibilityLabel(L("capture.destination"))
+                .help(L("capture.destinationHelp"))
             if !embedded, case .note = model.kind {   // v0.7 (§17.3)
                 inPersonToggle
             }
@@ -440,7 +433,7 @@ struct QuickCaptureView: View {
     /// "Reunión presencial" (v0.7, §17.3): in the panel's footer; in the narrow menu bar, on its own line.
     private var inPersonToggle: some View {
         Toggle(L("capture.inPerson"), isOn: $model.inPerson)
-            .toggleStyle(.checkbox)
+            .toggleStyle(.brandCheckbox)
             .font(Brand.caption)
             .foregroundStyle(Brand.color.text2)
             .lineLimit(1)

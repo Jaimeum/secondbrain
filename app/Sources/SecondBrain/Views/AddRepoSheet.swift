@@ -68,8 +68,7 @@ struct AddRepoSheet: View {
             }
             .padding(.horizontal, Self.inset)
             .padding(.top, Self.inset)
-            .padding(.bottom, Brand.spacing.m)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.bottom, Brand.spacing.s)
             List {
                 if let pasted {
                     Button {
@@ -82,10 +81,12 @@ struct AddRepoSheet: View {
                     .buttonStyle(.plain)
                     .disabled(resolving)
                     .listRowInsets(Self.rowInsets)
+                    .listRowSeparator(.hidden)
                 }
                 ForEach(filteredRepos) { info in
                     RepoPickRow(info: info, alreadyFollowed: isFollowed(info)) { choose(info) }
                         .listRowInsets(Self.rowInsets)
+                        .listRowSeparator(.hidden)
                 }
                 if !loadingRepos, filteredRepos.isEmpty, pasted == nil {
                     Text(myRepos.isEmpty ? L("repos.addSheet.noneYet") : L("repos.addSheet.noMatch"))
@@ -93,15 +94,17 @@ struct AddRepoSheet: View {
                         .foregroundStyle(Brand.color.text2)
                         .padding(.vertical, 8)
                         .listRowInsets(Self.rowInsets)
+                        .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .brandScrollEdgeFade(.top)
+            .brandScrollEdgeFade(.bottom)
             errorBanner
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             footer {
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -167,9 +170,9 @@ struct AddRepoSheet: View {
                             chosen = nil
                             error = nil
                         } label: {
-                            Image(systemName: "chevron.left").foregroundStyle(Brand.color.text2)
+                            Image(systemName: "chevron.left")
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.brandIcon)
                         .help(L("common.back"))
                     }
                     Text(info.fullName)
@@ -189,8 +192,7 @@ struct AddRepoSheet: View {
             }
             .padding(.horizontal, Self.inset)
             .padding(.top, Self.inset)
-            .padding(.bottom, Brand.spacing.m)
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .padding(.bottom, Brand.spacing.s)
             if loadingBranches && branches.isEmpty {
                 BrandLoader(size: 24).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -202,14 +204,17 @@ struct AddRepoSheet: View {
                                       isOn: Binding(get: { selected.contains(name) },
                                                     set: { if $0 { selected.insert(name) } else { selected.remove(name) } }))
                             .listRowInsets(Self.rowInsets)
+                            .listRowSeparator(.hidden)
                     }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .brandScrollEdgeFade(.top)
+                .brandScrollEdgeFade(.bottom)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             VStack(alignment: .leading, spacing: 4) {
                 Toggle(L("repos.readCode.toggle"), isOn: $readCode)
+                    .toggleStyle(.brandCheckbox)
                     .font(Brand.body)
                     .disabled(tooBig(info))
                 Text(tooBig(info) ? L("repos.readCode.tooBig") : L("repos.readCode.hint"))
@@ -220,10 +225,9 @@ struct AddRepoSheet: View {
             .padding(.horizontal, Self.inset)
             .padding(.vertical, Brand.spacing.m)
             errorBanner
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             footer {
                 Button(L("common.cancel")) { dismiss() }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.brandGhost)
                     .keyboardShortcut(.cancelAction)
                 Button(followTitle) { save(info) }
                     .buttonStyle(.brandPrimary)
@@ -303,18 +307,7 @@ struct AddRepoSheet: View {
     private static let rowInsets = EdgeInsets(top: 4, leading: inset, bottom: 4, trailing: inset)
 
     private func searchField(_ prompt: String, text: Binding<String>, busy: Bool, onSubmit: @escaping () -> Void) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").foregroundStyle(Brand.color.text3)
-            TextField(prompt, text: text)
-                .textFieldStyle(.plain)
-                .font(Brand.body)
-                .onSubmit(onSubmit)
-            if busy { BrandLoader(size: 14) }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Brand.color.card, in: RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Brand.radius.control, style: .continuous).strokeBorder(Brand.color.line))
+        BrandSearchField(prompt: prompt, text: text, busy: busy, onSubmit: onSubmit)
     }
 
     /// Errors get their own full-width line above the footer (long GitHub messages stay readable).
@@ -330,8 +323,7 @@ struct AddRepoSheet: View {
                         .textSelection(.enabled)
                     if orgRestricted {
                         Button(L("github.org.howTo")) { showOrgHelp = true }
-                            .buttonStyle(.borderless)
-                            .foregroundStyle(Brand.color.accent)
+                            .buttonStyle(.settingsLink)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -344,12 +336,10 @@ struct AddRepoSheet: View {
     }
 
     private func footer(@ViewBuilder buttons: () -> some View) -> some View {
-        HStack(spacing: Brand.spacing.s) {
+        BrandSheetFooter(horizontalPadding: Self.inset) {
             Spacer()
             buttons()
         }
-        .padding(.horizontal, Self.inset)
-        .padding(.vertical, Brand.spacing.m)
     }
 
     private func show(_ error: Error) {
@@ -424,7 +414,7 @@ private struct BranchPickRow: View {
                 }
             }
         }
-        .toggleStyle(.checkbox)
+        .toggleStyle(.brandCheckbox)
         .padding(.vertical, 2)
     }
 }

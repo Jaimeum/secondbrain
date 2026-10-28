@@ -72,7 +72,6 @@ struct ReposView: View {
     private var list: some View {
         VStack(spacing: 0) {
             header
-            Rectangle().fill(Brand.color.line).frame(height: 1)
             ScrollView {
                 VStack(spacing: Brand.spacing.m) {
                     if !github.isConnected { disconnectedBanner }
@@ -90,7 +89,8 @@ struct ReposView: View {
                 .frame(maxWidth: 820)
                 .frame(maxWidth: .infinity)
             }
-            Rectangle().fill(Brand.color.line).frame(height: 1)
+            .brandScrollEdgeFade(.top)
+            .brandScrollEdgeFade(.bottom)
             footer
         }
     }
@@ -176,9 +176,9 @@ struct ReposView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button { model.dismissNotice() } label: {
-                Image(systemName: "xmark").foregroundStyle(Brand.color.text2)
+                Image(systemName: "xmark")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.brandIcon)
             .help(L("common.close"))
         }
         .padding(Brand.spacing.m)
@@ -194,8 +194,7 @@ struct ReposView: View {
                 .truncationMode(.tail)
             Text(verbatim: "·").foregroundStyle(Brand.color.text3)
             Button(L("github.change")) { openGitHubSettings() }
-                .buttonStyle(.borderless)
-                .foregroundStyle(Brand.color.accent)
+                .buttonStyle(.settingsLink)
                 .fixedSize()
             Spacer(minLength: Brand.spacing.s)
             if let problem = model.problem {
@@ -306,8 +305,7 @@ private struct RepoCard: View {
                             .foregroundStyle(Brand.color.text)
                             .fixedSize(horizontal: false, vertical: true)
                         Button(L("repos.chooseBranches"), action: onEditBranches)
-                            .buttonStyle(.borderless)
-                            .foregroundStyle(Brand.color.accent)
+                            .buttonStyle(.settingsLink)
                     }
                     .font(Brand.body)
                 }
@@ -321,8 +319,7 @@ private struct RepoCard: View {
                             .textSelection(.enabled)
                         if GitHubModel.isOrgRestricted(error) {
                             Button(L("github.org.howTo"), action: onOrgHelp)
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(Brand.color.accent)
+                                .buttonStyle(.settingsLink)
                         }
                     }
                     .font(Brand.body)
@@ -347,10 +344,11 @@ private struct RepoCard: View {
             Divider()
             Button(role: .destructive, action: onRemove) { Label(L("repos.remove"), systemImage: "minus.circle") }
         } label: {
-            Image(systemName: "ellipsis").foregroundStyle(Brand.color.text2)
+            BrandMoreLabel()
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
         .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
         .help(L("project.more"))
     }

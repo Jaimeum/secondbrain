@@ -30,14 +30,16 @@ struct MailAttachmentsList: View {
                 .font(Brand.callout)
                 .foregroundStyle(Brand.color.text2)
             if let attachments {
+                let shape = RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous)
                 VStack(spacing: 0) {
                     ForEach(Array(attachments.enumerated()), id: \.element.id) { i, a in
-                        if i > 0 { Rectangle().fill(Brand.color.line).frame(height: 1) }
+                        // Quiet separators inset past the file icon (§15.1).
+                        if i > 0 { Rectangle().fill(Brand.color.lineSoft).frame(height: 1).padding(.leading, 36) }
                         row(a)
                     }
                 }
-                .background(Brand.color.surface, in: RoundedRectangle(cornerRadius: Brand.radius.control))
-                .overlay(RoundedRectangle(cornerRadius: Brand.radius.control).stroke(Brand.color.line, lineWidth: 1))
+                .background(Brand.color.card, in: shape)
+                .overlay(shape.strokeBorder(Brand.color.lineSoft, lineWidth: 1))
                 if source == nil, attachments.contains(where: { if case .notSaved = states[$0.id] { true } else { false } }) {
                     Text(L("attach.saveEmailFirst")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -50,7 +52,7 @@ struct MailAttachmentsList: View {
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 HStack(spacing: Brand.spacing.s) {
-                    ProgressView().controlSize(.small)
+                    BrandLoader(size: 14)
                     Text(L("attach.loading")).font(Brand.caption).foregroundStyle(Brand.color.text2)
                 }
             }
@@ -81,7 +83,7 @@ struct MailAttachmentsList: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if savingBatch {
-                ProgressView().controlSize(.small)
+                BrandLoader(size: 14)
             } else {
                 Button(L("attach.checklist.save", n)) { saveChecked() }
                     .buttonStyle(.brandPrimary)
@@ -97,7 +99,7 @@ struct MailAttachmentsList: View {
             if isPending {
                 Toggle("", isOn: Binding(get: { checked.contains(a.id) },
                                          set: { if $0 { checked.insert(a.id) } else { checked.remove(a.id) } }))
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.brandCheckbox)
                     .labelsHidden()
                     .disabled(savingBatch)
                     .accessibilityLabel(a.name)
@@ -130,7 +132,7 @@ struct MailAttachmentsList: View {
 
     @ViewBuilder private func action(_ a: AttachmentInfo, _ st: AttachmentState) -> some View {
         if saving.contains(a.id) {
-            ProgressView().controlSize(.small)
+            BrandLoader(size: 14)
         } else {
             switch st {
             case .saved(let entry):

@@ -94,6 +94,9 @@ struct MailDetailView: View {
                         Label(L("mail.attachments"), systemImage: "paperclip")
                             .font(Brand.caption).foregroundStyle(Brand.color.text2).lineLimit(1)
                     }
+                    // v0.7 (§17.7): the message in Outlook / Gmail.
+                    OpenOriginalButton(link: s.webLink, provider: model.account?.provider, style: .link,
+                                       gmailThreadId: s.threadId, accountEmail: model.account?.email)
                 }
                 .layoutPriority(1)
             }

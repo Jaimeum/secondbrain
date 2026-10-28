@@ -334,6 +334,13 @@ enum DebugSnapshots {
                 fichas["entity-home"] = .entity("index.md", .brain)
                 items.append(("entity-home", .home, nil))
             }
+            // v0.7 links (§17.7): a thread's ficha ("Abrir en Outlook" in its header), opened from the brain.
+            let emails = "projects/\(project.slug)/wiki/emails"
+            if let page = (try? FileManager.default.contentsOfDirectory(atPath: state.engine.vault.url(for: emails).path))?
+                .filter({ $0.hasSuffix(".md") }).sorted().first {
+                fichas["entity-thread"] = .entity("\(emails)/\(page)", .brain)
+                items.append(("entity-thread", .home, nil))
+            }
         }
         // v0.6 tasks: Pendientes with Proyecto / Persona / Buscar set (§16.13 "Pendientes con filtros").
         items.append(("tasks-filtered", .tasks, nil))

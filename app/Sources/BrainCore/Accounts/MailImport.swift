@@ -18,9 +18,11 @@ public enum MailImport {
         var owners = Set(ownerEmails.map { $0.lowercased().trimmingCharacters(in: .whitespaces) })
         if let account, account.provider.hasMail { owners.insert(account.email.lowercased()) }
         let subject = s.subject.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ParsedEmail(subject: subject.isEmpty ? nil : subject, from: s.from, to: s.to, cc: message.cc, date: s.date,
-                           body: split.body, quotedHistory: split.quoted, raw: render(message, language: language),
-                           isFromOwner: s.from.email.map { owners.contains($0.lowercased()) } ?? false)
+        var email = ParsedEmail(subject: subject.isEmpty ? nil : subject, from: s.from, to: s.to, cc: message.cc, date: s.date,
+                                body: split.body, quotedHistory: split.quoted, raw: render(message, language: language),
+                                isFromOwner: s.from.email.map { owners.contains($0.lowercased()) } ?? false)
+        email.webLink = s.webLink.flatMap { OriginalLinks.isOpenable($0) ? $0 : nil }   // v0.7 (§17.7)
+        return email
     }
 
     /// New text vs. quoted/forwarded history ("El … escribió:", "On … wrote:", "-----Original Message-----", "> …").

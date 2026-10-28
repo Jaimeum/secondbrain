@@ -705,7 +705,9 @@ struct MeetingDetail: View {
 
                 if let web = JoinLink.https(event.webLink) {
                     Link(destination: web) {
-                        Label(L("meetings.openInCalendar"), systemImage: "arrow.up.forward.square")
+                        // v0.7 (§17.7): "Abrir en Outlook Calendar / Google Calendar".
+                        Label(OriginalLinks.link(for: event).flatMap { OpenOriginalButton.title(provider: $0.provider, kind: .event) }
+                                ?? L("meetings.openInCalendar"), systemImage: "arrow.up.forward.square")
                     }
                     .font(Brand.callout)
                     .foregroundStyle(Brand.color.accent)

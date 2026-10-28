@@ -1612,3 +1612,6 @@
 "original.gmail" = "Abrir en Gmail";
 "original.outlookCalendar" = "Abrir en Outlook Calendar";
 "original.googleCalendar" = "Abrir en Google Calendar";
+
+/* v0.7 links */
+"original.help" = "%@ (se abre en el navegador)";

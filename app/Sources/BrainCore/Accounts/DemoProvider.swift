@@ -112,7 +112,7 @@ private struct DemoData {
             .prefix(2).joined(separator: " ")
         let link = account.provider == .microsoft
             ? "https://outlook.office.com/mail/inbox/id/\(id)"
-            : "https://mail.google.com/mail/u/0/#inbox/\(id)"
+            : OriginalLinks.gmailThread(accountEmail: account.email, threadId: thread ?? id)
         let summary = MailMessageSummary(id: id, threadId: thread ?? id, from: from, to: to, subject: subject,
                                          snippet: String(firstLine.prefix(140)), date: date, isRead: read,
                                          hasAttachments: attachments, webLink: link)

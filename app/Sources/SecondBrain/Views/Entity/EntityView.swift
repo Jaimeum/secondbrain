@@ -131,6 +131,7 @@ struct EntityView: View {
 
     private func actions(iconOnly: Bool) -> some View {
         HStack(spacing: Brand.spacing.s) {
+            EntityOriginalButton(path: path, iconOnly: iconOnly)   // v0.7 (§17.7): thread → newest email; meeting → its event
             if EntityView.isEditable(path) {
                 let edit = Button { state.editPage(path) } label: { Label(L("entity.edit"), systemImage: "pencil") }
                     .buttonStyle(.brandSecondary)

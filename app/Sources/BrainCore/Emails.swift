@@ -129,6 +129,7 @@ extension VaultStore {
                                        from: from, sourceId: Frontmatter.field("source_id", in: text),
                                        bodyHash: EmailParser.bodyFingerprint(Self.emailBody(text).body), added: nil,
                                        externalId: Frontmatter.field("external_id", in: text)))
+            meta.messages[meta.messages.count - 1].webLink = Frontmatter.field("web_link", in: text)   // v0.7 (§17.7)
             meta.addParticipants([from].compactMap { $0 })
         }
         return meta
@@ -305,7 +306,7 @@ public extension BrainEngine {
         cc: \(YAML.list(email.cc.map(EmailParser.format)))
         date: \(SBDate.iso(sent))
         added: \(SBDate.iso(added))
-        project: \(YAML.scalar(project))\(externalId.map { "\nexternal_id: \(YAML.quoted($0))" } ?? "")
+        project: \(YAML.scalar(project))\(externalId.map { "\nexternal_id: \(YAML.quoted($0))" } ?? "")\(email.webLink.map { "\nweb_link: \(YAML.quoted($0))" } ?? "")
         ---
 
 
@@ -323,6 +324,7 @@ public extension BrainEngine {
         meta.addParticipants([email.from].compactMap { $0 } + email.to + email.cc)
         meta.messages.append(.init(file: file.lastPathComponent, date: email.date, from: email.from, sourceId: id,
                                    bodyHash: EmailParser.bodyFingerprint(email.body), added: added, externalId: externalId))
+        meta.messages[meta.messages.count - 1].webLink = email.webLink   // v0.7 (§17.7)
         meta.messages.sort { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }
         try meta.save(to: dir)
 

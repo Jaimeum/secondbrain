@@ -1719,3 +1719,167 @@ Listo; `ProgressDots` en `accent`. El consentimiento nunca queda bajo el pliegue
   `scripts/build-app.sh` produce el ícono de marca.
 - Versión 0.5.0, `docs/RELEASE-NOTES` (README "Novedades"), README con la nueva navegación y capturas, `docs/TODO.md`
   con lo diferido (búsqueda de texto completo, animación D "conexión encontrada", Rive/Lottie).
+
+## 16. v0.6 — Ámbito por lugar, fichas, corrección y captura diaria (vinculante; prevalece sobre §15 donde choque)
+
+Decidido con el usuario el 2026-10-27. Principio rector: **el lugar fija el ámbito.** Fuera de un proyecto todo es del
+cerebro completo; dentro de un proyecto todo es de ese proyecto. **Ningún selector de ámbito en ninguna pantalla**
+(se elimina "Este proyecto | Todo el cerebro" de `ChatView` y el ⌥ de ⌘K). Las mismas funciones existen en ambos
+niveles, con la misma vista parametrizada por `Scope` (`.brain` / `.project(slug)`). El cerebro no gira en torno a la
+grabación: reuniones, correos, notas, documentos, enlaces y repos son entradas del día a día con el mismo peso.
+
+### 16.1 Barra lateral
+Orden: **Inicio** ⌘1 · **Preguntar** ⌘2 · **Grafo** ⌘3 · **Pendientes** ⌘4 · **Personas** ⌘5 — sección **Fuentes**:
+**Correo** ⌘6 · **Reuniones** ⌘7 · **Sin asignar** (solo si n > 0, con contador; `homeRoute = .inbox` deja de existir,
+`InboxView` es su vista) — sección **Proyectos**. `SidebarItem`: `home, ask, graph, tasks, people, mail, meetings,
+unassigned, project(slug)`. Se eliminan los alias de v0.5 (`brain`, `inbox`, `myTasks`, `templates`) y `BrainView`
+(código muerto). Las rutas de Inicio `HomeRoute.graph` y `.ask` desaparecen (Grafo y Preguntar tienen su ítem).
+**Pie del sidebar = `AddControl`**: botón "+ Agregar" (menú: Nota · Archivo… · Enlace… · Pegar correo ⌘⇧V · Grabar).
+Grabar solo toma el pie (tarjeta `record`-soft de §15.2) cuando hay una reunión del calendario en curso o se está
+grabando; entonces "+ Agregar" queda como botón secundario al lado. `QueueStatusLine` se mantiene.
+
+### 16.2 Proyecto
+Pestañas **Resumen · Contenido · Preguntar · Grafo · Pendientes · Personas** (`ProjectTab`: `summary, content, ask,
+graph, tasks, people`; por defecto `summary`; `ViewThatFits` → menú a 700 pt).
+- **Resumen** = ficha del proyecto (§16.4) con: "En breve" (`overview.md`, renderizado), Decisiones recientes (5),
+  Próximas fechas (hitos/límites de `timeline.md` futuros), Personas (avatares → ficha), Actividad reciente (5 fuentes),
+  Pendientes abiertos míos (3, "Ver todos →" pestaña Pendientes). Cada elemento es clicable.
+- **Contenido**: igual que §15.2 (Por fecha | Por tema) pero "En breve" ya no va fijado arriba (vive en Resumen).
+- **Preguntar / Grafo / Pendientes**: las vistas globales con `Scope.project(slug)`, sin selector.
+- **Personas**: personas vinculadas al proyecto (aristas del grafo + `project.json`), con rol/empresa de su página,
+  último contacto y nº de fuentes; clic → ficha filtrada al proyecto. "+ Agregar persona" (buscador de `people/`) y
+  "Quitar del proyecto" (menú contextual). Se guarda en `project.json` (`people: {include: [String], exclude:
+  [String]}`, slugs de `people/`) y además como hecho fijado (§16.6).
+- Menú "+ Agregar" del proyecto: Nota · Archivo… · Enlace… · Pegar correo · Grabar aquí (Grabar al final).
+  "Formato por defecto ▸" lista formatos de todos los ámbitos.
+
+### 16.3 Preguntar (`Views/Ask/AskView.swift`, `BrainCore/ChatStore.swift`)
+- Una vista `AskView(scope:)`: lista de conversaciones a la izquierda (200–260 pt, "Nueva conversación", más
+  recientes arriba, título = primera pregunta resumida a ≤ 6 palabras, menú contextual Renombrar / Eliminar) y la
+  conversación a la derecha.
+- **Conversaciones guardadas en disco**: `data/chats/brain/<id>.json` y `data/chats/projects/<slug>/<id>.json`
+  (`ChatThread {id, scope, title, createdAt, updatedAt, messages: [ChatMessage]}`); sobreviven al reinicio y al cambio
+  de vault se recargan del vault nuevo. `sb chat list [--project]` para tests.
+- Ámbito de proyecto = **prioriza el proyecto**: lee `projects/<slug>/**` y las páginas globales (`people/`, `orgs/`,
+  `facts.md`) que el proyecto enlaza; no lee otros proyectos. `query.md` se actualiza con esa regla. Ámbito cerebro =
+  todo el vault.
+- Citas: clic abre la página en un **panel lateral** (inspector) dentro de Preguntar, con "Abrir" para ir a su lugar;
+  nunca abandona la conversación. Igual en ambos ámbitos.
+- Cada respuesta: **Guardar como página** → `projects/<slug>/wiki/questions/` (proyecto) o `questions/` (cerebro);
+  aparece en Contenido / ⌘K. Botón "Corregir" no existe: la corrección es por edición (§16.6).
+- `questions/` global entra en `VaultStore.pages(projectSlug:nil)`, ⌘K y el grafo.
+- Preparación de reunión mantiene su ámbito implícito (proyecto del evento).
+
+### 16.4 Fichas: "qué sabemos de X" (`Views/Entity/EntityView.swift`, `BrainCore/EntityIndex.swift`)
+Cualquier nodo del grafo es una X con ficha: persona, empresa, tema, decisión, reunión, correo, documento, proyecto,
+pregunta guardada, repo. `EntityIndex` (reconstruido en `vaultRevision`, incremental) indexa todas las páginas del
+vault: id = ruta relativa sin `.md`, kind (por carpeta), título, aliases, proyecto, fecha de evento, enlaces salientes y
+**backlinks**. La ficha muestra:
+1. Cabecera: tipo, título, proyecto(s), chips de front-matter clicables, acciones (Editar, Ver en el grafo, Finder).
+2. La página escrita por Claude (`WikiWebView`) — el resumen.
+3. Secciones estructuradas automáticas (solo si tienen contenido): **Proyectos** · **Reuniones** · **Correos** ·
+   **Documentos y notas** · **Decisiones** · **Pendientes** (que la mencionan o de la que es dueña) · **Relacionados**
+   (otras entidades enlazadas en ambas direcciones), ordenadas por fecha de evento, cada fila clicable.
+- **Globales y filtrables**: abierta desde un lugar global, muestra todo; abierta dentro de un proyecto, las secciones se
+  filtran a ese proyecto y la cabecera muestra "En 🚀 Kickoff · Ver todo →" (abre la ficha global en Personas o Inicio).
+- **Empresas globales**: nueva carpeta `orgs/<slug>.md` (como `people/`), en el esquema del vault; las páginas de tema de
+  proyectos que hoy describen clientes/empresas se enlazan a ella (no se migran a mano: el ingest nuevo las crea y
+  `lint` sugiere). Personas llevan `org:` en front-matter.
+- **Regla única de clic en enlaces** (wikilinks, chips, filas de ficha, citas, nodos): se abre la ficha en el contexto
+  actual con pila de navegación y **Atrás** (⌘[). Dentro de un proyecto, una página de ese proyecto se abre en
+  Contenido; cualquier otra (persona, empresa, otro proyecto) se empuja como ficha filtrada. `VaultPageSheet` y
+  `PagePreviewSheet` se unifican en una sola `PageSheet` con Atrás, usada solo donde no hay pila (Correo, Reuniones).
+- **Personas** (sidebar) = lista global con búsqueda, rol, empresa y proyectos; clic → ficha. Se mantiene.
+- Exploración global de temas/empresas/decisiones: **por ⌘K** (no hay ítem extra).
+
+### 16.5 Grafo
+- `GraphView(scope:)`: sidebar Grafo (`.brain`, color por proyecto) y pestaña de proyecto (`.project`, color por tipo,
+  incluye las personas/empresas globales enlazadas). Sin selector. Un solo nombre: **Grafo** (se elimina la tarjeta
+  "Conexiones" de Inicio).
+- Clic en un nodo: se resalta y se abre su **ficha en un panel lateral** (versión compacta de §16.4) sin salir del
+  grafo; "Abrir" navega a la ficha completa según §16.4. Doble clic = Abrir.
+- "Ver en el grafo" desde una ficha abre el grafo del ámbito actual enfocado en ese nodo (arregla `focus: nil`).
+
+### 16.6 Editar a mano, propagar y hechos fijados (`Views/Entity/PageEditor.swift`, `BrainCore/Corrections.swift`)
+- Toda página del wiki y toda ficha tiene **Editar**: editor de markdown (monoespaciado, front-matter visible plegado),
+  Guardar ⌘S / Cancelar esc. Las fuentes `raw/` no se editan.
+- Al guardar: se escribe la página (entrada de Historial con antes/después → Deshacer) y se lanza
+  `/propagate` (comando nuevo del vault) con el diff. Claude **no escribe**: devuelve JSON
+  `{facts: [String], edits: [{path, before, after, reason}]}` con las demás páginas que afirman lo corregido.
+- Hoja **"Revisar cambios en el cerebro"**: lista de ediciones propuestas con diff por página, casillas (todas marcadas),
+  "Aplicar n" / "Solo esta página". Al aplicar: se escriben las ediciones (una entrada de Historial, deshacible) y los
+  `facts` se agregan a **`facts.md`** (raíz del vault, "Hechos confirmados por ti": `- 2026-10-27 · Javier Ruiz no forma
+  parte del equipo de Angela Torres. ([[javier-ruiz]], [[angela-torres]])`). Si Claude no encuentra nada que propagar,
+  igual se registra el hecho y se avisa "No encontré otras páginas que lo dijeran".
+- `facts.md` es vinculante para Claude: `CLAUDE.md` del vault (nueva sección) ordena leerlo antes de `ingest`, `query`,
+  `classify` y `lint`; nunca contradecirlo; si una fuente nueva lo contradice, conservar el hecho, anotar la
+  contradicción en `health.md` y en la página de la fuente ("Esto contradice un hecho que confirmaste: …"). La
+  frase "They never edit the wiki by hand" del esquema se reemplaza: el dueño puede editar; sus ediciones mandan.
+- `facts.md` se ve como página normal (⌘K "Hechos confirmados") y se puede editar.
+- Migración: subir `template-version`; vaults existentes reciben `facts.md`, `orgs/`, el comando `propagate.md` y el
+  `CLAUDE.md`/`query.md` nuevos por el mecanismo de migración existente.
+
+### 16.7 Búsqueda ⌘K
+- **Siempre global** (sin ⌥). Última fila: "Preguntar a todo el cerebro: «…»" (↩ sin resultados, ⌘↩ siempre) → ítem
+  Preguntar, conversación nueva.
+- **Texto completo**: índice invertido en memoria de todas las páginas del wiki (sin `raw/`), sin acentos ni mayúsculas,
+  reconstrucción incremental por archivo; resultados con fragmento (±60 caracteres, coincidencia en negrita). Títulos
+  siguen pesando más que cuerpo.
+- Grupos (máx. 4 filas, "Ver n más" expande): Personas · Empresas · Temas · Decisiones · Reuniones · Correos · Notas y
+  documentos · Preguntas guardadas · Repos · Pendientes · Proyectos · Acciones. Abrir una entidad → su ficha (§16.4).
+  Una tarea abre Pendientes de su proyecto con la fila resaltada.
+- Acciones: Nueva nota, Agregar archivo, Pegar enlace, Pegar correo, Grabar, Nuevo proyecto, Ajustes, Reglas, Formatos,
+  Hechos confirmados (Grabar ya no va primero).
+
+### 16.8 Pendientes
+`TasksView(scope:)` (`.brain` / `.project`). En `.brain` la barra de herramientas añade: **Proyecto ▾** (multi-selección),
+**Persona ▾** (dueño o mencionado; "Lo que le debo a…" / "Lo que me debe…") y campo **Buscar** (texto). Filtros
+persistidos por ventana (UserDefaults). El chip de proyecto navega a la pestaña Pendientes del proyecto. Segmentos y
+Origen como §15.2, en la barra de herramientas. `SourceTasksSheet` y el chip "Mis pendientes (n)" de reunión son
+clicables. Inicio "Ver todos (n)" cuenta lo mismo que lista.
+
+### 16.9 Inicio
+Orden: cabecera (fecha + campo "Busca o pregunta algo… ⌘K") → **Lo último que aprendí** (grid de tarjetas de las
+últimas 6 fuentes procesadas de cualquier tipo, incluidos commits/PR de GitHub agregados por repo, con "Ver todo por
+fecha →") → **Pendientes para hoy** → **Agenda** (bloque compacto: ahora/siguiente + hoy, máx. 3; se oculta sin
+calendario conectado, sin el aviso permanente "Conecta tu calendario") → **Por ordenar** (una línea "n por ordenar →
+Sin asignar" si n > 0). Se elimina la tarjeta Conexiones. Inicio vacío: cinco acciones con el mismo peso: Nota ·
+Archivo · Enlace · Correo · Grabar.
+
+### 16.10 Captura del día a día
+- **Captura rápida** (`Views/Capture/QuickCaptureWindow.swift`, `NSPanel` flotante 520×~220, no activa la app
+  principal): atajo global **⌃⌥Espacio** (configurable/desactivable en Ajustes › General, junto a ⌥⌘R). Un campo de
+  texto multilínea que detecta: URL → Enlace; texto con cabeceras de correo (From:/De:) → Correo; resto → Nota; y acepta
+  soltar archivos. Selector de proyecto (por defecto: sugerido por las reglas o "Sin asignar"), Guardar ⌘↩, esc cierra.
+  Confirmación "Guardado en 🚀 Kickoff" y se cierra.
+- **Barra de menús**: abre primero el mismo campo de captura (embebido); debajo, Grabar como una opción más
+  (`RecordControl` compacto), Detalles ▸, Abrir, Salir.
+- **Correo automático**: lo que cae en una regla con proyecto se guarda solo (§14.5). En v0.6 `autoAddMail` es
+  **verdadero por defecto** en reglas nuevas de correo y la oferta de regla lo dice ("…y guardar solos los próximos").
+  Lo que no cae en regla se queda en Correo sin tocar. Solo lectura, siempre.
+- `TemplateScope` gana `note` y `document` (los formatos existentes siguen siendo válidos).
+
+### 16.11 Onboarding y grabación
+- 5 pasos: Bienvenida → Claude → Tú y tu primer proyecto → Cuentas (opcional) → Listo. **Se quita el paso Permisos**:
+  micrófono/pantalla se piden la primera vez que el usuario pulsa Grabar (hoja breve explicativa + flujo actual con
+  "Reparar permiso"). La descarga de modelos de transcripción también se difiere al primer Grabar (o a Ajustes).
+- Copy de Bienvenida/tips: un segundo cerebro de todo lo que pasa en el día (correos, notas, documentos, enlaces, repos,
+  reuniones); ningún texto de bienvenida centrado en "escucho tus reuniones".
+- Estados vacíos sin sesgo a grabar.
+
+### 16.12 Ruteo y notificaciones
+- Un único enrutador: `AppState.navigate(to: Destination)` con `Destination` = `.sidebar(SidebarItem)`,
+  `.entity(path, scope)`, `.projectTab(slug, ProjectTab)`, `.task(id)`, `.event(id)`, `.chat(scope, threadId?)`,
+  `.graph(scope, focus?)`. Todos los `pending*` se consumen ahí y se limpian siempre (aunque el slug no exista).
+- Notificaciones: `done-` → ficha de la fuente; `inbox-` → Sin asignar; `failed-` → Sin asignar con la fila resaltada;
+  `job-`/`rate-` → Historial; correo automático → Contenido del proyecto.
+
+### 16.13 Verificación y entrega
+- Capturas (`SB_SNAPSHOT_WINDOW=1`, 1100×720 y 920×620, claro y oscuro) de: cada ítem del sidebar, cada pestaña de
+  proyecto, ficha global y filtrada, Preguntar con lista y panel de cita, Grafo con panel de ficha, editor, hoja
+  "Revisar cambios", captura rápida, barra de menús, onboarding (5 pasos), Pendientes con filtros.
+- `swift build` sin warnings nuevos; `sb selftest`, `sb github selftest`, `sb routing selftest` en verde y nuevos
+  `sb entity selftest` (índice, backlinks, filtros por proyecto), `sb chat selftest` (persistencia),
+  `sb facts selftest` (aplicar ediciones propuestas + `facts.md` + deshacer), `sb search selftest` (texto completo).
+- Versión **0.6.0**, notas de versión (README "Novedades" y `scripts/release.sh`), README con la nueva navegación,
+  `docs/TODO.md` actualizado, release publicada.

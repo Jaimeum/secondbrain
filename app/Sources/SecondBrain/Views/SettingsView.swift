@@ -238,6 +238,8 @@ private struct UpdatesSettings: View {
             } footer: {
                 if !updates.isEnabled {
                     Text(L("updates.unavailable"))
+                } else if updates.pendingInstallsDespiteSwitches, let pending = updates.pending {
+                    Text(L("updates.pendingStillInstalls", pending.version))
                 } else if updates.shouldMoveToApplications {
                     Text(L("updates.moveToApplications"))
                 }

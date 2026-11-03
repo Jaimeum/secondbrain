@@ -29,4 +29,19 @@ import BrainCore
     t.check(!UpdatePolicy.canInstallNow(isRecording: false, recorderBusy: true, jobs: idle), "recorder starting/stopping → waits")
     t.check(!UpdatePolicy.canInstallNow(isRecording: false, recorderBusy: false, jobs: idle + [job(.transcribe, .running)]),
             "transcribing → install waits")
+
+    // "Reiniciar" with an update staged must not race Sparkle's bundle swap with its own `open`.
+    t.eq(UpdatePolicy.restart(hasPendingUpdate: false, canInstallNow: true), .plain, "no update → plain relaunch")
+    t.eq(UpdatePolicy.restart(hasPendingUpdate: false, canInstallNow: false), .plain, "no update, busy → plain relaunch")
+    t.eq(UpdatePolicy.restart(hasPendingUpdate: true, canInstallNow: true), .installUpdate, "update + idle → Sparkle installs and relaunches")
+    t.eq(UpdatePolicy.restart(hasPendingUpdate: true, canInstallNow: false), .afterInstaller, "update + busy → open waits for the installer")
+
+    // Switching automatic updates off doesn't unstage a downloaded update: Ajustes says it still installs on quit.
+    let note = { (p: Bool, c: Bool, d: Bool) in
+        UpdatePolicy.pendingInstallsDespiteSwitches(hasPendingUpdate: p, automaticChecks: c, automaticDownloads: d)
+    }
+    t.check(!note(true, true, true), "switches on → no note")
+    t.check(note(true, true, false), "auto install off with a downloaded update → note")
+    t.check(note(true, false, true), "auto check off with a downloaded update → note")
+    t.check(!note(false, false, false), "nothing downloaded → no note")
 }

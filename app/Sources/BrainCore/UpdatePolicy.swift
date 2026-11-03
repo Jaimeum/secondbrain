@@ -35,4 +35,28 @@ public enum UpdatePolicy {
     public static func canInstallNow(isRecording: Bool, recorderBusy: Bool, jobs: [Job]) -> Bool {
         !isRecording && !recorderBusy && !isTranscribing(jobs)
     }
+
+    /// How AppState.relaunch ("Reiniciar" after a settings change) restarts the app.
+    public enum Restart: Equatable, Sendable {
+        /// No update waiting: quit and `open` the bundle once this process is gone.
+        case plain
+        /// An update is staged and nothing would be interrupted: let Sparkle install it and relaunch (no `open` of
+        /// our own racing its bundle swap).
+        case installUpdate
+        /// An update is staged but can't be installed now: Sparkle still installs it on quit, so the `open` waits
+        /// for its installer to finish before starting the (new) app.
+        case afterInstaller
+    }
+
+    public static func restart(hasPendingUpdate: Bool, canInstallNow: Bool) -> Restart {
+        guard hasPendingUpdate else { return .plain }
+        return canInstallNow ? .installUpdate : .afterInstaller
+    }
+
+    /// An update downloaded before the automatic switches were turned off is already armed to install on quit
+    /// (Sparkle has no way to unstage it): Ajustes says so instead of implying it was cancelled.
+    public static func pendingInstallsDespiteSwitches(hasPendingUpdate: Bool, automaticChecks: Bool,
+                                                      automaticDownloads: Bool) -> Bool {
+        hasPendingUpdate && (!automaticChecks || !automaticDownloads)
+    }
 }

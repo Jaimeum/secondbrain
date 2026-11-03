@@ -1825,5 +1825,6 @@
 "updates.installNow" = "Restart and Update";
 "updates.waitingRecording" = "It will install when the recording or transcription finishes.";
 "updates.menuBarReady" = "Update %@ ready · Restart";
+"updates.pendingStillInstalls" = "Version %@ is already downloaded and will install when you quit secondbrain, even with automatic updates off.";
 "updates.moveToApplications" = "Move secondbrain to Applications to receive updates.";
 "updates.unavailable" = "This copy of secondbrain doesn't receive automatic updates (development build).";

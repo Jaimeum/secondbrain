@@ -217,11 +217,24 @@ final class AppState {
 
     /// Quits and opens SecondBrain again. The new instance starts only after this process has exited, so two
     /// engines never share the queue. Plain `open` (no `-n`): the app allows one instance (`SingleInstance`).
+    /// v0.7.3: with an update staged for install-on-quit, Sparkle swaps the bundle as this process exits; the restart
+    /// hands off to it (or waits for its installer) instead of racing it with `open` (UpdatePolicy.restart).
     func relaunch() {
+        let plan = UpdatePolicy.restart(hasPendingUpdate: updates.pending != nil, canInstallNow: canInstallUpdateNow)
+        if plan == .installUpdate {
+            Log.info("relaunch: update pending, installing it and letting Sparkle relaunch")
+            updates.installNow()
+            return
+        }
         let pid = String(ProcessInfo.processInfo.processIdentifier)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        let wait = "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; "
+        var wait = "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; "
+        if plan == .afterInstaller {
+            // Sparkle's installer starts when this process exits; give it up to 2 min to finish the swap.
+            wait += "sleep 1; i=0; while pgrep -x Autoupdate >/dev/null && [ $i -lt 1200 ]; do sleep 0.1; i=$((i+1)); done; "
+            Log.info("relaunch: update pending, reopening after Sparkle's installer")
+        }
         if Bundle.main.bundleURL.pathExtension == "app" {
             process.arguments = ["-c", wait + "/usr/bin/open \"$0\"", Bundle.main.bundlePath, pid]
         } else if let exe = Bundle.main.executablePath {

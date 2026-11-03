@@ -34,17 +34,32 @@ final class UpdateController: NSObject {
     /// False when Sparkle can't install on its own (e.g. no SUPublicEDKey); the auto-install switch is then disabled.
     private(set) var allowsAutomaticInstall = false
 
+    // Turning these off only affects future cycles: an update already downloaded (`pending`) stays armed to
+    // install on quit (Sparkle has no API to unstage it), so `pending` is kept and Ajustes says it still installs.
     var automaticChecks = true {
         didSet {
             guard let updater, updater.automaticallyChecksForUpdates != automaticChecks else { return }
             updater.automaticallyChecksForUpdates = automaticChecks
+            logPendingIfSwitchedOff()
         }
     }
     var automaticDownloads = true {
         didSet {
             guard let updater, updater.automaticallyDownloadsUpdates != automaticDownloads else { return }
             updater.automaticallyDownloadsUpdates = automaticDownloads
+            logPendingIfSwitchedOff()
         }
+    }
+
+    /// The already-downloaded update installs on quit even with the switches off (Ajustes' footer).
+    var pendingInstallsDespiteSwitches: Bool {
+        UpdatePolicy.pendingInstallsDespiteSwitches(hasPendingUpdate: pending != nil, automaticChecks: automaticChecks,
+                                                    automaticDownloads: automaticDownloads)
+    }
+
+    private func logPendingIfSwitchedOff() {
+        guard pendingInstallsDespiteSwitches, let pending else { return }
+        Log.info("updates: automatic updates turned off; \(pending.version) was already downloaded and still installs on quit")
     }
 
     @ObservationIgnored private var controller: SPUStandardUpdaterController?

@@ -1825,5 +1825,6 @@
 "updates.installNow" = "Reiniciar y actualizar";
 "updates.waitingRecording" = "Se instalará al terminar la grabación o transcripción.";
 "updates.menuBarReady" = "Actualización %@ lista · Reiniciar";
+"updates.pendingStillInstalls" = "La versión %@ ya se descargó y se instalará al cerrar secondbrain, aunque apagues las actualizaciones automáticas.";
 "updates.moveToApplications" = "Mueve secondbrain a Aplicaciones para recibir actualizaciones.";
 "updates.unavailable" = "Esta copia de secondbrain no recibe actualizaciones automáticas (compilación de desarrollo).";

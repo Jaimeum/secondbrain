@@ -11,6 +11,21 @@ private final class CrashNoTranscriber: Transcribing, @unchecked Sendable {
     }
 }
 
+/// Reads its own job file from disk while "transcribing" (what a crash right now would leave behind), then fails
+/// with a fatal error so the run ends without touching Whisper.
+private final class DiskProbeTranscriber: Transcribing, @unchecked Sendable {
+    let jobsDir: URL
+    var seen: Job?
+    init(jobsDir: URL) { self.jobsDir = jobsDir }
+    func prepare(progress: @escaping @Sendable (ModelPrepProgress) -> Void) async throws {}
+    var isReady: Bool { true }
+    func transcribe(sessionDir: URL, manifest: SessionManifest, progress: @escaping @Sendable (Double, String) -> Void) async throws -> Transcript {
+        let files = (try? FileManager.default.contentsOfDirectory(at: jobsDir, includingPropertiesForKeys: nil)) ?? []
+        seen = files.compactMap { try? JSONDecoder.sb.decode(Job.self, from: Data(contentsOf: $0)) }.first { $0.kind == .transcribe }
+        throw EngineError.sessionMissing(manifest.id)
+    }
+}
+
 /// A fresh engine on the same data folder, like the app launching again after a crash.
 @MainActor private func launch(_ root: URL) -> BrainEngine {
     var config = AppConfig.default
@@ -95,6 +110,39 @@ private func simulateCrashMidRun(_ jobsDir: URL, id: String) throws {
 
     } catch {
         t.check(false, "queue crash-loop test threw: \(error)")
+    }
+
+    // The real `runNext` path: the attempt must already be on disk, `running`, while the job executes, so a crash
+    // inside `execute` is seen by the next launch (the log's endless "attempt 1" came from saving it only afterwards).
+    do {
+        let probeRoot = root.appendingPathComponent("run-next")
+        try fm.createDirectory(at: probeRoot, withIntermediateDirectories: true)
+        var config = AppConfig.default
+        config.vaultPath = probeRoot.appendingPathComponent("vault").path
+        config.dataPath = probeRoot.appendingPathComponent("data").path
+        config.uiLanguage = "es"
+        let paths = DataPaths(root: config.dataURL)
+        let probe = DiskProbeTranscriber(jobsDir: paths.jobs)
+        let engine = BrainEngine(config: config, transcriber: probe)
+        engine.autoProcess = false
+        engine.start()
+        let manifest = SessionManifest(id: SessionManifest.newId(at: Date()), title: "Prueba", projectSlug: nil,
+                                       startedAt: Date().addingTimeInterval(-60), endedAt: Date(),
+                                       tracks: ["system": ["system-000.wav"]], micCaptured: false)
+        let dir = paths.sessions.appendingPathComponent(manifest.id)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(repeating: 0, count: 64).write(to: dir.appendingPathComponent("system-000.wav"))
+        try manifest.save(to: dir)
+        engine.recordingFinished(manifest)
+        let ran = await engine.runUntilIdle(waitForLock: false)
+        t.check(ran, "runUntilIdle took the queue")
+        t.check(probe.seen != nil, "transcriber ran and found its job file")
+        t.eq(probe.seen?.status, .running, "job saved as running before execute")
+        t.eq(probe.seen?.attempts, 1, "attempt counted and saved before execute")
+        let after = engine.jobs.first { $0.kind == .transcribe }
+        t.check(after?.status == .failed && after?.attempts == 1, "fatal run → failed, attempt not counted twice")
+    } catch {
+        t.check(false, "runNext path test threw: \(error)")
     }
 
     // Retry policy: the attempt is counted when the run starts; a usage limit gives it back.

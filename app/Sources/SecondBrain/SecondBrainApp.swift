@@ -98,6 +98,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Snapshot mode (development) must not take focus or show windows on the user's screen.
         let snapshot = MainActor.assumeIsolated { DebugSnapshots.directory != nil }
+        // One SecondBrain at a time: a second copy (a translocated download, `open -n`, a double "Abrir") would
+        // start another engine, recover the same recordings and register the same hot keys. Bring up the running
+        // one and quit before `launch()` starts anything.
+        if !snapshot, MainActor.assumeIsolated({ SingleInstance.activateOtherAndShouldQuit(dataURL: AppState.shared.config.dataURL) }) {
+            exit(0)
+        }
         NSApp.setActivationPolicy(snapshot ? .prohibited : .regular)
         // Before any window shows, so a forced light/dark theme never flashes the system one.
         MainActor.assumeIsolated { AppState.applyAppearance(AppState.shared.config.appearance) }

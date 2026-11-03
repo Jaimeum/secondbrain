@@ -77,6 +77,9 @@ private final class ConfigBox: @unchecked Sendable {
     /// Another process (the app or `sb run`) holds `data/queue.lock` and is processing the queue; this engine
     /// waits and retries on its own.
     public private(set) var queueBusyElsewhere = false
+    /// Whether `start()` found the queue lock free. Startup repairs that must run in one process only (the app's
+    /// recovery of recordings cut short by a crash) check this, so a second process never repeats them.
+    public private(set) var ownsQueueAtStart = false
     public var onEvent: ((EngineEvent) -> Void)?
     /// Fires on every job change (status, progress, human message such as "Editando …").
     public var onJobUpdate: ((Job) -> Void)?
@@ -154,7 +157,10 @@ private final class ConfigBox: @unchecked Sendable {
         if owner { repairInterruptedSources() }
         needsRepair = !owner
         queueBusyElsewhere = !owner
-        Log.info("engine started: \(sources.count) sources, \(jobs.count) jobs, vault=\(config.vaultURL.path)"
+        ownsQueueAtStart = owner
+        // Pid and process name: several processes write this log (the app, `sb`), so a burst of starts can be told apart.
+        Log.info("engine started (\(ProcessInfo.processInfo.processName) pid \(getpid())): \(sources.count) sources, "
+                 + "\(jobs.count) jobs, vault=\(config.vaultURL.path)"
                  + (owner ? "" : " (queue owned by pid \(queueLock.holderPid().map(String.init) ?? "?"))"))
         if autoProcess { startWatching() }
         // MARK: v0.4 github — demo repos go under a project this vault has

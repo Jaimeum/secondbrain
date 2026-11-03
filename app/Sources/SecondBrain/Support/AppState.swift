@@ -197,8 +197,12 @@ final class AppState {
         MeetingsModel.shared.start(state: self)   // MARK: v0.3 meetings — agenda for Reuniones and the banners
         GitHubModel.shared.start(state: self)   // MARK: v0.4 github — keeps the followed repos up to date (§13.4)
         MailAutoImporter.shared.start(state: self)   // MARK: v0.4 routing — §14.5 auto-add of mail by rule
-        for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
-            engine.recordingFinished(manifest)
+        // Only the process that owns the queue repairs and re-enqueues interrupted recordings: another live one
+        // (a second app copy, `sb`) is doing it, and doing it twice could queue the same recording twice.
+        if engine.ownsQueueAtStart {
+            for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
+                engine.recordingFinished(manifest)
+            }
         }
     }
 
@@ -208,14 +212,14 @@ final class AppState {
     }
 
     /// Quits and opens SecondBrain again. The new instance starts only after this process has exited, so two
-    /// engines never share the queue (a quick `open -n` while we are still shutting down could run a job twice).
+    /// engines never share the queue. Plain `open` (no `-n`): the app allows one instance (`SingleInstance`).
     func relaunch() {
         let pid = String(ProcessInfo.processInfo.processIdentifier)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         let wait = "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; "
         if Bundle.main.bundleURL.pathExtension == "app" {
-            process.arguments = ["-c", wait + "/usr/bin/open -n \"$0\"", Bundle.main.bundlePath, pid]
+            process.arguments = ["-c", wait + "/usr/bin/open \"$0\"", Bundle.main.bundlePath, pid]
         } else if let exe = Bundle.main.executablePath {
             // Bare `swift build` binary (development): start it detached, keeping the environment (SB_CONFIG).
             process.arguments = ["-c", wait + "nohup \"$0\" >/dev/null 2>&1 &", exe, pid]

@@ -29,6 +29,7 @@ struct SelfTest: AsyncParsableCommand {
         t.group("transcript-merge") { testTranscriptMerge(t) }   // MARK: v0.7.3 transcribe crash
         await t.groupAsync("model-gate") { await testModelGate(t) }   // MARK: v0.7.3 transcribe crash
         await t.groupAsync("queue-crash-loop") { await testQueueCrashLoop(t, root: root.appendingPathComponent("queue-crash")) }   // MARK: v0.7.3 transcribe crash
+        await t.groupAsync("queue-owner-at-start") { await testQueueOwnerAtStart(t, root: root.appendingPathComponent("queue-owner")) }   // MARK: v0.7.3 engine-start burst
         await t.groupAsync("v03-models") { await testV3Models(t, root: root.appendingPathComponent("v03")) }
         await t.groupAsync("accounts") { await testAccounts(t, root: root.appendingPathComponent("accounts")) }   // MARK: v0.3 accounts
         await t.groupAsync("v03-meetings") { await testMeetings(t, root: root.appendingPathComponent("meetings")) }

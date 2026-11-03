@@ -129,3 +129,28 @@ private func simulateCrashMidRun(_ jobsDir: URL, id: String) throws {
     t.check(q.replace(with: [other], resetRunning: false).isEmpty && q.jobs.first?.status == .running,
             "without the queue lock running jobs are left alone")
 }
+
+// MARK: v0.7.3 engine-start burst — only the process that owns the queue at start runs one-time startup repairs.
+
+@MainActor func testQueueOwnerAtStart(_ t: Tester, root: URL) async {
+    try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let lockURL = root.appendingPathComponent("data").appendingPathComponent("queue.lock")
+
+    // Another live process holds the queue (a second app copy, `sb`): this engine must not own it.
+    let other = QueueLock(url: lockURL)
+    t.check(other.tryLock(), "stand-in process takes the queue lock")
+    let second = launch(root)
+    t.eq(second.ownsQueueAtStart, false, "engine started while the queue is held → not owner (skips recovery)")
+    t.check(second.queueBusyElsewhere, "engine reports the queue busy elsewhere")
+    t.eq(other.holderPid(), getpid(), "lock file names the holder pid")
+    t.check(other.holderName() != nil, "holder is a live process")
+
+    // A second lock on the same file (what a second app copy does with data/app.lock) is refused.
+    let again = QueueLock(url: lockURL)
+    t.eq(again.tryLock(), false, "second flock on the same file is refused while held")
+
+    // Holder gone: the next engine owns the queue and does the startup repairs.
+    other.unlock()
+    let first = launch(root)
+    t.eq(first.ownsQueueAtStart, true, "engine started with the queue free → owner")
+}

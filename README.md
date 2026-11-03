@@ -173,6 +173,8 @@ scripts/make-update-key.sh            # una vez: clave EdDSA de las actualizacio
 scripts/release.sh <versión>          # publica en GitHub Releases (zip, dmg, appcast.xml firmado) y borra las anteriores
 ```
 
+- **Antes de la primera release con actualizaciones automáticas:** corre `scripts/make-update-key.sh` y haz commit de `scripts/sparkle-public-ed-key.txt`; además el repo tiene que ser **público** (las apps instaladas bajan `releases/latest/download/appcast.xml` sin sesión). Hacerlo público expone todo el código y su historial: es decisión del dueño, `release.sh` solo lo comprueba. `release.sh` rechaza una versión más vieja que la última publicada y pide `SB_REPUBLISH=1` para volver a publicar la misma.
+
 - **Arquitectura y contrato entre módulos:** `docs/CONTRACT.md`. Los módulos son `Recorder`, `Transcription` (WhisperKit + SpeakerKit), `BrainCore` (cola, Claude, historial, vault), `SecondBrain` (UI) y `sb` (CLI).
 - **El esquema del cerebro** está en `app/Sources/BrainCore/Resources/vault-template/`.
 - **Marca:** el kit está en `docs/brand/` y su uso en código en `docs/brand/USAGE.md`; todos los colores y fuentes salen de `app/Sources/SecondBrain/Support/Brand.swift` (y de las variables `:root` de `wiki.css`/`graph.css`). Reglas de UX y layout: `docs/CONTRACT.md` §15 (v0.5) y §16 (v0.6, vinculante).

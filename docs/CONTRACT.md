@@ -429,6 +429,14 @@ entitlements no-sandbox; `--release` además genera
 `dist/SecondBrain-<ver>.zip` (ditto) y `dist/SecondBrain-<ver>.dmg` (hdiutil, con alias a /Applications)),
 `release.sh <version>` (gh repo create si no existe, push, gh release create con zip+dmg).
 Versión en `VERSION` (raíz), inicial `0.1.0`.
+Desde 0.7.3 (actualizaciones automáticas, Sparkle): `build-app.sh` incrusta `Sparkle.framework` (firmado con la
+misma identidad) y escribe en Info.plist el feed `releases/latest/download/appcast.xml` y la clave pública EdDSA
+(`--release` falla sin `scripts/sparkle-public-ed-key.txt`; se crea una vez con `make-update-key.sh`). `release.sh`
+sube zip, dmg, `SHA256SUMS.txt` y un `appcast.xml` firmado (`make-appcast.py`, un solo item) a una release marcada
+*latest*, y cuando el feed público ya sirve esa versión borra todas las releases y tags anteriores (remotos y
+locales) y los builds viejos de `dist/`: en GitHub solo queda la más nueva. La app se actualiza con el zip; el dmg
+es solo para la primera instalación. Una actualización solo se instala si conserva el requisito designado
+(bundle id + certificado "SecondBrain Dev"), así que los permisos TCC sobreviven.
 
 ## 11. v0.2 — Pendientes, acuerdos, formatos, exportar, correos y fechas
 

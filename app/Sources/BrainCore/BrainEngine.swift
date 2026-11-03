@@ -77,6 +77,9 @@ private final class ConfigBox: @unchecked Sendable {
     /// Another process (the app or `sb run`) holds `data/queue.lock` and is processing the queue; this engine
     /// waits and retries on its own.
     public private(set) var queueBusyElsewhere = false
+    /// Whether `start()` found the queue lock free. Startup repairs that must run in one process only (the app's
+    /// recovery of recordings cut short by a crash) check this, so a second process never repeats them.
+    public private(set) var ownsQueueAtStart = false
     public var onEvent: ((EngineEvent) -> Void)?
     /// Fires on every job change (status, progress, human message such as "Editando …").
     public var onJobUpdate: ((Job) -> Void)?
@@ -148,12 +151,16 @@ private final class ConfigBox: @unchecked Sendable {
         for entry in history.recoverInterrupted() { Log.info("recovered interrupted change \(entry.id): \(entry.title)") }
         sources = sourceStore.loadAll()
         migrateSourceDates()
-        queue.load(resetRunning: owner)
+        let quarantined = queue.load(resetRunning: owner, interruptedError: interruptedJobError)
         jobs = queue.jobs
+        quarantine(quarantined)
         if owner { repairInterruptedSources() }
         needsRepair = !owner
         queueBusyElsewhere = !owner
-        Log.info("engine started: \(sources.count) sources, \(jobs.count) jobs, vault=\(config.vaultURL.path)"
+        ownsQueueAtStart = owner
+        // Pid and process name: several processes write this log (the app, `sb`), so a burst of starts can be told apart.
+        Log.info("engine started (\(ProcessInfo.processInfo.processName) pid \(getpid())): \(sources.count) sources, "
+                 + "\(jobs.count) jobs, vault=\(config.vaultURL.path)"
                  + (owner ? "" : " (queue owned by pid \(queueLock.holderPid().map(String.init) ?? "?"))"))
         if autoProcess { startWatching() }
         // MARK: v0.4 github — demo repos go under a project this vault has
@@ -662,13 +669,15 @@ private final class ConfigBox: @unchecked Sendable {
             }.value
             guard store === sourceStore else { return }   // reloaded meanwhile
             guard generation == writeGeneration, !isProcessing else { continue }
-            queue.replace(with: loadedJobs, resetRunning: resetRunning && queueLock.isHeld)
+            let quarantined = queue.replace(with: loadedJobs, resetRunning: resetRunning && queueLock.isHeld,
+                                            interruptedError: interruptedJobError)
             if jobs != queue.jobs { jobs = queue.jobs }
             if loadedSources != sources {
                 let old = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
                 sources = loadedSources
                 for src in loadedSources where old[src.id] != src { onEvent?(.sourceUpdated(src)) }
             }
+            quarantine(quarantined)
             return
         }
     }
@@ -737,11 +746,14 @@ private final class ConfigBox: @unchecked Sendable {
         guard !isProcessing, !stopping, queueLock.isHeld, var job = queue.nextRunnable() else { return false }
         isProcessing = true
         defer { isProcessing = false }
+        // The attempt is counted and saved before the run: if it crashes the process, the next launch sees it
+        // (`JobQueue.replace` counts the interruption and stops a job that keeps crashing).
         job.status = .running
+        job.attempts += 1
         job.message = initialMessage(for: job)
         job.updatedAt = Date()
         saveJob(job)
-        Log.info("running \(job.kind.rawValue) job \(job.id) attempt \(job.attempts + 1)")
+        Log.info("running \(job.kind.rawValue) job \(job.id) attempt \(job.attempts)")
 
         let outcome = await execute(job)
         let current = queue.job(id: job.id) ?? job
@@ -804,20 +816,60 @@ private final class ConfigBox: @unchecked Sendable {
         case .fatal, .retryable:
             saveJob(job)
             Log.error("job \(job.id) \(job.status == .failed ? "failed" : "will retry"): \(job.error ?? "")")
-            if var src = job.sourceId.flatMap(source), !(job.kind == .classify && src.projectSlug != nil) {
-                src.progress = nil
-                if job.kind == .classify {
-                    src.status = .needsProject       // a failed suggestion is not a failed source
-                } else if job.status == .failed {
-                    src.status = .failed
-                    src.error = job.error
-                } else {
-                    src.status = .queued
-                }
-                upsert(&src)
+            applyJobFailure(job)
+        }
+    }
+
+    /// Shows a job that failed (or will retry) on its source, its drop and as an event. Shared by `finish` and
+    /// `quarantine`, so a job stopped after crashing lands in the same "Con problema" / "Reintentar" state.
+    private func applyJobFailure(_ job: Job) {
+        if var src = job.sourceId.flatMap(source), !(job.kind == .classify && src.projectSlug != nil) {
+            src.progress = nil
+            if job.kind == .classify {
+                src.status = .needsProject       // a failed suggestion is not a failed source
+            } else if job.status == .failed {
+                src.status = .failed
+                src.error = job.error
+            } else {
+                src.status = .queued
             }
-            if job.kind == .fileDump { job.status == .failed ? fileDumpFailed(job) : fileDumpWillRetry(job) }   // v0.7
-            if job.status == .failed { onEvent?(.jobFailed(job)) }
+            upsert(&src)
+        }
+        if job.kind == .fileDump { job.status == .failed ? fileDumpFailed(job) : fileDumpWillRetry(job) }   // v0.7
+        if job.status == .failed { onEvent?(.jobFailed(job)) }
+    }
+
+    /// Error for a job failed because the process kept dying while it ran.
+    private var interruptedJobError: String {
+        lang.t("La app se cerró mientras procesaba esto. Lo pausé para que no vuelva a pasar; puedes reintentarlo.",
+               "The app closed while processing this. I paused it so it doesn't happen again; you can retry it.")
+    }
+
+    /// Jobs `JobQueue.replace` failed after repeated interrupted runs: surfaced like any failed job (the audio and
+    /// session stay, so "Reintentar" can run them again).
+    private func quarantine(_ failed: [Job]) {
+        guard !failed.isEmpty else { return }
+        jobs = queue.jobs
+        for job in failed {
+            Log.error("job \(job.id) quarantined after \(job.interruptions ?? 0) interrupted runs (attempt \(job.attempts))")
+            onJobUpdate?(job)
+            applyJobFailure(job)
+        }
+    }
+
+    /// Call on a clean quit: a job running here goes back to `queued` without using an attempt, so only a real
+    /// crash or force quit counts as an interrupted run.
+    public func prepareForTermination() {
+        stopping = true
+        guard queueLock.isHeld else { return }
+        for var job in queue.jobs where job.status == .running {
+            job.status = .queued
+            job.attempts = max(0, job.attempts - 1)
+            job.notBefore = nil
+            job.progress = nil
+            job.updatedAt = Date()
+            saveJob(job)
+            Log.info("job \(job.id) requeued on quit")
         }
     }
 
@@ -1089,6 +1141,13 @@ private final class ConfigBox: @unchecked Sendable {
                     src.progress = nil
                     upsert(&src)
                 }
+            } else if let failed = queue.jobs.last(where: { $0.sourceId == src.id && $0.status == .failed }) {
+                // A job stopped after crashing (or failed before the source was saved): keep it stopped. `retry`
+                // would replace it with a fresh job and the crash loop would start over.
+                src.status = .failed
+                src.error = failed.error ?? interruptedJobError
+                src.progress = nil
+                upsert(&src)
             } else {
                 retry(sourceId: src.id)
             }

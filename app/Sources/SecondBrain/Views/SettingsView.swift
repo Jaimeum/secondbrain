@@ -191,7 +191,93 @@ private struct GeneralSettings: View {
                 SettingsDivider()
                 CaptureHotKeyRow()
             }
+            UpdatesSettings()   // v0.7.3 auto-updates
         }
+    }
+}
+
+// MARK: - Actualizaciones (v0.7.3 auto-updates, Support/Updates.swift)
+
+/// Version, last check, the two automatic switches and "Buscar ahora"; a downloaded update offers "Reiniciar y
+/// actualizar", disabled while recording or transcribing (it installs on quit anyway).
+private struct UpdatesSettings: View {
+    @Environment(AppState.self) private var state
+
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–"
+    }
+
+    var body: some View {
+        @Bindable var updates = state.updates
+        VStack(alignment: .leading, spacing: Brand.spacing.s) {
+            if let pending = updates.pending {
+                UpdateReadyNotice(version: pending.version)
+            }
+            SettingsGroup(title: L("settings.group.updates")) {
+                SettingsRow(title: L("updates.version"), detail: lastCheckText) {
+                    Text(verbatim: version)
+                        .font(Brand.font(12, .semibold))
+                        .foregroundStyle(Brand.color.text)
+                }
+                SettingsDivider()
+                SettingsRow(title: L("updates.autoCheck")) {
+                    Toggle("", isOn: $updates.automaticChecks).toggleStyle(.switch).labelsHidden()
+                }
+                .disabled(!updates.isEnabled)
+                SettingsDivider()
+                SettingsRow(title: L("updates.autoInstall")) {
+                    Toggle("", isOn: $updates.automaticDownloads).toggleStyle(.switch).labelsHidden()
+                }
+                .disabled(!updates.isEnabled || !updates.automaticChecks || !updates.allowsAutomaticInstall)
+                SettingsDivider()
+                SettingsRow(title: L("updates.checkNow"), detail: updates.lastError) {
+                    Button(L("updates.checkNowButton")) { updates.checkForUpdates() }
+                        .buttonStyle(.brandSecondary)
+                        .disabled(!updates.isEnabled || !updates.canCheck)
+                }
+            } footer: {
+                if !updates.isEnabled {
+                    Text(L("updates.unavailable"))
+                } else if updates.pendingInstallsDespiteSwitches, let pending = updates.pending {
+                    Text(L("updates.pendingStillInstalls", pending.version))
+                } else if updates.shouldMoveToApplications {
+                    Text(L("updates.moveToApplications"))
+                }
+            }
+        }
+    }
+
+    private var lastCheckText: String {
+        guard let date = state.updates.lastCheck else { return L("updates.lastCheckNever") }
+        let when = Calendar.current.isDateInToday(date) ? Fmt.time(date) : Fmt.date(date)
+        return L("updates.lastCheck", when)
+    }
+}
+
+/// "secondbrain X está lista · Reiniciar y actualizar", shaped like RestartNotice.
+private struct UpdateReadyNotice: View {
+    @Environment(AppState.self) private var state
+    let version: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.down.circle").foregroundStyle(Brand.color.accent)
+                Text(L("updates.ready", version))
+                    .foregroundStyle(Brand.color.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(L("updates.installNow")) { state.updates.installNow() }
+                    .buttonStyle(.brandPrimary)
+                    .disabled(!state.canInstallUpdateNow)
+            }
+            if !state.canInstallUpdateNow {
+                Text(L("updates.waitingRecording"))
+                    .font(Brand.caption)
+                    .foregroundStyle(Brand.color.text2)
+            }
+        }
+        .padding(12)
+        .background(Brand.color.cardAlt, in: RoundedRectangle(cornerRadius: Brand.radius.card, style: .continuous))
     }
 }
 

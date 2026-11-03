@@ -12,8 +12,12 @@ actor ModelStore {
     private(set) var speaker: SpeakerKit?
     private var loading: Task<Void, Error>?
 
-    /// WhisperKit/SpeakerKit are reference types without Sendable conformance; the transcription
-    /// queue is serial, so handing them out of the actor is safe in practice.
+    /// Serializes every WhisperKit/SpeakerKit call on these instances (see `ModelGate`).
+    nonisolated let gate = ModelGate()
+
+    /// WhisperKit/SpeakerKit are reference types without Sendable conformance and are not safe to call
+    /// concurrently. Handing them out of the actor is safe only because callers make every model call
+    /// through `gate`, one at a time, and never ask WhisperKit to decode in parallel.
     struct Loaded: @unchecked Sendable {
         let whisper: WhisperKit
         let speaker: SpeakerKit

@@ -85,6 +85,18 @@ struct MenuBarView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // v0.7.3 auto-updates: a downloaded update, one click from installing (not while recording/transcribing).
+            if let pending = state.updates.pending {
+                Button { state.updates.installNow() } label: {
+                    Label(L("updates.menuBarReady", pending.version), systemImage: "arrow.down.circle")
+                        .font(Brand.callout)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(state.canInstallUpdateNow ? Brand.color.accent : Brand.color.text2)
+                .disabled(!state.canInstallUpdateNow)
+                .help(state.canInstallUpdateNow ? "" : L("updates.waitingRecording"))
+            }
+
             HStack {
                 Button(L("menu.open"), action: openMain)
                 Spacer()

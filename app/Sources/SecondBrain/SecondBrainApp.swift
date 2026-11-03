@@ -30,6 +30,11 @@ struct SecondBrainApp: App {
         .defaultSize(width: 1100, height: 720)
         .windowToolbarStyle(.unified)
         .commands {
+            // v0.7.3 auto-updates: "Buscar actualizaciones…" under "Acerca de secondbrain".
+            CommandGroup(after: .appInfo) {
+                Button(L("updates.menu.check")) { state.updates.checkForUpdates() }
+                    .disabled(!state.updates.isEnabled || !state.updates.canCheck)
+            }
             CommandGroup(replacing: .newItem) {
                 Button(L("sidebar.newProject")) { state.showNewProject = true }
                     .keyboardShortcut("n")
@@ -98,6 +103,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Snapshot mode (development) must not take focus or show windows on the user's screen.
         let snapshot = MainActor.assumeIsolated { DebugSnapshots.directory != nil }
+        // One SecondBrain at a time: a second copy (a translocated download, `open -n`, a double "Abrir") would
+        // start another engine, recover the same recordings and register the same hot keys. Bring up the running
+        // one and quit before `launch()` starts anything.
+        if !snapshot, MainActor.assumeIsolated({ SingleInstance.activateOtherAndShouldQuit(dataURL: AppState.shared.config.dataURL) }) {
+            exit(0)
+        }
         NSApp.setActivationPolicy(snapshot ? .prohibited : .regular)
         // Before any window shows, so a forced light/dark theme never flashes the system one.
         MainActor.assumeIsolated { AppState.applyAppearance(AppState.shared.config.appearance) }
@@ -131,6 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // A clean quit isn't a crash: put the running job back without using an attempt.
+        MainActor.assumeIsolated { AppState.shared.engine.prepareForTermination() }
         // A Claude run cut short is recorded (and undoable) on the next launch; don't let it keep editing.
         ClaudeRunner.terminateAll()
     }

@@ -307,6 +307,8 @@ public struct Job: Codable, Identifiable, Equatable, Sendable {
     public var projectSlug: String?
     public var payload: [String: String]
     public var attempts: Int
+    /// Runs cut short by the process dying (crash, force quit). Optional so older job files still decode.
+    public var interruptions: Int?
     public var notBefore: Date?
     public var error: String?
     public var message: String?

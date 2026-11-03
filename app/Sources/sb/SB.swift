@@ -38,7 +38,31 @@ func makeEngine(_ config: AppConfig = AppConfig.load()) -> BrainEngine {
     let engine = BrainEngine(config: config, transcriber: transcriber)
     engine.autoProcess = false
     engine.start()
+    TerminationSignals.install(for: engine)
     return engine
+}
+
+/// `sb` works through the whole queue (including long transcribe jobs the app queued). Stopped with Ctrl-C or a
+/// tool timeout's SIGTERM, it must requeue the job it was running like the app does on quit; otherwise the next
+/// queue owner counts the run as a crash and, after `JobQueue.maxInterruptions`, fails a healthy job.
+@MainActor enum TerminationSignals {
+    private static var sources: [DispatchSourceSignal] = []
+    private static weak var engine: BrainEngine?
+
+    static func install(for engine: BrainEngine) {
+        self.engine = engine
+        guard sources.isEmpty else { return }
+        for sig in [SIGINT, SIGTERM, SIGHUP] {
+            signal(sig, SIG_IGN)   // delivered to the dispatch source instead of killing the process
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler {
+                MainActor.assumeIsolated { TerminationSignals.engine?.prepareForTermination() }
+                exit(128 + sig)
+            }
+            source.resume()
+            sources.append(source)
+        }
+    }
 }
 
 struct CLIError: Error, CustomStringConvertible {
@@ -199,6 +223,7 @@ struct Run: AsyncParsableCommand {
         }
         engine.onJobUpdate = { job in print("[\(job.kind.rawValue)] \(job.status.rawValue)") }
         engine.start()
+        TerminationSignals.install(for: engine)
         var wasBusy: Bool?
         for tick in 0..<(serve * 2) {
             if tick == 6, let reloadConfig {
@@ -237,6 +262,7 @@ struct Status: AsyncParsableCommand {
         if engine.jobs.isEmpty { print("  (none)") }
         for j in engine.jobs {
             var line = "  \(j.id.prefix(8))  \(j.kind.rawValue)\t\(j.status.rawValue)\tattempts=\(j.attempts)"
+            if let n = j.interruptions, n > 0 { line += " interrupted=\(n)" }
             if let nb = j.notBefore { line += "  not before \(stamp(nb))" }
             if let err = j.error { line += "  ! \(err)" }
             print(line)

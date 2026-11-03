@@ -33,6 +33,8 @@ final class AppState {
     private(set) var engine: BrainEngine
     private(set) var transcriber: WhisperTranscriber
     let recorder: Recorder
+    /// v0.7.3: Sparkle auto-updates (Support/Updates.swift); started by `launch()`.
+    let updates: UpdateController
 
     private(set) var projects: [Project] = []
     /// Bumped whenever the vault likely changed on disk, so lists of pages refresh.
@@ -159,6 +161,7 @@ final class AppState {
         self.transcriber = transcriber
         engine = BrainEngine(config: config, transcriber: transcriber)
         recorder = Recorder(sessionsDir: paths.sessions)
+        updates = UpdateController()
     }
 
     // MARK: Lifecycle
@@ -174,6 +177,7 @@ final class AppState {
             applyHotKey()
             QuickCapturePanel.shared.applyHotKey(state: self)   // MARK: v0.6 capture — ⌥⌘N or the recorded one (§16.10)
         }
+        updates.start()   // v0.7.3: a no-op in snapshots and outside a release-configured .app
         if config.onboardingComplete {
             startEngine()
             // v0.6 (§16.11): the transcription model waits for the first "Grabar" (or Ajustes); once recording was
@@ -197,8 +201,12 @@ final class AppState {
         MeetingsModel.shared.start(state: self)   // MARK: v0.3 meetings — agenda for Reuniones and the banners
         GitHubModel.shared.start(state: self)   // MARK: v0.4 github — keeps the followed repos up to date (§13.4)
         MailAutoImporter.shared.start(state: self)   // MARK: v0.4 routing — §14.5 auto-add of mail by rule
-        for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
-            engine.recordingFinished(manifest)
+        // Only the process that owns the queue repairs and re-enqueues interrupted recordings: another live one
+        // (a second app copy, `sb`) is doing it, and doing it twice could queue the same recording twice.
+        if engine.ownsQueueAtStart {
+            for manifest in Recorder.recoverInterruptedSessions(in: engine.paths.sessions) {
+                engine.recordingFinished(manifest)
+            }
         }
     }
 
@@ -208,14 +216,27 @@ final class AppState {
     }
 
     /// Quits and opens SecondBrain again. The new instance starts only after this process has exited, so two
-    /// engines never share the queue (a quick `open -n` while we are still shutting down could run a job twice).
+    /// engines never share the queue. Plain `open` (no `-n`): the app allows one instance (`SingleInstance`).
+    /// v0.7.3: with an update staged for install-on-quit, Sparkle swaps the bundle as this process exits; the restart
+    /// hands off to it (or waits for its installer) instead of racing it with `open` (UpdatePolicy.restart).
     func relaunch() {
+        let plan = UpdatePolicy.restart(hasPendingUpdate: updates.pending != nil, canInstallNow: canInstallUpdateNow)
+        if plan == .installUpdate {
+            Log.info("relaunch: update pending, installing it and letting Sparkle relaunch")
+            updates.installNow()
+            return
+        }
         let pid = String(ProcessInfo.processInfo.processIdentifier)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        let wait = "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; "
+        var wait = "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; "
+        if plan == .afterInstaller {
+            // Sparkle's installer starts when this process exits; give it up to 2 min to finish the swap.
+            wait += "sleep 1; i=0; while pgrep -x Autoupdate >/dev/null && [ $i -lt 1200 ]; do sleep 0.1; i=$((i+1)); done; "
+            Log.info("relaunch: update pending, reopening after Sparkle's installer")
+        }
         if Bundle.main.bundleURL.pathExtension == "app" {
-            process.arguments = ["-c", wait + "/usr/bin/open -n \"$0\"", Bundle.main.bundlePath, pid]
+            process.arguments = ["-c", wait + "/usr/bin/open \"$0\"", Bundle.main.bundlePath, pid]
         } else if let exe = Bundle.main.executablePath {
             // Bare `swift build` binary (development): start it detached, keeping the environment (SB_CONFIG).
             process.arguments = ["-c", wait + "nohup \"$0\" >/dev/null 2>&1 &", exe, pid]
@@ -549,6 +570,14 @@ final class AppState {
     }
 
     var isRecorderBusy: Bool { recorder.state == .starting || recorder.state == .stopping }
+
+    /// A transcription is running (installing an update now would cut it short).
+    var isTranscribing: Bool { UpdatePolicy.isTranscribing(engine.jobs) }
+
+    /// "Reiniciar y actualizar" interrupts nothing: no recording (starting, running or stopping), no transcription.
+    var canInstallUpdateNow: Bool {
+        UpdatePolicy.canInstallNow(isRecording: isRecording, recorderBusy: isRecorderBusy, jobs: engine.jobs)
+    }
 
     private var recordingTitleOrNil: String? {
         let t = recordingTitle.trimmingCharacters(in: .whitespacesAndNewlines)

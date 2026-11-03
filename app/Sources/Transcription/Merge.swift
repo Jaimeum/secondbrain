@@ -118,21 +118,27 @@ public enum TranscriptMerge {
     ]
 
     /// Removes runaway n-gram loops ("y y y y y", "no sé no sé no sé no sé"), keeping one copy.
+    /// The n-gram length bound is recomputed on every pass: a collapse can leave fewer than `minRepeats` words
+    /// ("y y y" → "y"), and `1...0` would trap.
     public static func collapseLoops(_ text: String, minRepeats: Int = 3) -> String {
+        guard minRepeats >= 2 else { return text }   // 0 divides by zero, 1 would never stop collapsing
         var words = text.split(separator: " ").map(String.init)
         guard words.count >= minRepeats else { return text }
-        let key = { (w: String) in normalized(w) }
+        var keys = words.map { normalized($0) }
         var changed = true
         while changed {
             changed = false
-            outer: for n in 1...min(6, words.count / minRepeats) {
+            let maxN = min(6, words.count / minRepeats)
+            guard maxN >= 1 else { break }
+            outer: for n in 1...maxN {
                 var i = 0
                 while i + n * minRepeats <= words.count {
-                    let gram = words[i..<i + n].map(key)
+                    let gram = keys[i..<i + n]
                     var reps = 1
-                    while i + (reps + 1) * n <= words.count, words[i + reps * n..<i + (reps + 1) * n].map(key) == gram { reps += 1 }
+                    while i + (reps + 1) * n <= words.count, keys[i + reps * n..<i + (reps + 1) * n] == gram { reps += 1 }
                     if reps >= minRepeats {
                         words.removeSubrange(i + n..<i + reps * n)
+                        keys.removeSubrange(i + n..<i + reps * n)
                         changed = true
                         break outer
                     }

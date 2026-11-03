@@ -1806,3 +1806,25 @@
 "attach.review.hint" = "Ya guardé el correo. Marqué los adjuntos que parecen útiles: revisa y confirma con «Guardar los marcados».";
 "attach.review.done" = "Listo";
 "batch.wholeThreads" = "+%ld del resto de sus conversaciones";
+
+/* v0.7.3 auto-updates (Support/Updates.swift) */
+"notify.updateTitle" = "Actualización lista";
+"notify.updateBody" = "secondbrain %@ se instalará al cerrar la app, o ahora desde Ajustes.";
+"notify.updateAvailableTitle" = "Hay una actualización";
+"notify.updateAvailableBody" = "secondbrain %@ está disponible.";
+"updates.menu.check" = "Buscar actualizaciones…";
+"settings.group.updates" = "Actualizaciones";
+"updates.version" = "Versión";
+"updates.lastCheck" = "Última búsqueda: %@";
+"updates.lastCheckNever" = "Aún no se ha buscado";
+"updates.autoCheck" = "Buscar actualizaciones automáticamente";
+"updates.autoInstall" = "Descargar e instalar automáticamente";
+"updates.checkNow" = "Buscar una versión nueva";
+"updates.checkNowButton" = "Buscar ahora";
+"updates.ready" = "secondbrain %@ está lista.";
+"updates.installNow" = "Reiniciar y actualizar";
+"updates.waitingRecording" = "Se instalará al terminar la grabación o transcripción.";
+"updates.menuBarReady" = "Actualización %@ lista · Reiniciar";
+"updates.pendingStillInstalls" = "La versión %@ ya se descargó y se instalará al cerrar secondbrain, aunque apagues las actualizaciones automáticas.";
+"updates.moveToApplications" = "Mueve secondbrain a Aplicaciones para recibir actualizaciones.";
+"updates.unavailable" = "Esta copia de secondbrain no recibe actualizaciones automáticas (compilación de desarrollo).";

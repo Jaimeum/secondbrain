@@ -306,6 +306,8 @@ extension AppState {
         } else if id.hasPrefix("job-") || id.hasPrefix("rate-") || id.hasPrefix("hist-") {
             clearPending()
             historyRequest = HistoryRequest(projectSlug: nil)
+        } else if id.hasPrefix("update-") {   // v0.7.3: an update is ready → Ajustes › General › Actualizaciones
+            SettingsLinkOpener.open(tab: "general")
         } else if id.hasPrefix("automail-") {
             // "automail-<unix time>-<slug>" (slugs may contain dashes).
             let rest = id.dropFirst("automail-".count)

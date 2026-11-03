@@ -27,6 +27,7 @@ struct SelfTest: AsyncParsableCommand {
         t.group("integration-fixes") { testIntegrationFixes(t) }
         t.group("mic-restart") { testMicRestartPolicy(t) }   // MARK: v0.7.2 mic restarts
         t.group("transcript-merge") { testTranscriptMerge(t) }   // MARK: v0.7.3 transcribe crash
+        t.group("update-policy") { testUpdatePolicy(t) }   // MARK: v0.7.3 auto-updates
         await t.groupAsync("model-gate") { await testModelGate(t) }   // MARK: v0.7.3 transcribe crash
         await t.groupAsync("queue-crash-loop") { await testQueueCrashLoop(t, root: root.appendingPathComponent("queue-crash")) }   // MARK: v0.7.3 transcribe crash
         await t.groupAsync("queue-owner-at-start") { await testQueueOwnerAtStart(t, root: root.appendingPathComponent("queue-owner")) }   // MARK: v0.7.3 engine-start burst

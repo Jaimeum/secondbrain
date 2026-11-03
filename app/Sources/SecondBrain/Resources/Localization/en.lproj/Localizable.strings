@@ -1806,3 +1806,9 @@
 "attach.review.hint" = "The email is saved. I checked the attachments that look useful: review them and confirm with “Save checked”.";
 "attach.review.done" = "Done";
 "batch.wholeThreads" = "+%ld from the rest of their conversations";
+
+/* v0.7.3 auto-updates (Support/Updates.swift) */
+"notify.updateTitle" = "Update ready";
+"notify.updateBody" = "secondbrain %@ will install when you quit the app, or now from Settings.";
+"notify.updateAvailableTitle" = "An update is available";
+"notify.updateAvailableBody" = "secondbrain %@ is available.";

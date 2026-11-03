@@ -14,6 +14,8 @@ let package = Package(
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-markdown.git", from: "0.9.0"),
+        // Auto-updates of the app (Support/Updates.swift). A binary XCFramework: resolves with the Command Line Tools.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.4"),
     ],
     targets: [
         .target(
@@ -38,6 +40,7 @@ let package = Package(
             dependencies: [
                 "BrainCore", "Recorder", "Transcription",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
+                .product(name: "Sparkle", package: "Sparkle"),
             ],
             resources: [.copy("Resources/web"), .copy("Resources/Brand"), .process("Resources/Localization")]
         ),

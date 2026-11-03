@@ -33,6 +33,8 @@ final class AppState {
     private(set) var engine: BrainEngine
     private(set) var transcriber: WhisperTranscriber
     let recorder: Recorder
+    /// v0.7.3: Sparkle auto-updates (Support/Updates.swift); started by `launch()`.
+    let updates: UpdateController
 
     private(set) var projects: [Project] = []
     /// Bumped whenever the vault likely changed on disk, so lists of pages refresh.
@@ -159,6 +161,7 @@ final class AppState {
         self.transcriber = transcriber
         engine = BrainEngine(config: config, transcriber: transcriber)
         recorder = Recorder(sessionsDir: paths.sessions)
+        updates = UpdateController()
     }
 
     // MARK: Lifecycle
@@ -174,6 +177,7 @@ final class AppState {
             applyHotKey()
             QuickCapturePanel.shared.applyHotKey(state: self)   // MARK: v0.6 capture — ⌥⌘N or the recorded one (§16.10)
         }
+        updates.start()   // v0.7.3: a no-op in snapshots and outside a release-configured .app
         if config.onboardingComplete {
             startEngine()
             // v0.6 (§16.11): the transcription model waits for the first "Grabar" (or Ajustes); once recording was
@@ -553,6 +557,14 @@ final class AppState {
     }
 
     var isRecorderBusy: Bool { recorder.state == .starting || recorder.state == .stopping }
+
+    /// A transcription is running (installing an update now would cut it short).
+    var isTranscribing: Bool { UpdatePolicy.isTranscribing(engine.jobs) }
+
+    /// "Reiniciar y actualizar" interrupts nothing: no recording (starting, running or stopping), no transcription.
+    var canInstallUpdateNow: Bool {
+        UpdatePolicy.canInstallNow(isRecording: isRecording, recorderBusy: isRecorderBusy, jobs: engine.jobs)
+    }
 
     private var recordingTitleOrNil: String? {
         let t = recordingTitle.trimmingCharacters(in: .whitespacesAndNewlines)

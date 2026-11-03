@@ -131,7 +131,8 @@ public final class WhisperTranscriber: Transcribing, @unchecked Sendable {
         detectLanguage: true,          // per window: meetings mix es/en
         skipSpecialTokens: true,
         wordTimestamps: true,
-        concurrentWorkerCount: 4
+        // 1, not 4: parallel decoding on one WhisperKit races on its unlocked shared state (see ModelGate).
+        concurrentWorkerCount: 1
     )
 
     /// Transcribes the planned windows (skipping near-silent ones) in small batches so progress and
@@ -175,7 +176,8 @@ public final class WhisperTranscriber: Transcribing, @unchecked Sendable {
         if !allowed.isEmpty, !outliers.isEmpty {
             var options: [DecodingOptions] = []
             for i in outliers {
-                let probs = (try? await whisper.detectLangauge(audioArray: Array(audio[windows[i].range])).langProbs) ?? [:]
+                let slice = Array(audio[windows[i].range])
+                let probs = (try? await store.gate.run { try await whisper.detectLangauge(audioArray: slice) }.langProbs) ?? [:]
                 var o = Self.decodeOptions
                 o.language = allowed.max { (probs[$0] ?? -.infinity) < (probs[$1] ?? -.infinity) }
                 o.detectLanguage = false
@@ -189,15 +191,23 @@ public final class WhisperTranscriber: Transcribing, @unchecked Sendable {
         return windows
     }
 
+    /// Decodes the windows one at a time. `transcribeWithOptions` would run them as parallel child tasks
+    /// on the same WhisperKit, which is the data race behind the 2026-11-03 EXC_BAD_ACCESS crash.
     private func run(_ whisper: WhisperKit, _ audio: [Float], _ ranges: [Range<Int>],
                      options: [DecodingOptions]) async -> (windows: [Window], error: Error?) {
-        let results = await whisper.transcribeWithOptions(
-            audioArrays: ranges.map { Array(audio[$0]) },
-            decodeOptionsArray: options
-        )
         var windows: [Window] = []
         var firstError: Error?
-        for (range, result) in zip(ranges, results) {
+        for (range, option) in zip(ranges, options) {
+            if Task.isCancelled { break }
+            let samples = Array(audio[range])
+            let result: Result<[TranscriptionResult], Error>
+            do {
+                result = .success(try await store.gate.run {
+                    try await whisper.transcribe(audioArray: samples, decodeOptions: option)
+                })
+            } catch {
+                result = .failure(error)
+            }
             switch result {
             case .success(let parts):
                 // Whisper pads every window to 30 s and may "hear" text past its end.
@@ -224,7 +234,9 @@ public final class WhisperTranscriber: Transcribing, @unchecked Sendable {
     private func diarize(_ speakerKit: SpeakerKit, _ audio: [Float],
                          progress: @escaping (Double) -> Void) async throws -> DiarizationResult {
         let box = ProgressBox(progress)
-        let result = try await speakerKit.diarize(audioArray: audio, options: nil) { p in box.send(p.fractionCompleted) }
+        let result = try await store.gate.run {
+            try await speakerKit.diarize(audioArray: audio, options: nil) { p in box.send(p.fractionCompleted) }
+        }
         progress(1)
         return result
     }

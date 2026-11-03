@@ -53,3 +53,38 @@ import Transcription
     t.eq(Windowing.sampleRanges([SpeechTurn(start: -.infinity, end: .nan)], audio: audio, maxLength: 480000), [],
          "no finite bounds → no range")
 }
+
+// MARK: v0.7.3 transcribe crash — parallel decoding on one WhisperKit raced on its unlocked shared state and
+// over-released an ObjC object (EXC_BAD_ACCESS in objc_autoreleasePoolPop). ModelGate must run model calls one at a time.
+
+/// Counts how many bodies run at once.
+private actor Overlap {
+    var inside = 0, peak = 0, order: [Int] = []
+    func enter(_ i: Int) { inside += 1; peak = max(peak, inside); order.append(i) }
+    func leave() { inside -= 1 }
+}
+
+private struct GateTestError: Error {}
+
+@MainActor func testModelGate(_ t: Tester) async {
+    let gate = ModelGate()
+    let overlap = Overlap()
+    await withTaskGroup(of: Void.self) { group in
+        for i in 0..<16 {
+            group.addTask {
+                await gate.run {
+                    await overlap.enter(i)
+                    try? await Task.sleep(for: .milliseconds(2))
+                    await overlap.leave()
+                }
+            }
+        }
+    }
+    t.eq(await overlap.peak, 1, "16 concurrent callers never overlap inside the gate")
+    t.eq(await overlap.order.count, 16, "every caller ran")
+
+    // A throwing body releases the gate.
+    let threw = await (try? gate.run { () async throws -> Int in throw GateTestError() }) == nil
+    t.check(threw, "the error reaches the caller")
+    t.eq(await gate.run { 42 }, 42, "the gate is free again after a throwing body")
+}

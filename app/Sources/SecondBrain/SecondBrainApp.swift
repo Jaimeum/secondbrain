@@ -131,6 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // A clean quit isn't a crash: put the running job back without using an attempt.
+        MainActor.assumeIsolated { AppState.shared.engine.prepareForTermination() }
         // A Claude run cut short is recorded (and undoable) on the next launch; don't let it keep editing.
         ClaudeRunner.terminateAll()
     }

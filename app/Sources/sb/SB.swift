@@ -237,6 +237,7 @@ struct Status: AsyncParsableCommand {
         if engine.jobs.isEmpty { print("  (none)") }
         for j in engine.jobs {
             var line = "  \(j.id.prefix(8))  \(j.kind.rawValue)\t\(j.status.rawValue)\tattempts=\(j.attempts)"
+            if let n = j.interruptions, n > 0 { line += " interrupted=\(n)" }
             if let nb = j.notBefore { line += "  not before \(stamp(nb))" }
             if let err = j.error { line += "  ! \(err)" }
             print(line)

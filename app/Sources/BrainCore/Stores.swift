@@ -36,6 +36,9 @@ public enum JobOutcome: Equatable, Sendable {
 /// Persistent serial queue (data/jobs/<id>.json). Scheduling only; the engine executes jobs.
 public final class JobQueue: @unchecked Sendable {
     public static let maxAttempts = 3
+    /// A job whose run was cut short this many times (the process died while it ran) is failed instead of
+    /// requeued, so a job that crashes the app can't crash it again on every launch.
+    public static let maxInterruptions = 2
     public static let rateLimitWait: TimeInterval = 15 * 60
     /// Backoff after the n-th failed attempt: 30 s, 60 s, 120 s…
     public static func backoff(afterAttempt n: Int) -> TimeInterval { 30 * pow(2, Double(max(0, n - 1))) }
@@ -46,9 +49,11 @@ public final class JobQueue: @unchecked Sendable {
     public init(dir: URL) { self.dir = dir }
 
     /// Loads jobs from disk. With `resetRunning` (only the process holding the queue lock may do this),
-    /// anything left `running` by a crash goes back to `queued`.
-    public func load(resetRunning: Bool = true) {
-        replace(with: Self.readAll(dir: dir), resetRunning: resetRunning)
+    /// anything left `running` by a crash is counted as interrupted and requeued with a backoff, or failed once it
+    /// keeps dying (see `replace`). Returns the jobs failed that way; `interruptedError` becomes their error.
+    @discardableResult
+    public func load(resetRunning: Bool = true, interruptedError: String = "") -> [Job] {
+        replace(with: Self.readAll(dir: dir), resetRunning: resetRunning, interruptedError: interruptedError)
     }
 
     /// Jobs on disk, oldest first (no side effects; safe from any thread).
@@ -59,15 +64,32 @@ public final class JobQueue: @unchecked Sendable {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// Replaces the in-memory list (e.g. after another process changed the queue).
-    public func replace(with loaded: [Job], resetRunning: Bool) {
+    /// Replaces the in-memory list (e.g. after another process changed the queue). With `resetRunning`, a job
+    /// still `running` was cut short by a dead process (a clean quit requeues its job first): its interruption
+    /// is counted and it waits out a backoff, or it is failed after `maxInterruptions` / `maxAttempts` so it
+    /// can't crash every launch. Returns the jobs failed here.
+    @discardableResult
+    public func replace(with loaded: [Job], resetRunning: Bool, interruptedError: String = "", now: Date = Date()) -> [Job] {
         jobs = loaded
-        guard resetRunning else { return }
+        guard resetRunning else { return [] }
+        var failed: [Job] = []
         for i in jobs.indices where jobs[i].status == .running {
-            jobs[i].status = .queued
-            jobs[i].updatedAt = Date()
+            let n = (jobs[i].interruptions ?? 0) + 1
+            jobs[i].interruptions = n
+            jobs[i].updatedAt = now
+            jobs[i].progress = nil
+            if n >= Self.maxInterruptions || jobs[i].attempts >= Self.maxAttempts {
+                jobs[i].status = .failed
+                jobs[i].notBefore = nil
+                jobs[i].error = interruptedError
+                failed.append(jobs[i])
+            } else {
+                jobs[i].status = .queued
+                jobs[i].notBefore = now.addingTimeInterval(Self.backoff(afterAttempt: max(1, jobs[i].attempts)))
+            }
             persist(jobs[i])
         }
+        return failed
     }
 
     public func upsert(_ job: Job) {
@@ -94,7 +116,8 @@ public final class JobQueue: @unchecked Sendable {
 
     public var hasPending: Bool { jobs.contains { $0.status == .queued || $0.status == .running } }
 
-    /// Applies the retry policy to a job that just ran. Returns the updated job.
+    /// Applies the retry policy to a job that just ran. Returns the updated job. `attempts` was already counted
+    /// (and saved) when the run started, so a crash mid-run still counts; a usage limit gives it back.
     public static func reschedule(_ job: Job, outcome: JobOutcome, now: Date = Date()) -> Job {
         var job = job
         job.updatedAt = now
@@ -105,18 +128,17 @@ public final class JobQueue: @unchecked Sendable {
             job.notBefore = nil
         case .rateLimited(let resetAt):
             job.status = .queued
+            job.attempts = max(0, job.attempts - 1)
             if let resetAt, resetAt > now {
                 job.notBefore = resetAt.addingTimeInterval(30)
             } else {
                 job.notBefore = now.addingTimeInterval(rateLimitWait)
             }
         case .fatal(let message):
-            job.attempts += 1
             job.status = .failed
             job.error = message
             job.notBefore = nil
         case .retryable(let message):
-            job.attempts += 1
             job.error = message
             if job.attempts >= maxAttempts {
                 job.status = .failed

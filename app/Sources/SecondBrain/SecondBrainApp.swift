@@ -30,6 +30,11 @@ struct SecondBrainApp: App {
         .defaultSize(width: 1100, height: 720)
         .windowToolbarStyle(.unified)
         .commands {
+            // v0.7.3 auto-updates: "Buscar actualizaciones…" under "Acerca de secondbrain".
+            CommandGroup(after: .appInfo) {
+                Button(L("updates.menu.check")) { state.updates.checkForUpdates() }
+                    .disabled(!state.updates.isEnabled || !state.updates.canCheck)
+            }
             CommandGroup(replacing: .newItem) {
                 Button(L("sidebar.newProject")) { state.showNewProject = true }
                     .keyboardShortcut("n")

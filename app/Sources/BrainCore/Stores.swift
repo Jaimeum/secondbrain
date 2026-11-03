@@ -121,6 +121,8 @@ public final class JobQueue: @unchecked Sendable {
     public static func reschedule(_ job: Job, outcome: JobOutcome, now: Date = Date()) -> Job {
         var job = job
         job.updatedAt = now
+        // The run ended without killing the process: only back-to-back crashes count toward `maxInterruptions`.
+        job.interruptions = nil
         switch outcome {
         case .success:
             job.status = .done

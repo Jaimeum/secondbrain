@@ -112,6 +112,23 @@ private func simulateCrashMidRun(_ jobsDir: URL, id: String) throws {
     let fatal = JobQueue.reschedule(job, outcome: .fatal("x"))
     t.check(fatal.attempts == 1 && fatal.status == .failed, "fatal → failed, attempt not double counted")
 
+    // A run that ends normally clears the interruption count: an old force quit plus an unrelated later crash
+    // must not add up to a quarantine (only back-to-back crashes do).
+    job.interruptions = 1
+    t.eq(JobQueue.reschedule(job, outcome: .retryable("x")).interruptions, nil, "retryable run clears interruptions")
+    t.eq(JobQueue.reschedule(job, outcome: .rateLimited(resetAt: nil)).interruptions, nil, "rate-limited run clears interruptions")
+    let q2 = JobQueue(dir: root.appendingPathComponent("reset-interruptions"))
+    var survivor = Job(kind: .ingest)
+    survivor.interruptions = 1
+    survivor.attempts = 1
+    survivor = JobQueue.reschedule(survivor, outcome: .retryable("x"))   // ran to the end after the old crash
+    survivor.status = .running                                           // …then a new, unrelated crash
+    survivor.attempts = 2
+    let afterOne = q2.replace(with: [survivor], resetRunning: true, interruptedError: "boom")
+    t.check(afterOne.isEmpty && q2.jobs.first?.status == .queued && q2.jobs.first?.interruptions == 1,
+            "crash after a completed run → requeued, not quarantined")
+    job.interruptions = nil
+
     // Old job files (no `interruptions`) still decode.
     let legacy = #"{"id":"a","kind":"transcribe","status":"running","payload":{},"attempts":0,"createdAt":"2026-11-02T19:17:51Z","updatedAt":"2026-11-02T19:17:51Z"}"#
     let decoded = try? JSONDecoder.sb.decode(Job.self, from: Data(legacy.utf8))

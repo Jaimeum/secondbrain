@@ -20,9 +20,11 @@ Los adjuntos y los hilos de correo entran al cerebro, y todo lo que no es una re
 
 **Necesitas:** una Mac con Apple Silicon (M1 o más nueva) con macOS 15 Sequoia o posterior, unos 5 GB libres, conexión a internet la primera vez y una suscripción de Claude **Pro o Max**. No necesitas saber programar ni tener una API key.
 
-1. Descarga `SecondBrain-<versión>.dmg` de la página de **Releases** (sección *Assets*).
+Solo se instala una vez: **desde 0.7.3 secondbrain se actualiza solo** (ver [Actualizaciones](#actualizaciones)). El `.dmg` es para la primera instalación, o para pasar de 0.7.2 o anterior a la versión actual.
 
-   **Lo más fácil (sin el aviso de "Apple no puede verificar…"):** abre la app **Terminal**, pega esto y pulsa Enter. Toma el `.dmg` más reciente de Descargas, cierra SecondBrain si está abierta, la instala (o actualiza) en Aplicaciones y la abre. Sirve igual para actualizar; tus archivos y ajustes no se tocan.
+1. Descarga `SecondBrain-<versión>.dmg` de la página de **Releases** (sección *Assets*; siempre hay una sola, la más nueva).
+
+   **Lo más fácil (sin el aviso de "Apple no puede verificar…"):** abre la app **Terminal**, pega esto y pulsa Enter. Toma el `.dmg` más reciente de Descargas, cierra SecondBrain si está abierta, la instala (o actualiza) en Aplicaciones y la abre. Tus archivos y ajustes no se tocan.
 
    ```sh
    DMG=$(ls -t ~/Downloads/SecondBrain-*.dmg | head -1) && MNT=$(hdiutil attach -nobrowse "$DMG" 2>/dev/null | grep -o '/Volumes/.*' | tail -1) && { pgrep -x SecondBrain >/dev/null && osascript -e 'quit app "SecondBrain"' && sleep 2; rm -rf /Applications/SecondBrain.app && ditto "$MNT/SecondBrain.app" /Applications/SecondBrain.app && xattr -dr com.apple.quarantine /Applications/SecondBrain.app; hdiutil detach "$MNT" -quiet; open /Applications/SecondBrain.app; }
@@ -34,6 +36,14 @@ Los adjuntos y los hilos de correo entran al cerebro, y todo lo que no es una re
 4. Sigue la bienvenida:
    - **Conectar Claude:** si no tienes Claude Code, secondbrain lo instala; luego se abre el navegador para que inicies sesión con tu cuenta.
    - **Permisos y modelo:** se piden la primera vez que pulsas **Grabar**: *Audio de la computadora* (macOS lo llama "Grabación de pantalla y audio del sistema"; no se graba tu pantalla), *Micrófono* y la descarga del modelo de transcripción (~3 GB, una sola vez; de 2 a 10 minutos según tu internet).
+
+### Actualizaciones
+
+secondbrain busca versiones nuevas al abrirse y cada 6 horas, las descarga en segundo plano y las instala **al cerrar la app**, o cuando pulsas **Reiniciar y actualizar** (en Ajustes o en el menú de la barra superior). Nunca se instala a mitad de una grabación ni de una transcripción: espera a que terminen. Cada actualización se verifica antes de instalarse (firma de la actualización y misma firma de código que tu app), así que los permisos de micrófono y audio se conservan y no vuelve a salir el aviso de "Abrir de todos modos".
+
+- **Ajustes › General › Actualizaciones**: versión actual, última búsqueda, **Buscar ahora** y los interruptores *Buscar actualizaciones automáticamente* y *Descargar e instalar automáticamente* (los dos encendidos de fábrica). También en el menú *secondbrain → Buscar actualizaciones…*.
+- La app tiene que estar en **Aplicaciones**: abierta desde el `.dmg` o desde Descargas no puede reemplazarse a sí misma.
+- La primera actualización automática puede hacer que macOS pregunte si secondbrain puede *administrar apps* (Privacidad y seguridad → Gestión de apps). Acéptalo una vez.
 
 ## Si algo no funciona
 
@@ -159,7 +169,8 @@ El audio se transcribe en tu Mac y se borra después. Las transcripciones y el w
 cd app && swift build                 # compila (solo Command Line Tools)
 scripts/make-dev-cert.sh              # identidad de firma local (permisos estables entre builds)
 scripts/build-app.sh [--release]      # build/SecondBrain.app (+ dist/*.zip y *.dmg con --release); ícono desde scripts/icon/secondbrain.iconset
-scripts/release.sh <versión>          # publica en GitHub Releases
+scripts/make-update-key.sh            # una vez: clave EdDSA de las actualizaciones (llavero + scripts/sparkle-public-ed-key.txt)
+scripts/release.sh <versión>          # publica en GitHub Releases (zip, dmg, appcast.xml firmado) y borra las anteriores
 ```
 
 - **Arquitectura y contrato entre módulos:** `docs/CONTRACT.md`. Los módulos son `Recorder`, `Transcription` (WhisperKit + SpeakerKit), `BrainCore` (cola, Claude, historial, vault), `SecondBrain` (UI) y `sb` (CLI).

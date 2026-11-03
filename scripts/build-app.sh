@@ -6,7 +6,12 @@
 #   scripts/build-app.sh --debug     debug build (faster) → build/SecondBrain.app
 #
 # Env overrides: SB_SIGN_IDENTITY ("-" forces ad-hoc; only then does --release sign ad-hoc), SB_SCRATCH (SwiftPM --scratch-path),
-# SB_HARDENED=1 (sign with the hardened runtime), SB_SKIP_BUILD=1 (reuse the last build products).
+# SB_HARDENED=1 (sign with the hardened runtime), SB_SKIP_BUILD=1 (reuse the last build products),
+# SB_FEED_URL (auto-update appcast; e.g. a file:// one to test an update before publishing it).
+#
+# Auto-updates (Sparkle): Sparkle.framework is embedded and signed with the app's identity; Info.plist gets the feed
+# URL and the EdDSA public key from scripts/sparkle-public-ed-key.txt (scripts/make-update-key.sh). Without that file
+# the app builds but never looks for updates; --release refuses to build without it.
 set -euo pipefail
 trap 'echo >&2; echo "ERROR: build-app.sh falló en la línea $LINENO (ver arriba) / build failed at line $LINENO" >&2' ERR
 
@@ -19,6 +24,10 @@ DISPLAY_NAME="secondbrain"   # CONTRACT §15.1: the brand is lowercase; executab
 BUNDLE_ID="app.secondbrain.mac"
 APP="$ROOT/build/$APP_NAME.app"
 DEV_IDENTITY="SecondBrain Dev"
+# The appcast travels with the latest GitHub release (scripts/release.sh), so deleting older releases breaks nothing.
+FEED_URL="${SB_FEED_URL:-https://github.com/Jaimeum/secondbrain/releases/latest/download/appcast.xml}"
+ED_KEY_FILE="$SCRIPTS/sparkle-public-ed-key.txt"
+ED_PUBLIC_KEY="$( [[ -f "$ED_KEY_FILE" ]] && tr -d '[:space:]' < "$ED_KEY_FILE" || true)"
 
 CONFIG=release
 PACKAGE=0
@@ -51,6 +60,12 @@ if [[ $PACKAGE == 1 && -z "${SB_SIGN_IDENTITY:-}" ]] \
     echo "   modos: SB_SIGN_IDENTITY=- scripts/build-app.sh --release" >&2
     exit 1
 fi
+# A release without the update key would ship an app that can never update itself again.
+if [[ $PACKAGE == 1 && -z "$ED_PUBLIC_KEY" ]]; then
+    echo "ERROR: falta $ED_KEY_FILE (clave pública de actualizaciones); corre scripts/make-update-key.sh." >&2
+    echo "   Sin ella la app publicada no podría actualizarse sola. / Missing the Sparkle public key." >&2
+    exit 1
+fi
 if [[ "${SB_SKIP_BUILD:-0}" != 1 ]]; then
     step "Compilando $APP_NAME $VERSION ($CONFIG)"
     if ! swift build "${SWIFT_ARGS[@]}" --product "$APP_NAME"; then
@@ -80,15 +95,28 @@ for required in "${APP_NAME}_BrainCore.bundle" "${APP_NAME}_${APP_NAME}.bundle";
     [[ -d "$APP/Contents/Resources/$required" ]] || { echo "ERROR: falta $required (Bundle.module fallaría)" >&2; exit 1; }
 done
 
-# Bundled dynamic frameworks (none today: SwiftPM links package products statically).
+# Bundled dynamic frameworks: Sparkle (a binary target, next to the executable) and any dynamic package product.
+# ditto keeps the framework's Versions/Current symlinks, which its code signature covers.
 shopt -s nullglob
-FRAMEWORKS=("$BIN"/PackageFrameworks/*.framework)
+FRAMEWORKS=("$BIN"/*.framework "$BIN"/PackageFrameworks/*.framework)
 shopt -u nullglob
+EXE="$APP/Contents/MacOS/$APP_NAME"
 if (( ${#FRAMEWORKS[@]} )); then
     mkdir -p "$APP/Contents/Frameworks"
-    for f in "${FRAMEWORKS[@]}"; do ditto "$f" "$APP/Contents/Frameworks/$(basename "$f")"; done
-    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
+    for f in "${FRAMEWORKS[@]}"; do
+        ditto "$f" "$APP/Contents/Frameworks/$(basename "$f")"
+        echo "   framework: $(basename "$f")"
+    done
 fi
+[[ -d "$APP/Contents/Frameworks/Sparkle.framework" ]] \
+    || { echo "ERROR: falta Sparkle.framework en $BIN (las actualizaciones no funcionarían)" >&2; exit 1; }
+RPATHS="$(otool -l "$EXE" | awk '/cmd LC_RPATH/ {getline; getline; print $2}')"
+grep -qxF "@executable_path/../Frameworks" <<<"$RPATHS" \
+    || install_name_tool -add_rpath "@executable_path/../Frameworks" "$EXE" 2>/dev/null   # (re-signed below)
+# SwiftPM also leaves rpaths into this machine's build folder: drop them, the app must only load what it ships.
+while IFS= read -r rp; do
+    if [[ "$rp" == "$PKG/"* ]]; then install_name_tool -delete_rpath "$rp" "$EXE" 2>/dev/null; fi
+done <<<"$RPATHS"
 
 ICON_CACHE="$ROOT/build/AppIcon.icns"
 ICONSET="$SCRIPTS/icon/secondbrain.iconset"
@@ -171,6 +199,13 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<key>NSHighResolutionCapable</key><true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key><true/>
 	<key>NSPrincipalClass</key><string>NSApplication</string>
+	<key>SUFeedURL</key><string>$FEED_URL</string>
+$( [[ -n "$ED_PUBLIC_KEY" ]] && printf '\t<key>SUPublicEDKey</key><string>%s</string>' "$ED_PUBLIC_KEY" )
+	<key>SUEnableAutomaticChecks</key><true/>
+	<key>SUAutomaticallyUpdate</key><true/>
+	<key>SUScheduledCheckInterval</key><integer>21600</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key><true/>
+	<key>SURequireSignedFeed</key><true/>
 	<key>NSHumanReadableCopyright</key><string>SecondBrain — todo se queda en tu Mac / everything stays on your Mac.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>SecondBrain usa el micrófono para grabar tu voz en las reuniones. Todo se procesa en tu Mac. / SecondBrain uses the microphone to record your voice in meetings. Everything is processed on your Mac.</string>
@@ -195,9 +230,29 @@ if [[ -z "$IDENTITY" ]]; then
         echo "   se perderán en cada build; corre scripts/make-dev-cert.sh para evitarlo."
     fi
 fi
-SIGN_ARGS=(--force --sign "$IDENTITY" --entitlements "$SCRIPTS/SecondBrain.entitlements" --timestamp=none)
-[[ "${SB_HARDENED:-0}" == 1 ]] && SIGN_ARGS+=(--options runtime)
-if ! with_timeout 60 codesign "${SIGN_ARGS[@]}" "$APP"; then
+# Inside out, all with the same identity: Sparkle's helpers (XPC services keep their own entitlements), its
+# framework, then the app. Sparkle refuses an update whose code signature doesn't satisfy the running app's
+# designated requirement, so every release must keep this identity (as the TCC permissions already require).
+# (install_name_tool above only warns that the executable's old signature is now invalid; it is replaced here.)
+sign_all() {
+    local id=$1
+    local base=(--force --sign "$id" --timestamp=none)
+    [[ "${SB_HARDENED:-0}" == 1 ]] && base+=(--options runtime)
+    local fw="$APP/Contents/Frameworks/Sparkle.framework"
+    local xpc
+    for xpc in "$fw"/Versions/B/XPCServices/*.xpc; do
+        with_timeout 60 codesign "${base[@]}" --preserve-metadata=entitlements "$xpc" || return 1
+    done
+    with_timeout 60 codesign "${base[@]}" "$fw/Versions/B/Autoupdate" || return 1
+    with_timeout 60 codesign "${base[@]}" "$fw/Versions/B/Updater.app" || return 1
+    with_timeout 60 codesign "${base[@]}" "$fw" || return 1
+    local other
+    for other in "$APP"/Contents/Frameworks/*.framework; do
+        [[ "$other" == "$fw" ]] || with_timeout 60 codesign "${base[@]}" "$other" || return 1
+    done
+    with_timeout 60 codesign "${base[@]}" --entitlements "$SCRIPTS/SecondBrain.entitlements" "$APP"
+}
+if ! sign_all "$IDENTITY"; then
     if [[ "$IDENTITY" != "-" && $PACKAGE == 1 ]]; then
         echo "ERROR: no se pudo firmar con \"$IDENTITY\" (¿diálogo del llavero? elige «Permitir siempre» y vuelve a" >&2
         echo "   correrlo). La release no se firma ad-hoc." >&2
@@ -205,14 +260,22 @@ if ! with_timeout 60 codesign "${SIGN_ARGS[@]}" "$APP"; then
     elif [[ "$IDENTITY" != "-" ]]; then
         echo "   No se pudo firmar con \"$IDENTITY\" (¿diálogo del llavero?) → firma ad-hoc." >&2
         IDENTITY="-"
-        SIGN_ARGS=(--force --sign - --entitlements "$SCRIPTS/SecondBrain.entitlements" --timestamp=none)
-        codesign "${SIGN_ARGS[@]}" "$APP"
+        sign_all -
     else
         exit 1
     fi
 fi
-codesign --verify --strict "$APP"
+codesign --verify --deep --strict "$APP"
+if [[ "$IDENTITY" != "-" ]]; then
+    # The requirement Sparkle (and TCC) check an update against: this bundle id and this certificate.
+    DR="$(codesign -d -r- "$APP" 2>&1)"
+    # A self-signed certificate is its own root, so the requirement reads "certificate root = H…" (that same cert).
+    grep -qE "certificate (leaf|root) = H\"[0-9a-f]+\"" <<<"$DR" && grep -q "\"$BUNDLE_ID\"" <<<"$DR" \
+        || { echo "ERROR: el requisito designado no fija el certificado:"$'\n'"$DR" >&2; exit 1; }
+fi
 echo "   firmado con: $([[ "$IDENTITY" == "-" ]] && echo ad-hoc || echo "$IDENTITY")"
+[[ -n "$ED_PUBLIC_KEY" ]] && echo "   actualizaciones: $FEED_URL" \
+    || echo "   actualizaciones: desactivadas (sin $ED_KEY_FILE; corre scripts/make-update-key.sh)"
 
 echo
 echo "Listo: $APP"

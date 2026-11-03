@@ -78,8 +78,8 @@ enum TrackLoader {
     }
 
     static func rms(_ audio: [Float], from start: Double, to end: Double) -> Double {
-        let a = max(0, min(audio.count, Int(start * Double(sampleRate))))
-        let b = max(a, min(audio.count, Int(end * Double(sampleRate))))
+        let a = Windowing.sampleIndex(start, count: audio.count)
+        let b = max(a, Windowing.sampleIndex(end, count: audio.count))
         guard b > a else { return 0 }
         return audio.withUnsafeBufferPointer { Double(vDSP.rootMeanSquare(UnsafeBufferPointer(rebasing: $0[a..<b]))) }
     }

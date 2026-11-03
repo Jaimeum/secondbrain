@@ -80,14 +80,22 @@ public enum Windowing {
     /// longest silence in its second half (same rule as WhisperKit's VADAudioChunker).
     public static func sampleRanges(_ windows: [SpeechTurn], audio: [Float], maxLength: Int) -> [Range<Int>] {
         windows.flatMap { w -> [Range<Int>] in
-            let a = max(0, min(audio.count, Int(w.start * Double(sampleRate))))
-            let b = max(a, min(audio.count, Int(w.end * Double(sampleRate))))
+            let a = sampleIndex(w.start, count: audio.count)
+            let b = max(a, sampleIndex(w.end, count: audio.count))
             return b > a ? split(audio, a..<b, maxLength: maxLength) : []
         }
     }
 
+    /// Seconds → sample index in 0...count, clamped in Double space: `Int(_:)` traps on NaN, ±inf or values past
+    /// Int.max, which a bad Whisper/SpeakerKit timestamp could produce.
+    static func sampleIndex(_ seconds: Double, count: Int) -> Int {
+        let x = seconds * Double(sampleRate)
+        guard !x.isNaN, x > 0 else { return 0 }          // NaN, negatives and -inf → start of the audio
+        return x >= Double(count) ? count : Int(x)        // +inf and anything past the end → end of the audio
+    }
+
     static func split(_ audio: [Float], _ range: Range<Int>, maxLength: Int) -> [Range<Int>] {
-        guard range.count > maxLength else { return [range] }
+        guard maxLength > 0, range.count > maxLength else { return [range] }   // maxLength 0 would never advance
         let frame = sampleRate / 10
         var ranges: [Range<Int>] = []
         var start = range.lowerBound

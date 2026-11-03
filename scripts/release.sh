@@ -5,7 +5,8 @@
 # pushes the current branch and the tag v<version>, and creates the GitHub release (marked latest) with
 # the zip, the dmg, SHA256SUMS.txt and appcast.xml — or, if it already exists, re-uploads them (--clobber)
 # and refreshes the notes. Once releases/latest/download/appcast.xml serves this version, every other
-# release (and its tag) is deleted: the repo keeps only the newest one.
+# release (and its tag, remote and local) is deleted: the repo keeps only the newest one. Older
+# dist/SecondBrain-*.{zip,dmg} are pruned too.
 #
 # Auto-updates (Sparkle): the zip is the update payload, signed with the EdDSA key of
 # scripts/make-update-key.sh (login keychain; SB_ED_KEY_FILE=<file> uses an exported key instead). The
@@ -219,6 +220,19 @@ for old in $OLD_TAGS; do
     echo "   borrada: $old"
 done
 [[ -n "$OLD_TAGS" ]] || echo "   (no había otras)"
+# Local release tags with no GitHub release left (older runs, deleted by hand) would be re-pushed later.
+for old in $(git tag -l 'v*' | grep -vxF "$TAG" || true); do
+    git tag -d "$old" >/dev/null && echo "   tag local borrado: $old"
+done
+
+# Old builds pile up in dist/ (hundreds of MB each): keep only this version's zip and dmg.
+step "Limpiando dist/"
+shopt -s nullglob
+for f in dist/SecondBrain-*.zip dist/SecondBrain-*.dmg; do
+    [[ "$f" == "$ZIP" || "$f" == "$DMG" ]] && continue
+    rm -f -- "$f" && echo "   borrado: $f"
+done
+shopt -u nullglob
 
 echo
 echo "Listo: https://github.com/$REPO/releases/tag/$TAG"
